@@ -1,0 +1,11 @@
+The repository publishing root must directly contain:
+index.html
+plotter.html
+app.js
+plotter.js
+styles.css
+.nojekyll
+
+Do not upload a parent folder so that the files end up at:
+ree-excel-github-pages/index.html
+unless GitHub Pages is configured to publish from that folder.
