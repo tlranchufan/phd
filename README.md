@@ -1,157 +1,65 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LA-ICPMS QuickSheet Plotter</title>
-  <meta name="description" content="Browser-based LA-ICPMS QuickSheet plotter.">
-  <link rel="stylesheet" href="./styles.css?v=20260721-2">
-</head>
-<body>
-  <nav class="site-nav">
-    <div class="nav-inner">
-      <a href="./index.html">Excel Processor</a>
-      <a href="./plotter.html" class="active" aria-current="page">QuickSheet Plotter</a>
-    </div>
-  </nav>
+# REE Excel Tools — GitHub Pages edition
 
-  <header class="hero">
-    <div>
-      <p class="eyebrow">Browser-only analytical plotting</p>
-      <h1>LA-ICPMS QuickSheet Plotter</h1>
-      <p class="lede">Load a QuickSheet workbook, choose samples and elements, separate repeated x-values, and export an interactive or publication-ready plot. Files remain in your browser.</p>
-    </div>
-  </header>
+A static, browser-only website containing two tools:
 
-  <main class="container plotter-layout">
-    <aside class="plot-controls">
-      <section class="card">
-        <h2>1. Load workbook</h2>
-        <p class="hint">Required columns: <code>Code</code>, <code>Compound</code>, <code>Mol/Kg</code>, <code>wt%</code>, and <code>Metric</code>.</p>
-        <input id="plotFile" type="file" accept=".xls,.xlsx">
-        <div class="actions upload-actions">
-          <button id="loadPlotFile" class="primary" type="button" disabled>Continue — load workbook</button>
-          <button id="clearPlotFile" type="button" disabled>Clear workbook</button>
-        </div>
-        <div id="plotLoadStatus" class="status">Choose a workbook, then click Continue.</div>
-        <div id="plotFileSummary" class="file-list"></div>
-      </section>
+1. **REE Excel Processor** — processes composition summaries, ratios, KEEP/EXCLUDE decisions, SD-band colours, and collated workbooks.
+2. **LA-ICPMS QuickSheet Plotter** — reads QuickSheet summary workbooks and creates interactive concentration or element-ratio plots.
 
-      <section id="plotConfig" class="card hidden">
-        <h2>2. Configure plot</h2>
+All workbook processing occurs in the visitor's browser. Files are not uploaded to a backend.
 
-        <label>Codes to display
-          <select id="codes" multiple size="8"></select>
-        </label>
-        <div class="actions mini-actions">
-          <button id="selectAllCodes" type="button">Select all</button>
-          <button id="clearCodes" type="button">Clear</button>
-        </div>
+## Plotter features
 
-        <fieldset>
-          <legend>X axis</legend>
-          <label class="inline-option"><input type="radio" name="xunit" value="Mol/Kg" checked> Mol/Kg</label>
-          <label class="inline-option"><input type="radio" name="xunit" value="wt%"> wt%</label>
-        </fieldset>
+- Reads the first worksheet of `.xls` or `.xlsx` files.
+- Requires `Code`, `Compound`, `Mol/Kg`, `wt%`, and `Metric` columns.
+- Uses rows whose `Metric` is `avg`, with matching `std dev` rows for error bars.
+- Orders element selectors by atomic weight.
+- Plots ppm or converts ppm to element mol/kg.
+- Calculates weight/weight or mol/mol element ratios.
+- Keeps different compounds as separate lines.
+- Facets by element or compound.
+- Supports log10 y axes.
+- Detects repeated x-values and applies display-only offsets by sample, Code, or Compound.
+- Hover labels always show the original x-value and the applied display offset.
+- Exports PNG, SVG, PDF, and standalone interactive HTML.
 
-        <fieldset>
-          <legend>Repeated x-values</legend>
-          <label>Offset mode
-            <select id="offsetMode">
-              <option value="sample" selected>Separate every sample</option>
-              <option value="code">Separate by Code</option>
-              <option value="compound">Separate by Compound</option>
-              <option value="none">No offset</option>
-            </select>
-          </label>
-          <label>Offset spread
-            <input id="offsetSpread" type="range" min="0.02" max="0.30" step="0.01" value="0.12">
-            <span id="offsetSpreadValue">12%</span> of nearest x-spacing
-          </label>
-          <p class="hint">Offsets change display positions only. Hover labels and calculations retain the original x-value.</p>
-        </fieldset>
+## Publish on GitHub Pages
 
-        <fieldset>
-          <legend>Plot type</legend>
-          <label class="inline-option"><input type="radio" name="plotMode" value="simple" checked> Simple</label>
-          <label class="inline-option"><input type="radio" name="plotMode" value="ratio"> Element/element ratio</label>
-        </fieldset>
+1. Create or open your GitHub repository.
+2. Upload all files and folders from this package to the repository root.
+3. Commit them to `main`.
+4. Open **Settings → Pages**.
+5. Choose **GitHub Actions** if using the included workflow, or **Deploy from a branch → main → /(root)**.
+6. After deployment, hard-refresh the site with `Ctrl+Shift+R` if an older version is cached.
 
-        <div id="simpleControls">
-          <label>Elements to show
-            <select id="elements" multiple size="10"></select>
-          </label>
-          <div class="actions mini-actions">
-            <button id="selectAllElements" type="button">Select all</button>
-            <button id="clearElements" type="button">Clear</button>
-          </div>
+## Browser libraries
 
-          <fieldset>
-            <legend>Y-axis quantity</legend>
-            <label class="inline-option"><input type="radio" name="yMode" value="ppm" checked> ppm</label>
-            <label class="inline-option"><input type="radio" name="yMode" value="mol"> Element (mol/kg)</label>
-          </fieldset>
+The pages load these libraries from CDNs:
 
-          <label class="toggle"><input id="facetElements" type="checkbox"> Facet by element</label>
-          <label class="toggle"><input id="logY" type="checkbox"> Log10 y-axis</label>
-          <label class="toggle"><input id="showErr" type="checkbox" checked> Show avg ± standard deviation</label>
-          <label class="toggle"><input id="facetCompounds" type="checkbox"> Facet by compound</label>
-        </div>
+- SheetJS Community Edition
+- ExcelJS
+- JSZip
+- Plotly.js
+- jsPDF
 
-        <div id="ratioControls" class="hidden">
-          <label>Numerator element
-            <select id="numerator"></select>
-          </label>
-          <label>Denominator element
-            <select id="denominator"></select>
-          </label>
-          <fieldset>
-            <legend>Ratio basis</legend>
-            <label class="inline-option"><input type="radio" name="ratioBasis" value="ww" checked> weight/weight</label>
-            <label class="inline-option"><input type="radio" name="ratioBasis" value="mm"> mol/mol</label>
-          </fieldset>
-          <label class="toggle"><input id="ratioLogY" type="checkbox"> Log10 y-axis</label>
-        </div>
-      </section>
+An internet connection is required when first loading the site unless those libraries are later stored locally in the repository.
 
-      <section id="exportCard" class="card hidden">
-        <h2>3. Export</h2>
-        <label>File name
-          <input id="plotName" type="text" value="laicpms_plot">
-        </label>
-        <label class="toggle"><input id="autoAspect" type="checkbox" checked> Automatic aspect ratio</label>
-        <label id="aspectWrap" class="hidden">Height/width ratio
-          <input id="aspectRatio" type="number" value="0.7" min="0.1" max="3" step="0.05">
-        </label>
-        <div class="actions">
-          <button id="downloadPng" class="primary" type="button">Download PNG</button>
-          <button id="downloadSvg" type="button">Download SVG</button>
-          <button id="downloadPdf" type="button">Download PDF</button>
-          <button id="downloadHtml" type="button">Download interactive HTML</button>
-        </div>
-      </section>
-    </aside>
+## Local testing
 
-    <section class="plot-main">
-      <div class="card">
-        <div class="section-head plot-head">
-          <div>
-            <h2>Plot</h2>
-            <div id="plotStatus" class="status">Load a workbook to begin.</div>
-          </div>
-          <button id="resetZoom" type="button" disabled>Reset zoom</button>
-        </div>
-        <div id="plot" class="plot-surface"></div>
-        <div id="plotWarnings" class="warning-box hidden"></div>
-      </div>
-    </section>
-  </main>
+```bash
+python -m http.server 8000
+```
 
-  <footer>LA-ICPMS QuickSheet Plotter · Static GitHub Pages edition</footer>
+Then open `http://localhost:8000`.
 
-  <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20260721-3"></script>
-</body>
-</html>
+## License
+
+MIT. Third-party libraries retain their own licenses.
+
+## Blank-page check
+
+The publishing root must contain `index.html` directly. After extracting the ZIP, upload the files themselves, not an enclosing `ree-excel-github-pages` directory. In GitHub, opening the repository root should show `index.html`, `plotter.html`, `app.js`, and `styles.css` side by side.
+
+
+### Faceted plot spacing update
+
+Each facet now retains its own x- and y-axis titles. The plot height and vertical row spacing expand automatically so axis titles do not overlap neighbouring facet titles. Logarithmic y-axes use power-of-ten labels.

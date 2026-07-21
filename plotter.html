@@ -3,94 +3,155 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>REE Excel Processor</title>
-  <meta name="description" content="Browser-based REE composition summary processor and collator.">
+  <title>LA-ICPMS QuickSheet Plotter</title>
+  <meta name="description" content="Browser-based LA-ICPMS QuickSheet plotter.">
   <link rel="stylesheet" href="./styles.css?v=20260721-2">
 </head>
 <body>
   <nav class="site-nav">
     <div class="nav-inner">
-      <a href="./index.html" class="active" aria-current="page">Excel Processor</a>
-      <a href="./plotter.html">QuickSheet Plotter</a>
+      <a href="./index.html">Excel Processor</a>
+      <a href="./plotter.html" class="active" aria-current="page">QuickSheet Plotter</a>
     </div>
   </nav>
+
   <header class="hero">
     <div>
-      <p class="eyebrow">Browser-only Excel processing</p>
-      <h1>REE Excel Processor</h1>
-      <p class="lede">Upload analytical Excel files, choose ratios and SD-band colouring, exclude rows, and download processed or collated workbooks. Files remain in your browser.</p>
+      <p class="eyebrow">Browser-only analytical plotting</p>
+      <h1>LA-ICPMS QuickSheet Plotter</h1>
+      <p class="lede">Load a QuickSheet workbook, choose samples and elements, separate repeated x-values, and export an interactive or publication-ready plot. Files remain in your browser.</p>
     </div>
   </header>
 
-  <main class="container">
-    <section class="card">
-      <h2>1. Upload source files</h2>
-      <p>Accepted: <code>.xls</code> and <code>.xlsx</code>. The first worksheet must contain a <strong>SAMPLES: Composition Summary</strong> section.</p>
-      <input id="files" type="file" accept=".xls,.xlsx" multiple>
-      <div class="actions upload-actions">
-        <button id="continueUpload" type="button" class="primary" disabled>Continue — process selected files</button>
-        <button id="clearSelection" type="button" disabled>Clear current selection</button>
-        <button id="clearFiles" type="button" disabled>Clear all loaded files</button>
-      </div>
-      <div id="selectionStatus" class="status">Choose one or more files, then click Continue.</div>
-      <div id="loadStatus" class="status">No files loaded.</div>
-      <div id="loadedFiles" class="file-list" aria-live="polite"></div>
-    </section>
-
-    <section id="configCard" class="card hidden">
-      <h2>2. Configure ratios and colouring</h2>
-      <div class="grid two">
-        <label>Denominator element
-          <select id="denom"></select>
-        </label>
-        <fieldset>
-          <legend>Numerator elements</legend>
-          <div id="numerators" class="check-grid"></div>
-        </fieldset>
-      </div>
-      <fieldset>
-        <legend>Columns for SD-band colouring</legend>
-        <div id="colorColumns" class="check-grid"></div>
-      </fieldset>
-      <p class="hint">Green: ≤1 SD; blue: ≤2 SD; orange: ≤3 SD; red: &gt;3 SD; grey: below detection (&lt;...).</p>
-      <button id="applyConfig" class="primary">Apply configuration</button>
-    </section>
-
-    <section id="reviewCard" class="card hidden">
-      <div class="section-head">
-        <div>
-          <h2>3. Review and exclude rows</h2>
-          <p>Select a file, then toggle rows between KEEP and EXCLUDE. Statistics and colours use kept rows only.</p>
+  <main class="container plotter-layout">
+    <aside class="plot-controls">
+      <section class="card">
+        <h2>1. Load workbook</h2>
+        <p class="hint">Required columns: <code>Code</code>, <code>Compound</code>, <code>Mol/Kg</code>, <code>wt%</code>, and <code>Metric</code>.</p>
+        <input id="plotFile" type="file" accept=".xls,.xlsx">
+        <div class="actions upload-actions">
+          <button id="loadPlotFile" class="primary" type="button" disabled>Continue — load workbook</button>
+          <button id="clearPlotFile" type="button" disabled>Clear workbook</button>
         </div>
-        <label>File
-          <select id="reviewFile"></select>
+        <div id="plotLoadStatus" class="status">Choose a workbook, then click Continue.</div>
+        <div id="plotFileSummary" class="file-list"></div>
+      </section>
+
+      <section id="plotConfig" class="card hidden">
+        <h2>2. Configure plot</h2>
+
+        <label>Codes to display
+          <select id="codes" multiple size="8"></select>
         </label>
-      </div>
-      <div id="reviewSummary" class="stats"></div>
-      <div class="table-wrap"><table id="reviewTable"></table></div>
-    </section>
+        <div class="actions mini-actions">
+          <button id="selectAllCodes" type="button">Select all</button>
+          <button id="clearCodes" type="button">Clear</button>
+        </div>
 
-    <section id="downloadCard" class="card hidden">
-      <h2>4. Download outputs</h2>
-      <div class="actions">
-        <button id="downloadZip" class="primary">Download processed ZIP</button>
-        <button id="downloadCollated">Download collated workbook</button>
-      </div>
-      <p class="hint">The ZIP contains one <code>_processed.xlsx</code> and one <code>_keep_exclude.csv</code> per source file.</p>
-      <div id="buildStatus" class="status"></div>
-    </section>
+        <fieldset>
+          <legend>X axis</legend>
+          <label class="inline-option"><input type="radio" name="xunit" value="Mol/Kg" checked> Mol/Kg</label>
+          <label class="inline-option"><input type="radio" name="xunit" value="wt%"> wt%</label>
+        </fieldset>
 
-    <section class="card compact">
-      <h2>Privacy and limitations</h2>
-      <p>Processing happens locally in the browser. Uploaded data is not sent to this website. Very large workbooks may be slower than the desktop R version. This browser version reads the first worksheet and writes new <code>.xlsx</code> files.</p>
+        <fieldset>
+          <legend>Repeated x-values</legend>
+          <label>Offset mode
+            <select id="offsetMode">
+              <option value="sample" selected>Separate every sample</option>
+              <option value="code">Separate by Code</option>
+              <option value="compound">Separate by Compound</option>
+              <option value="none">No offset</option>
+            </select>
+          </label>
+          <label>Offset spread
+            <input id="offsetSpread" type="range" min="0.02" max="0.30" step="0.01" value="0.12">
+            <span id="offsetSpreadValue">12%</span> of nearest x-spacing
+          </label>
+          <p class="hint">Offsets change display positions only. Hover labels and calculations retain the original x-value.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Plot type</legend>
+          <label class="inline-option"><input type="radio" name="plotMode" value="simple" checked> Simple</label>
+          <label class="inline-option"><input type="radio" name="plotMode" value="ratio"> Element/element ratio</label>
+        </fieldset>
+
+        <div id="simpleControls">
+          <label>Elements to show
+            <select id="elements" multiple size="10"></select>
+          </label>
+          <div class="actions mini-actions">
+            <button id="selectAllElements" type="button">Select all</button>
+            <button id="clearElements" type="button">Clear</button>
+          </div>
+
+          <fieldset>
+            <legend>Y-axis quantity</legend>
+            <label class="inline-option"><input type="radio" name="yMode" value="ppm" checked> ppm</label>
+            <label class="inline-option"><input type="radio" name="yMode" value="mol"> Element (mol/kg)</label>
+          </fieldset>
+
+          <label class="toggle"><input id="facetElements" type="checkbox"> Facet by element</label>
+          <label class="toggle"><input id="logY" type="checkbox"> Log10 y-axis</label>
+          <label class="toggle"><input id="showErr" type="checkbox" checked> Show avg ± standard deviation</label>
+          <label class="toggle"><input id="facetCompounds" type="checkbox"> Facet by compound</label>
+        </div>
+
+        <div id="ratioControls" class="hidden">
+          <label>Numerator element
+            <select id="numerator"></select>
+          </label>
+          <label>Denominator element
+            <select id="denominator"></select>
+          </label>
+          <fieldset>
+            <legend>Ratio basis</legend>
+            <label class="inline-option"><input type="radio" name="ratioBasis" value="ww" checked> weight/weight</label>
+            <label class="inline-option"><input type="radio" name="ratioBasis" value="mm"> mol/mol</label>
+          </fieldset>
+          <label class="toggle"><input id="ratioLogY" type="checkbox"> Log10 y-axis</label>
+        </div>
+      </section>
+
+      <section id="exportCard" class="card hidden">
+        <h2>3. Export</h2>
+        <label>File name
+          <input id="plotName" type="text" value="laicpms_plot">
+        </label>
+        <label class="toggle"><input id="autoAspect" type="checkbox" checked> Automatic aspect ratio</label>
+        <label id="aspectWrap" class="hidden">Height/width ratio
+          <input id="aspectRatio" type="number" value="0.7" min="0.1" max="3" step="0.05">
+        </label>
+        <div class="actions">
+          <button id="downloadPng" class="primary" type="button">Download PNG</button>
+          <button id="downloadSvg" type="button">Download SVG</button>
+          <button id="downloadPdf" type="button">Download PDF</button>
+          <button id="downloadHtml" type="button">Download interactive HTML</button>
+        </div>
+      </section>
+    </aside>
+
+    <section class="plot-main">
+      <div class="card">
+        <div class="section-head plot-head">
+          <div>
+            <h2>Plot</h2>
+            <div id="plotStatus" class="status">Load a workbook to begin.</div>
+          </div>
+          <button id="resetZoom" type="button" disabled>Reset zoom</button>
+        </div>
+        <div id="plot" class="plot-surface"></div>
+        <div id="plotWarnings" class="warning-box hidden"></div>
+      </div>
     </section>
   </main>
 
-  <footer>REE Excel Processor · Static GitHub Pages edition</footer>
+  <footer>LA-ICPMS QuickSheet Plotter · Static GitHub Pages edition</footer>
 
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script defer src="./app.js?v=20260721-2"></script>
+  <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script defer src="./plotter.js?v=20260721-3"></script>
 </body>
 </html>
