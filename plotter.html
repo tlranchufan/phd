@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>REE Excel Processor</title>
+  <meta name="description" content="Browser-based REE composition summary processor and collator.">
+  <link rel="stylesheet" href="./styles.css?v=20260721-2">
+</head>
+<body>
+  <nav class="site-nav">
+    <div class="nav-inner">
+      <a href="./index.html" class="active" aria-current="page">Excel Processor</a>
+      <a href="./plotter.html">QuickSheet Plotter</a>
+    </div>
+  </nav>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Browser-only Excel processing</p>
+      <h1>REE Excel Processor</h1>
+      <p class="lede">Upload analytical Excel files, choose ratios and SD-band colouring, exclude rows, and download processed or collated workbooks. Files remain in your browser.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>1. Upload source files</h2>
+      <p>Accepted: <code>.xls</code> and <code>.xlsx</code>. The first worksheet must contain a <strong>SAMPLES: Composition Summary</strong> section.</p>
+      <input id="files" type="file" accept=".xls,.xlsx" multiple>
+      <div class="actions upload-actions">
+        <button id="continueUpload" type="button" class="primary" disabled>Continue — process selected files</button>
+        <button id="clearSelection" type="button" disabled>Clear current selection</button>
+        <button id="clearFiles" type="button" disabled>Clear all loaded files</button>
+      </div>
+      <div id="selectionStatus" class="status">Choose one or more files, then click Continue.</div>
+      <div id="loadStatus" class="status">No files loaded.</div>
+      <div id="loadedFiles" class="file-list" aria-live="polite"></div>
+    </section>
+
+    <section id="configCard" class="card hidden">
+      <h2>2. Configure ratios and colouring</h2>
+      <div class="grid two">
+        <label>Denominator element
+          <select id="denom"></select>
+        </label>
+        <fieldset>
+          <legend>Numerator elements</legend>
+          <div id="numerators" class="check-grid"></div>
+        </fieldset>
+      </div>
+      <fieldset>
+        <legend>Columns for SD-band colouring</legend>
+        <div id="colorColumns" class="check-grid"></div>
+      </fieldset>
+      <p class="hint">Green: ≤1 SD; blue: ≤2 SD; orange: ≤3 SD; red: &gt;3 SD; grey: below detection (&lt;...).</p>
+      <button id="applyConfig" class="primary">Apply configuration</button>
+    </section>
+
+    <section id="reviewCard" class="card hidden">
+      <div class="section-head">
+        <div>
+          <h2>3. Review and exclude rows</h2>
+          <p>Select a file, then toggle rows between KEEP and EXCLUDE. Statistics and colours use kept rows only.</p>
+        </div>
+        <label>File
+          <select id="reviewFile"></select>
+        </label>
+      </div>
+      <div id="reviewSummary" class="stats"></div>
+      <div class="table-wrap"><table id="reviewTable"></table></div>
+    </section>
+
+    <section id="downloadCard" class="card hidden">
+      <h2>4. Download outputs</h2>
+      <div class="actions">
+        <button id="downloadZip" class="primary">Download processed ZIP</button>
+        <button id="downloadCollated">Download collated workbook</button>
+      </div>
+      <p class="hint">The ZIP contains one <code>_processed.xlsx</code> and one <code>_keep_exclude.csv</code> per source file.</p>
+      <div id="buildStatus" class="status"></div>
+    </section>
+
+    <section class="card compact">
+      <h2>Privacy and limitations</h2>
+      <p>Processing happens locally in the browser. Uploaded data is not sent to this website. Very large workbooks may be slower than the desktop R version. This browser version reads the first worksheet and writes new <code>.xlsx</code> files.</p>
+    </section>
+  </main>
+
+  <footer>REE Excel Processor · Static GitHub Pages edition</footer>
+
+  <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script defer src="./app.js?v=20260721-2"></script>
+</body>
+</html>
