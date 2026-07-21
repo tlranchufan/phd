@@ -157,26 +157,93 @@ function applyOffsets(rows, xField, mode, spreadFraction) {
 
 function subplotDomains(count) {
   const cols = Math.ceil(Math.sqrt(count));
-  const rows = Math.ceil(count/cols);
-  const gapX=.07, gapY=.10;
-  const w=(1-gapX*(cols-1))/cols, h=(1-gapY*(rows-1))/rows;
-  return Array.from({length:count},(_,i)=>{
-    const col=i%cols, row=Math.floor(i/cols);
-    return {x:[col*(w+gapX), col*(w+gapX)+w], y:[1-(row+1)*h-row*gapY, 1-row*h-row*gapY]};
+  const rows = Math.ceil(count / cols);
+
+  // Faceted plots need extra vertical room for tick labels and panel titles.
+  // Increase the gap slightly as the number of rows grows, while keeping
+  // enough plotting area for every panel.
+  const gapX = cols > 1 ? 0.08 : 0;
+  // Keep enough paper-space between rows for a full x-axis title on every panel.
+  const gapY = rows > 1 ? Math.min(0.26, 0.20 + 0.01 * Math.min(rows, 4)) : 0;
+  const w = (1 - gapX * (cols - 1)) / cols;
+  const h = (1 - gapY * (rows - 1)) / rows;
+
+  return Array.from({length: count}, (_, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    return {
+      col,
+      row,
+      cols,
+      rows,
+      isBottomRow: row === rows - 1 || i + cols >= count,
+      isLeftColumn: col === 0,
+      x: [col * (w + gapX), col * (w + gapX) + w],
+      y: [1 - (row + 1) * h - row * gapY, 1 - row * h - row * gapY]
+    };
   });
 }
 
 function makeLayout(panelNames, xLabel, yLabel, logY) {
+  const isFaceted = panelNames.length > 1;
   const layout = {
-    margin:{l:70,r:30,t:panelNames.length>1?70:30,b:65},
-    legend:{orientation:'h',y:-0.18}, hovermode:'closest', paper_bgcolor:'#fff', plot_bgcolor:'#fff'
+    margin: {l: isFaceted ? 82 : 70, r: 30, t: isFaceted ? 72 : 30, b: isFaceted ? 78 : 65},
+    legend: {orientation: 'h', y: -0.18},
+    hovermode: 'closest',
+    paper_bgcolor: '#fff',
+    plot_bgcolor: '#fff'
   };
-  const domains=subplotDomains(panelNames.length);
-  panelNames.forEach((name,i)=>{
-    const n=i+1, suffix=n===1?'':n;
-    layout[`xaxis${suffix}`]={domain:domains[i].x,title:{text:xLabel},showgrid:true,zeroline:false};
-    layout[`yaxis${suffix}`]={domain:domains[i].y,title:{text:yLabel},type:logY?'log':'linear',showgrid:true,zeroline:false};
-    if(panelNames.length>1) layout.annotations=(layout.annotations||[]).concat({text:name,x:(domains[i].x[0]+domains[i].x[1])/2,y:domains[i].y[1]+.025,xref:'paper',yref:'paper',showarrow:false,font:{size:13}});
+
+  const domains = subplotDomains(panelNames.length);
+  panelNames.forEach((name, i) => {
+    const n = i + 1;
+    const suffix = n === 1 ? '' : n;
+    const domain = domains[i];
+
+    const xAxis = {
+      domain: domain.x,
+      anchor: `y${suffix}`,
+      title: {text: xLabel, standoff: isFaceted ? 24 : 14},
+      showgrid: true,
+      zeroline: false,
+      automargin: true
+    };
+
+    const yAxis = {
+      domain: domain.y,
+      anchor: `x${suffix}`,
+      title: {text: yLabel, standoff: isFaceted ? 24 : 14},
+      type: logY ? 'log' : 'linear',
+      showgrid: true,
+      zeroline: false,
+      automargin: true
+    };
+
+    // Show clean powers of ten (10^2, 10^3, …), rather than 100, 1000,
+    // and suppress the crowded minor-number labels seen on log facets.
+    if (logY) {
+      yAxis.dtick = 1;
+      yAxis.exponentformat = 'power';
+      yAxis.showexponent = 'all';
+      yAxis.minor = {showgrid: true, gridcolor: '#eeeeee', ticks: ''};
+    }
+
+    layout[`xaxis${suffix}`] = xAxis;
+    layout[`yaxis${suffix}`] = yAxis;
+
+    if (isFaceted) {
+      layout.annotations = (layout.annotations || []).concat({
+        text: name,
+        x: (domain.x[0] + domain.x[1]) / 2,
+        y: domain.y[1] + (domain.row === 0 ? 0.030 : 0.025),
+        xref: 'paper',
+        yref: 'paper',
+        showarrow: false,
+        font: {size: 13},
+        xanchor: 'center',
+        yanchor: 'bottom'
+      });
+    }
   });
   return layout;
 }
@@ -267,9 +334,17 @@ function renderPlot() {
     if(auto){
       const faceted=radioValue('plotMode')==='simple' && ($('facetElements').checked||$('facetCompounds').checked);
       const count=faceted ? Math.max(1,(result.layout.annotations||[]).length) : 1;
-      aspect=faceted?Math.min(1.6,.58+.16*Math.ceil(Math.sqrt(count))):.7;
+      if (faceted) {
+        const cols=Math.ceil(Math.sqrt(count));
+        const facetRows=Math.ceil(count/cols);
+        // Allocate a full plotting panel plus title/axis-label clearance per row.
+        result.layout.height=Math.max(620, facetRows*430);
+      } else {
+        result.layout.height=Math.max(520,Math.round(width*.7));
+      }
+    } else {
+      result.layout.height=Math.max(520,Math.round(width*aspect));
     }
-    result.layout.height=Math.max(520,Math.round(width*aspect));
     result.layout.autosize=true;
     Plotly.react('plot',result.traces,result.layout,{responsive:true,displaylogo:false,scrollZoom:true,toImageButtonOptions:{format:'png',filename:sanitizeName($('plotName').value),scale:2}});
     $('plotStatus').textContent=`${rawRows.length} sample row(s), ${codes.size} Code(s), x = ${xField}; offset mode: ${mode}.`;

@@ -58,3 +58,8 @@ MIT. Third-party libraries retain their own licenses.
 ## Blank-page check
 
 The publishing root must contain `index.html` directly. After extracting the ZIP, upload the files themselves, not an enclosing `ree-excel-github-pages` directory. In GitHub, opening the repository root should show `index.html`, `plotter.html`, `app.js`, and `styles.css` side by side.
+
+
+### Faceted plot spacing update
+
+Each facet now retains its own x- and y-axis titles. The plot height and vertical row spacing expand automatically so axis titles do not overlap neighbouring facet titles. Logarithmic y-axes use power-of-ten labels.
