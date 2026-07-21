@@ -226,6 +226,15 @@ function makeLayout(panelNames, xLabel, yLabel, logY) {
       yAxis.exponentformat = 'power';
       yAxis.showexponent = 'all';
       yAxis.minor = {showgrid: true, gridcolor: '#eeeeee', ticks: ''};
+    } else {
+      // In regular (linear) mode, always show the full value instead of
+      // Plotly's abbreviated SI labels such as 2k or 3k.
+      // The trim flag removes unnecessary trailing zeroes while retaining
+      // decimals for small values.
+      yAxis.tickformat = '.10~f';
+      yAxis.hoverformat = '.10~f';
+      yAxis.exponentformat = 'none';
+      yAxis.showexponent = 'none';
     }
 
     layout[`xaxis${suffix}`] = xAxis;
@@ -285,7 +294,7 @@ function buildSimplePlot(rows, xField) {
           marker:{size:10}, line:{width:2},
           error_y:showErr?{type:'data',array:pts.map(p=>p.err??0),visible:true,thickness:1.2,width:4}:undefined,
           customdata:pts.map(p=>[p.r.Code,p.r.Compound,p.r[xField],p.r.__offset,p.r.File||'',element]),
-          hovertemplate:'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Element: %{customdata[5]}<br>Y: %{y:.6g}<extra></extra>'
+          hovertemplate:'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Element: %{customdata[5]}<br>Y: %{y:.10~f}<extra></extra>'
         });
       });
     });
@@ -312,7 +321,7 @@ function buildRatioPlot(rows,xField) {
   const traces=[];
   groups.forEach((pts,comp)=>{
     pts.sort((a,b)=>a.r.__displayX-b.r.__displayX);
-    traces.push({type:'scatter',mode:'lines+markers',name:comp,x:pts.map(p=>p.r.__displayX),y:pts.map(p=>p.ratio),marker:{size:10},line:{width:2},customdata:pts.map(p=>[p.r.Code,p.r.Compound,p.r[xField],p.r.__offset]),hovertemplate:'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Ratio: %{y:.6g}<extra></extra>'});
+    traces.push({type:'scatter',mode:'lines+markers',name:comp,x:pts.map(p=>p.r.__displayX),y:pts.map(p=>p.ratio),marker:{size:10},line:{width:2},customdata:pts.map(p=>[p.r.Code,p.r.Compound,p.r[xField],p.r.__offset]),hovertemplate:'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Ratio: %{y:.10~f}<extra></extra>'});
   });
   return {traces,layout:makeLayout(['Plot'],xField,`${numerator}/${denominator} (${basis==='mm'?'mol/mol':'w/w'})`,logY),warnings:skippedZero?[`${skippedZero} row(s) were skipped because the denominator was zero.`]:[]};
 }
