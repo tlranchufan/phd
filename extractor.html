@@ -1,14 +1,172 @@
-<!doctype html><html><head><meta charset="utf-8">
-<title>ZIP CSV Extractor</title>
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<style>body{font-family:Arial;max-width:900px;margin:40px auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px}#drop{border:2px dashed #888;padding:20px;margin:1em 0;text-align:center}</style>
-</head><body>
-<h1>ZIP CSV Extractor</h1>
-<input id="file" type="file" accept=".zip">
-<label><input id="flatten" type="checkbox"> Flatten folders</label>
-<button id="download" disabled>Download CSV ZIP</button>
-<div id="drop">Drag ZIP here</div>
-<div id="status"></div>
-<table><thead><tr><th>Filename</th><th>Folder</th><th>Size</th></tr></thead><tbody id="rows"></tbody></table>
-<script src="extractor.js"></script>
-</body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>File Extractors</title>
+  <meta name="description" content="Browser-based CSV extraction and Raman TXT/CSV processing tools.">
+  <link rel="stylesheet" href="./styles.css?v=20260726">
+  <style>
+    .tool-grid{display:grid;grid-template-columns:1fr;gap:1.2rem}
+    .drop-zone{border:2px dashed #9aa9b5;border-radius:12px;padding:1.25rem;text-align:center;background:#f8fafc;transition:.15s ease}
+    .drop-zone.dragover{border-color:var(--accent);background:#edf6f8}
+    .drop-zone strong{display:block;margin-bottom:.3rem}
+    .drop-zone input{max-width:620px;margin:.7rem auto 0}
+    .option-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.7rem 1rem}
+    .option-grid label,.radio-stack label{font-weight:500;display:flex;gap:.5rem;align-items:flex-start}
+    .option-grid input,.radio-stack input{margin-top:.2rem}
+    .radio-stack{display:grid;gap:.5rem}
+    .progress-shell{height:12px;background:#e5eaee;border-radius:999px;overflow:hidden;margin-top:.8rem}
+    .progress-bar{height:100%;width:0;background:var(--accent2);transition:width .12s linear}
+    .summary-pills{display:flex;flex-wrap:wrap;gap:.5rem;margin:.8rem 0}
+    .summary-pill{background:#edf6f8;border:1px solid #cce5ea;border-radius:999px;padding:.35rem .65rem;font-size:.85rem}
+    .preview-table td:first-child,.preview-table th:first-child{text-align:left}
+    .preview-table td:nth-child(2),.preview-table th:nth-child(2){text-align:left}
+    .preview-table td:nth-child(3),.preview-table th:nth-child(3){text-align:left}
+    .log-box{white-space:pre-wrap;min-height:95px;max-height:260px;overflow:auto;background:#0f172a;color:#dbeafe;border-radius:10px;padding:.85rem;font:0.82rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}
+    .subcard{border:1px solid var(--line);border-radius:11px;padding:1rem;margin-top:1rem;background:#fbfcfd}
+    .subcard h3{margin:.1rem 0 .75rem}
+    .small-select{max-width:500px}
+    .file-badge{display:inline-block;padding:.2rem .48rem;border-radius:999px;background:#eef2f5;font-size:.76rem;font-weight:700}
+    .action-note{color:var(--muted);font-size:.83rem}
+    .error-box{border-color:#efb4b4;background:#fff3f3;color:#8b1d1d}
+    @media(min-width:1050px){.tool-grid{grid-template-columns:1fr 1fr}.tool-grid>.card{margin-bottom:0}}
+  </style>
+</head>
+<body>
+  <nav class="site-nav">
+    <div class="nav-inner">
+      <a href="./index.html">Excel Processor</a>
+      <a href="./plotter.html">QuickSheet Plotter</a>
+      <a href="./extractor.html" class="active" aria-current="page">Extractors</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Browser-only file preparation</p>
+      <h1>File Extractors</h1>
+      <p class="lede">Extract CSV files or process Raman TXT/CSV exports from ZIP archives. Everything runs locally in your browser; your files are not uploaded.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="tool-grid">
+      <section class="card">
+        <h2>CSV Extractor</h2>
+        <p>Find every <code>.csv</code> inside a ZIP, including files in nested folders, then download a CSV-only ZIP.</p>
+
+        <div id="csvDrop" class="drop-zone">
+          <strong>Drop a ZIP archive here</strong>
+          <span class="hint">or choose one below</span>
+          <input id="csvZipFile" type="file" accept=".zip,application/zip">
+        </div>
+
+        <fieldset>
+          <legend>Output layout</legend>
+          <div class="radio-stack">
+            <label><input type="radio" name="csvLayout" value="retain" checked> Retain the original folder directory</label>
+            <label><input type="radio" name="csvLayout" value="flatten"> Place all CSV files in one folder</label>
+          </div>
+          <p class="hint">Duplicate names are renamed automatically when using one folder.</p>
+        </fieldset>
+
+        <div class="actions">
+          <button id="csvScan" type="button" class="primary" disabled>Scan ZIP</button>
+          <button id="csvReset" type="button" disabled>Clear</button>
+          <button id="csvDownload" type="button" disabled>Download CSV ZIP</button>
+        </div>
+        <div id="csvStatus" class="status" role="status">Choose a ZIP archive to begin.</div>
+        <div class="progress-shell" aria-hidden="true"><div id="csvProgress" class="progress-bar"></div></div>
+        <div id="csvSummary" class="summary-pills"></div>
+
+        <div id="csvPreviewWrap" class="table-wrap hidden">
+          <table class="preview-table">
+            <thead><tr><th>CSV file</th><th>Original folder</th><th>Size</th></tr></thead>
+            <tbody id="csvPreview"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Raman Processor</h2>
+        <p>Reproduce and extend the Raman file-management workflow: strip TXT headers, rename OMNIC files, sort TXT/CSV pairs, and separate quartz files.</p>
+
+        <div id="ramanDrop" class="drop-zone">
+          <strong>Drop a Raman ZIP archive here</strong>
+          <span class="hint">or choose one below</span>
+          <input id="ramanZipFile" type="file" accept=".zip,application/zip">
+        </div>
+
+        <label>Processing preset
+          <select id="ramanPreset" class="small-select">
+            <option value="cleanup" selected>OMNIC cleanup — recommended</option>
+            <option value="strip">Strip TXT headers only</option>
+            <option value="sort">Sort TXT/CSV pairs only</option>
+            <option value="quartz">Quartz sorter only</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+
+        <div id="ramanCustom" class="subcard hidden">
+          <h3>Custom operations</h3>
+          <div class="option-grid">
+            <label><input id="opStrip" type="checkbox" checked> <span><strong>Strip TXT headers</strong><br><span class="action-note">Remove the first line from every TXT file.</span></span></label>
+            <label><input id="opRename" type="checkbox" checked> <span><strong>Rename OMNIC files</strong><br><span class="action-note"><code>@output_</code> becomes <code>omnic_</code>.</span></span></label>
+            <label><input id="opSort" type="checkbox" checked> <span><strong>Sort TXT/CSV pairs</strong><br><span class="action-note">Create matched and unmatched folders.</span></span></label>
+            <label><input id="opQuartz" type="checkbox" checked> <span><strong>Separate quartz files</strong><br><span class="action-note">Move filenames containing Qz into Quartz.</span></span></label>
+            <label><input id="opQuartzInsensitive" type="checkbox" checked> <span><strong>Case-insensitive Qz</strong><br><span class="action-note">Also recognises qz, QZ, and qZ.</span></span></label>
+            <label><input id="opKeepOther" type="checkbox" checked> <span><strong>Keep other file types</strong><br><span class="action-note">Place unrelated files under <code>other/</code>.</span></span></label>
+          </div>
+        </div>
+
+        <p class="hint">The browser edition keeps TXT basenames unchanged when stripping headers so TXT/CSV pairing remains reliable. Empty or one-line TXT files become empty processed files and are reported in the log.</p>
+
+        <div class="actions">
+          <button id="ramanProcess" type="button" class="primary" disabled>Process ZIP</button>
+          <button id="ramanReset" type="button" disabled>Clear</button>
+          <button id="ramanDownload" type="button" disabled>Download processed ZIP</button>
+        </div>
+        <div id="ramanStatus" class="status" role="status">Choose a ZIP archive to begin.</div>
+        <div class="progress-shell" aria-hidden="true"><div id="ramanProgress" class="progress-bar"></div></div>
+        <div id="ramanSummary" class="summary-pills"></div>
+      </section>
+    </div>
+
+    <section id="ramanResults" class="card hidden">
+      <div class="section-head">
+        <div>
+          <h2>Raman output preview</h2>
+          <p id="ramanPreviewNote" class="hint"></p>
+        </div>
+        <span id="ramanOutputName" class="file-badge">raman_processed.zip</span>
+      </div>
+      <div class="grid two">
+        <div>
+          <h3>Processing log</h3>
+          <div id="ramanLog" class="log-box" aria-live="polite"></div>
+        </div>
+        <div>
+          <h3>Output files</h3>
+          <div class="table-wrap" style="max-height:360px">
+            <table class="preview-table">
+              <thead><tr><th>Output path</th><th>Source</th><th>Action</th></tr></thead>
+              <tbody id="ramanPreview"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card compact">
+      <h2>Privacy and limitations</h2>
+      <p>ZIP archives are read and rebuilt locally using JavaScript. Nothing is sent to a server. Very large archives may require substantial browser memory. The Raman processor supports UTF-8, UTF-16, and common Windows text encodings.</p>
+    </section>
+  </main>
+
+  <footer>File Extractors · Static GitHub Pages edition</footer>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script defer src="./extractor.js?v=20260726-complete"></script>
+</body>
+</html>
