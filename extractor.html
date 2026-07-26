@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>ZIP CSV Extractor</title>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>body{font-family:Arial;max-width:900px;margin:40px auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px}#drop{border:2px dashed #888;padding:20px;margin:1em 0;text-align:center}</style>
+</head><body>
+<h1>ZIP CSV Extractor</h1>
+<input id="file" type="file" accept=".zip">
+<label><input id="flatten" type="checkbox"> Flatten folders</label>
+<button id="download" disabled>Download CSV ZIP</button>
+<div id="drop">Drag ZIP here</div>
+<div id="status"></div>
+<table><thead><tr><th>Filename</th><th>Folder</th><th>Size</th></tr></thead><tbody id="rows"></tbody></table>
+<script src="extractor.js"></script>
+</body></html>
