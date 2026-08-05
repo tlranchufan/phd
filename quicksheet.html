@@ -31,16 +31,16 @@
   <main class="container">
     <section class="card">
       <h2>Processed workbooks → QuickSheet</h2>
-      <p>Upload one or more <code>_processed.xlsx</code> files. The builder reads the <strong>Average</strong>, <strong>Std Dev</strong> and <strong>RSD</strong> rows, ignores the limits-of-detection section, and turns values beginning with <code>&lt;</code> into blank cells.</p>
+      <p>Upload one or more <code>_processed.xlsx</code> files. You can add files in several separate upload rounds; each new selection is appended to the queue. The builder reads the <strong>Average</strong>, <strong>Std Dev</strong> and <strong>RSD</strong> rows, ignores the limits-of-detection section, and turns values beginning with <code>&lt;</code> into blank cells.</p>
 
-      <label>Processed workbooks
+      <label>Add processed workbooks
         <input id="processedFiles" type="file" accept=".xls,.xlsx" multiple>
       </label>
       <div class="actions upload-actions">
-        <button id="loadProcessed" type="button" class="primary" disabled>Continue — read processed files</button>
+        <button id="loadProcessed" type="button" class="primary" disabled>Continue — read queued files</button>
         <button id="clearProcessed" type="button" disabled>Clear</button>
       </div>
-      <div id="processedStatus" class="status" role="status">Choose one or more processed workbooks, then click Continue.</div>
+      <div id="processedStatus" class="status" role="status">Add one or more processed workbooks. You may select files again to append another batch.</div>
       <div id="processedFileList" class="file-list"></div>
 
       <div id="metadataCard" class="subcard hidden">
@@ -105,9 +105,9 @@
 
     <section class="card">
       <h2>Merge existing QuickSheets</h2>
-      <p>Upload multiple QuickSheets to append them into one workbook. The merger normalises common header variants, forms the union of all columns, and leaves cells blank where a source workbook does not contain a column.</p>
+      <p>Upload multiple QuickSheets to append them into one workbook. You can add them in several separate upload rounds. The merger normalises common header variants, forms the union of all columns, and leaves cells blank where a source workbook does not contain a column.</p>
 
-      <label>QuickSheet workbooks
+      <label>Add QuickSheet workbooks
         <input id="mergeFiles" type="file" accept=".xls,.xlsx" multiple>
       </label>
       <div class="grid two builder-options">
@@ -122,7 +122,7 @@
           <input id="mergeFileName" type="text" value="laicpms_quicksheet_merged">
         </label>
       </div>
-      <div id="mergeStatus" class="status" role="status">Choose two or more QuickSheets to merge.</div>
+      <div id="mergeStatus" class="status" role="status">Add QuickSheets in one or more upload rounds, then click Merge QuickSheets.</div>
       <div id="mergeFileList" class="file-list"></div>
       <div id="mergeSummary" class="summary-pills"></div>
 
@@ -141,6 +141,6 @@
   <footer>REE Laboratory Tools · Static GitHub Pages edition</footer>
 
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script defer src="./quicksheet.js?v=20260805-1"></script>
+  <script defer src="./quicksheet.js?v=20260805-multi-upload"></script>
 </body>
 </html>

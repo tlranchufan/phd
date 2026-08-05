@@ -67,6 +67,28 @@ function formatBytes(bytes) {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[index]}`;
 }
 
+function fileSignature(file) {
+  return [file.name, file.size, file.lastModified, file.type].join('::');
+}
+
+function appendUniqueFiles(existingFiles, newFiles, additionalSignatures = new Set()) {
+  const known = new Set(existingFiles.map(fileSignature));
+  for (const signature of additionalSignatures) known.add(signature);
+
+  const added = [];
+  let skipped = 0;
+  for (const file of newFiles) {
+    const signature = fileSignature(file);
+    if (known.has(signature)) {
+      skipped += 1;
+      continue;
+    }
+    known.add(signature);
+    added.push(file);
+  }
+  return { files: [...existingFiles, ...added], added: added.length, skipped };
+}
+
 function setStatus(id, text, isError = false) {
   const node = $(id);
   node.textContent = text;
@@ -301,10 +323,10 @@ async function parseProcessedFile(file) {
   };
 }
 
-function renderSelectedFiles(files, targetId) {
+function renderSelectedFiles(files, targetId, onRemove = null) {
   const target = $(targetId);
   clearNode(target);
-  for (const file of files) {
+  files.forEach((file, index) => {
     const item = document.createElement('div');
     item.className = 'file-item';
     const meta = document.createElement('div');
@@ -317,8 +339,47 @@ function renderSelectedFiles(files, targetId) {
     detail.textContent = formatBytes(file.size);
     meta.append(name, detail);
     item.appendChild(meta);
+
+    if (typeof onRemove === 'function') {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'file-remove';
+      remove.textContent = 'Remove';
+      remove.addEventListener('click', () => onRemove(index));
+      item.appendChild(remove);
+    }
+
     target.appendChild(item);
-  }
+  });
+}
+
+function loadedProcessedSignatures() {
+  return new Set(builderState.samples.map((sample) => fileSignature(sample.file)));
+}
+
+function updateProcessedControls() {
+  const queued = builderState.selectedFiles.length;
+  const loaded = builderState.samples.length;
+  $('loadProcessed').disabled = queued === 0;
+  $('clearProcessed').disabled = queued === 0 && loaded === 0;
+}
+
+function renderProcessedQueue() {
+  renderSelectedFiles(builderState.selectedFiles, 'processedFileList', (index) => {
+    builderState.selectedFiles.splice(index, 1);
+    renderProcessedQueue();
+    updateProcessedControls();
+    const queued = builderState.selectedFiles.length;
+    const loaded = builderState.samples.length;
+    setStatus(
+      'processedStatus',
+      queued
+        ? `${queued} file(s) queued; ${loaded} workbook(s) already loaded. Click Continue to read the queue.`
+        : loaded
+          ? `${loaded} workbook(s) loaded. Add another batch at any time, or build the QuickSheet.`
+          : 'Add one or more processed workbooks. You may select files again to append another batch.',
+    );
+  });
 }
 
 function invalidateBuilderOutput() {
@@ -375,6 +436,17 @@ function renderMetadataRows() {
       invalidateBuilderOutput();
       renderMetadataRows();
       updateMetadataVisibility();
+      updateProcessedControls();
+      const queued = builderState.selectedFiles.length;
+      const loaded = builderState.samples.length;
+      setStatus(
+        'processedStatus',
+        queued
+          ? `${queued} file(s) queued; ${loaded} workbook(s) loaded.`
+          : loaded
+            ? `${loaded} workbook(s) loaded. Add another batch at any time, or build the QuickSheet.`
+            : 'Add one or more processed workbooks. You may select files again to append another batch.',
+      );
     });
     actionCell.appendChild(remove);
     row.appendChild(actionCell);
@@ -387,23 +459,27 @@ function renderMetadataRows() {
 function updateMetadataVisibility() {
   const hasSamples = builderState.samples.length > 0;
   $('metadataCard').classList.toggle('hidden', !hasSamples);
-  if (!hasSamples) setStatus('processedStatus', 'Choose one or more processed workbooks, then click Continue.');
+  if (!hasSamples && !builderState.selectedFiles.length) setStatus('processedStatus', 'Add one or more processed workbooks. You may select files again to append another batch.');
 }
 
 async function loadProcessedFiles() {
   if (!builderState.selectedFiles.length) return;
-  $('loadProcessed').disabled = true;
-  $('clearProcessed').disabled = true;
+
+  const queue = [...builderState.selectedFiles];
+  builderState.selectedFiles = [];
+  $('processedFiles').value = '';
+  renderProcessedQueue();
+  updateProcessedControls();
   invalidateBuilderOutput();
-  builderState.samples = [];
-  updateMetadataVisibility();
 
   const errors = [];
-  for (let index = 0; index < builderState.selectedFiles.length; index += 1) {
-    const file = builderState.selectedFiles[index];
-    setStatus('processedStatus', `Reading ${file.name} (${index + 1} of ${builderState.selectedFiles.length})…`);
+  let newlyLoaded = 0;
+  for (let index = 0; index < queue.length; index += 1) {
+    const file = queue[index];
+    setStatus('processedStatus', `Reading ${file.name} (${index + 1} of ${queue.length})…`);
     try {
       builderState.samples.push(await parseProcessedFile(file));
+      newlyLoaded += 1;
     } catch (error) {
       console.error(error);
       errors.push(`${file.name}: ${error.message}`);
@@ -413,13 +489,17 @@ async function loadProcessedFiles() {
 
   renderMetadataRows();
   updateMetadataVisibility();
-  const loaded = builderState.samples.length;
-  const errorText = errors.length ? ` ${errors.length} file(s) could not be read.` : '';
-  setStatus('processedStatus', `Loaded ${loaded} processed workbook${loaded === 1 ? '' : 's'}.${errorText}`, errors.length > 0 && loaded === 0);
+  updateProcessedControls();
+
+  const total = builderState.samples.length;
+  const skippedText = errors.length ? ` ${errors.length} file(s) could not be read.` : '';
+  setStatus(
+    'processedStatus',
+    `Added ${newlyLoaded} processed workbook${newlyLoaded === 1 ? '' : 's'}; ${total} total loaded.${skippedText}`,
+    errors.length > 0 && newlyLoaded === 0,
+  );
   if (errors.length) setStatus('builderStatus', errors.join(' | '), true);
-  else setStatus('builderStatus', 'Enter sample metadata, then build the QuickSheet.');
-  $('loadProcessed').disabled = !builderState.selectedFiles.length;
-  $('clearProcessed').disabled = false;
+  else setStatus('builderStatus', 'Enter sample metadata, add another upload batch if needed, then build the QuickSheet.');
 }
 
 function measurementHeadersForBuilder() {
@@ -636,15 +716,42 @@ function orderedMergedHeaders(parsedFiles) {
   return [...META_COLUMNS, ...STANDARD_ELEMENTS, ...extras, ...STANDARD_RATIOS, INCLUSION_COLUMN];
 }
 
-async function mergeQuickSheets() {
-  if (!mergeState.selectedFiles.length) return;
-  $('mergeQuickSheets').disabled = true;
-  $('downloadMerged').disabled = true;
+function invalidateMergeOutput() {
   mergeState.headers = [];
   mergeState.rows = [];
   mergeState.workbookBytes = null;
+  $('downloadMerged').disabled = true;
   $('mergePreviewWrap').classList.add('hidden');
+  clearNode($('mergePreview'));
   renderSummary('mergeSummary', []);
+}
+
+function updateMergeControls() {
+  const count = mergeState.selectedFiles.length;
+  $('mergeQuickSheets').disabled = count === 0;
+  $('clearMerge').disabled = count === 0;
+}
+
+function renderMergeFiles() {
+  renderSelectedFiles(mergeState.selectedFiles, 'mergeFileList', (index) => {
+    mergeState.selectedFiles.splice(index, 1);
+    invalidateMergeOutput();
+    renderMergeFiles();
+    updateMergeControls();
+    const count = mergeState.selectedFiles.length;
+    setStatus(
+      'mergeStatus',
+      count
+        ? `${count} QuickSheet file(s) selected. Add another batch or click Merge QuickSheets.`
+        : 'Add QuickSheets in one or more upload rounds, then click Merge QuickSheets.',
+    );
+  });
+}
+
+async function mergeQuickSheets() {
+  if (!mergeState.selectedFiles.length) return;
+  $('mergeQuickSheets').disabled = true;
+  invalidateMergeOutput();
 
   const parsedFiles = [];
   const errors = [];
@@ -702,15 +809,17 @@ function resetProcessed() {
   $('processedFiles').value = '';
   $('loadProcessed').disabled = true;
   $('clearProcessed').disabled = true;
-  clearNode($('processedFileList'));
+  renderProcessedQueue();
   clearNode($('metadataRows'));
   $('metadataCard').classList.add('hidden');
   $('builderPreviewCard').classList.add('hidden');
   $('downloadQuickSheet').disabled = true;
   renderSummary('builderSummary', []);
-  setStatus('processedStatus', 'Choose one or more processed workbooks, then click Continue.');
+  setStatus('processedStatus', 'Add one or more processed workbooks. You may select files again to append another batch.');
   setStatus('builderStatus', '');
+  updateProcessedControls();
 }
+
 
 function resetMerge() {
   mergeState.selectedFiles = [];
@@ -721,20 +830,39 @@ function resetMerge() {
   $('mergeQuickSheets').disabled = true;
   $('clearMerge').disabled = true;
   $('downloadMerged').disabled = true;
-  clearNode($('mergeFileList'));
+  renderMergeFiles();
   clearNode($('mergePreview'));
   $('mergePreviewWrap').classList.add('hidden');
   renderSummary('mergeSummary', []);
-  setStatus('mergeStatus', 'Choose two or more QuickSheets to merge.');
+  setStatus('mergeStatus', 'Add QuickSheets in one or more upload rounds, then click Merge QuickSheets.');
+  updateMergeControls();
 }
+
 
 function bindEvents() {
   $('processedFiles').addEventListener('change', (event) => {
-    builderState.selectedFiles = Array.from(event.target.files || []);
-    renderSelectedFiles(builderState.selectedFiles, 'processedFileList');
-    $('loadProcessed').disabled = builderState.selectedFiles.length === 0;
-    $('clearProcessed').disabled = builderState.selectedFiles.length === 0;
-    setStatus('processedStatus', builderState.selectedFiles.length ? `${builderState.selectedFiles.length} file(s) selected. Click Continue to read them.` : 'Choose one or more processed workbooks, then click Continue.');
+    const incoming = Array.from(event.target.files || []);
+    const result = appendUniqueFiles(
+      builderState.selectedFiles,
+      incoming,
+      loadedProcessedSignatures(),
+    );
+    builderState.selectedFiles = result.files;
+    event.target.value = '';
+    renderProcessedQueue();
+    updateProcessedControls();
+
+    const queued = builderState.selectedFiles.length;
+    const loaded = builderState.samples.length;
+    const duplicateText = result.skipped ? ` ${result.skipped} duplicate file(s) were ignored.` : '';
+    setStatus(
+      'processedStatus',
+      queued
+        ? `${queued} file(s) queued; ${loaded} workbook(s) already loaded. Click Continue to read the queue.${duplicateText}`
+        : loaded
+          ? `${loaded} workbook(s) loaded.${duplicateText}`
+          : `No new files were added.${duplicateText}`,
+    );
   });
   $('loadProcessed').addEventListener('click', loadProcessedFiles);
   $('clearProcessed').addEventListener('click', resetProcessed);
@@ -749,13 +877,22 @@ function bindEvents() {
   });
 
   $('mergeFiles').addEventListener('change', (event) => {
-    mergeState.selectedFiles = Array.from(event.target.files || []);
-    renderSelectedFiles(mergeState.selectedFiles, 'mergeFileList');
-    $('mergeQuickSheets').disabled = mergeState.selectedFiles.length === 0;
-    $('clearMerge').disabled = mergeState.selectedFiles.length === 0;
-    $('downloadMerged').disabled = true;
-    mergeState.workbookBytes = null;
-    setStatus('mergeStatus', mergeState.selectedFiles.length ? `${mergeState.selectedFiles.length} QuickSheet file(s) selected. Click Merge QuickSheets.` : 'Choose two or more QuickSheets to merge.');
+    const incoming = Array.from(event.target.files || []);
+    const result = appendUniqueFiles(mergeState.selectedFiles, incoming);
+    mergeState.selectedFiles = result.files;
+    event.target.value = '';
+    invalidateMergeOutput();
+    renderMergeFiles();
+    updateMergeControls();
+
+    const count = mergeState.selectedFiles.length;
+    const duplicateText = result.skipped ? ` ${result.skipped} duplicate file(s) were ignored.` : '';
+    setStatus(
+      'mergeStatus',
+      count
+        ? `${count} QuickSheet file(s) selected. Add another batch or click Merge QuickSheets.${duplicateText}`
+        : `No new files were added.${duplicateText}`,
+    );
   });
   $('mergeQuickSheets').addEventListener('click', mergeQuickSheets);
   $('clearMerge').addEventListener('click', resetMerge);
