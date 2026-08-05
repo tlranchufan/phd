@@ -30,6 +30,14 @@ const mergeState = {
   workbookBytes: null,
 };
 
+const collatedState = {
+  selectedFiles: [],
+  entries: [],
+  headers: [],
+  rows: [],
+  workbookBytes: null,
+};
+
 const $ = (id) => document.getElementById(id);
 
 function normaliseText(value) {
@@ -660,6 +668,343 @@ function downloadBytes(bytes, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+
+function loadedCollatedSignatures() {
+  return new Set(collatedState.entries.map((entry) => fileSignature(entry.file)));
+}
+
+function invalidateCollatedOutput() {
+  collatedState.headers = [];
+  collatedState.rows = [];
+  collatedState.workbookBytes = null;
+  $('downloadCollatedQuickSheet').disabled = true;
+  $('collatedPreviewCard').classList.add('hidden');
+  clearNode($('collatedPreview'));
+  renderSummary('collatedSummary', []);
+}
+
+function updateCollatedControls() {
+  const queued = collatedState.selectedFiles.length;
+  const loaded = collatedState.entries.length;
+  $('loadCollated').disabled = queued === 0;
+  $('clearCollated').disabled = queued === 0 && loaded === 0;
+}
+
+function renderCollatedQueue() {
+  renderSelectedFiles(collatedState.selectedFiles, 'collatedFileList', (index) => {
+    collatedState.selectedFiles.splice(index, 1);
+    renderCollatedQueue();
+    updateCollatedControls();
+    const queued = collatedState.selectedFiles.length;
+    const loaded = collatedState.entries.length;
+    setStatus(
+      'collatedStatus',
+      queued
+        ? `${queued} file(s) queued; ${loaded} subentry or subentries already loaded. Click Continue to read the queue.`
+        : loaded
+          ? `${loaded} subentry or subentries loaded. Add another batch at any time, or build the QuickSheet.`
+          : `Add one or more collated workbooks. Each workbook's first worksheet will be read.`,
+    );
+  });
+}
+
+function findCollatedSummaryTable(workbook) {
+  const sheetName = workbook.SheetNames?.[0];
+  if (!sheetName) throw new Error('The workbook does not contain a worksheet.');
+
+  const rows = rowsFromSheet(workbook.Sheets[sheetName]);
+  for (let index = 0; index < Math.min(rows.length, 60); index += 1) {
+    const headerEntries = mapHeaders(rows[index]);
+    const headerSet = new Set(headerEntries.map((entry) => entry.header));
+    if (headerSet.has('Code') && headerSet.has('Metric')) {
+      return { sheetName, rows, headerIndex: index, headerEntries };
+    }
+  }
+  throw new Error(`The first worksheet "${sheetName}" does not contain a header row with Code and Metric.`);
+}
+
+async function parseCollatedFile(file) {
+  const workbook = await readWorkbook(file);
+  const table = findCollatedSummaryTable(workbook);
+  const headers = table.headerEntries.map((entry) => entry.header);
+  const entries = [];
+  let current = null;
+  let sequence = 0;
+
+  for (let index = table.headerIndex + 1; index < table.rows.length; index += 1) {
+    const sourceRow = table.rows[index];
+    if (rowIsBlank(sourceRow)) continue;
+
+    const object = cleanQuickSheetRow(sourceRow, table.headerEntries);
+    const metric = canonicalMetric(object.Metric);
+    if (!['avg', 'std dev', 'rsd'].includes(metric)) continue;
+
+    if (metric === 'avg') {
+      sequence += 1;
+      const sourceCode = normaliseText(object.Code) || `${safeFileStem(file.name)}_${sequence}`;
+      current = {
+        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-${sequence}`,
+        file,
+        fileName: file.name,
+        sheetName: table.sheetName,
+        sourceCode,
+        code: sourceCode,
+        compound: '',
+        molkg: '',
+        wt: '',
+        headers,
+        summary: {
+          average: object,
+          stddev: null,
+          rsd: null,
+        },
+        inclusionCount: numericValue(object[INCLUSION_COLUMN]),
+      };
+      entries.push(current);
+      continue;
+    }
+
+    if (!current) continue;
+    if (metric === 'std dev') current.summary.stddev = object;
+    if (metric === 'rsd') current.summary.rsd = object;
+  }
+
+  if (!entries.length) {
+    throw new Error(`No avg / std dev / rsd subentries were found on the first worksheet "${table.sheetName}".`);
+  }
+
+  return entries;
+}
+
+function renderCollatedMetadataRows() {
+  const body = $('collatedMetadataRows');
+  clearNode(body);
+
+  collatedState.entries.forEach((entry, index) => {
+    const row = document.createElement('tr');
+    addCell(row, entry.fileName, 'source-cell');
+    addCell(row, entry.sourceCode);
+
+    const fields = [
+      ['code', 'text', entry.code],
+      ['compound', 'text', entry.compound],
+      ['molkg', 'number', entry.molkg],
+      ['wt', 'number', entry.wt],
+    ];
+    for (const [field, type, value] of fields) {
+      const cell = document.createElement('td');
+      const input = document.createElement('input');
+      input.type = type;
+      input.value = value;
+      input.dataset.collatedIndex = String(index);
+      input.dataset.field = field;
+      if (type === 'number') {
+        input.step = 'any';
+        input.inputMode = 'decimal';
+      }
+      input.addEventListener('input', () => {
+        collatedState.entries[index][field] = input.value;
+        invalidateCollatedOutput();
+      });
+      cell.appendChild(input);
+      row.appendChild(cell);
+    }
+
+    addCell(row, entry.inclusionCount ?? '');
+    const detected = entry.headers
+      .filter((header) => !META_COLUMNS.includes(header) && header !== INCLUSION_COLUMN)
+      .join(', ');
+    addCell(row, detected, 'detected-columns');
+
+    const actionCell = document.createElement('td');
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'file-remove';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => {
+      collatedState.entries.splice(index, 1);
+      invalidateCollatedOutput();
+      renderCollatedMetadataRows();
+      updateCollatedVisibility();
+      updateCollatedControls();
+      const queued = collatedState.selectedFiles.length;
+      const loaded = collatedState.entries.length;
+      setStatus(
+        'collatedStatus',
+        queued
+          ? `${queued} file(s) queued; ${loaded} subentry or subentries loaded.`
+          : loaded
+            ? `${loaded} subentry or subentries loaded. Add another batch at any time, or build the QuickSheet.`
+            : `Add one or more collated workbooks. Each workbook's first worksheet will be read.`,
+      );
+    });
+    actionCell.appendChild(remove);
+    row.appendChild(actionCell);
+    body.appendChild(row);
+  });
+
+  $('collatedMetadataCount').textContent = `${collatedState.entries.length} subentr${collatedState.entries.length === 1 ? 'y' : 'ies'}`;
+}
+
+function updateCollatedVisibility() {
+  const hasEntries = collatedState.entries.length > 0;
+  $('collatedMetadataCard').classList.toggle('hidden', !hasEntries);
+  if (!hasEntries && !collatedState.selectedFiles.length) {
+    setStatus('collatedStatus', `Add one or more collated workbooks. Each workbook's first worksheet will be read.`);
+  }
+}
+
+async function loadCollatedFiles() {
+  if (!collatedState.selectedFiles.length) return;
+
+  const queue = [...collatedState.selectedFiles];
+  collatedState.selectedFiles = [];
+  $('collatedFiles').value = '';
+  renderCollatedQueue();
+  updateCollatedControls();
+  invalidateCollatedOutput();
+
+  const errors = [];
+  let filesLoaded = 0;
+  let entriesAdded = 0;
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const file = queue[index];
+    setStatus('collatedStatus', `Reading ${file.name} (${index + 1} of ${queue.length})…`);
+    try {
+      const entries = await parseCollatedFile(file);
+      collatedState.entries.push(...entries);
+      filesLoaded += 1;
+      entriesAdded += entries.length;
+    } catch (error) {
+      console.error(error);
+      errors.push(`${file.name}: ${error.message}`);
+    }
+    await yieldToBrowser();
+  }
+
+  renderCollatedMetadataRows();
+  updateCollatedVisibility();
+  updateCollatedControls();
+
+  const errorText = errors.length ? ` ${errors.length} file(s) could not be read.` : '';
+  setStatus(
+    'collatedStatus',
+    `Added ${entriesAdded} subentry or subentries from ${filesLoaded} workbook(s); ${collatedState.entries.length} total loaded.${errorText}`,
+    errors.length > 0 && entriesAdded === 0,
+  );
+  if (errors.length) setStatus('collatedBuilderStatus', errors.join(' | '), true);
+  else setStatus('collatedBuilderStatus', 'Enter metadata for each subentry, add another upload batch if needed, then build the QuickSheet.');
+}
+
+function collatedMeasurementHeaders() {
+  const includeExtras = $('collatedIncludeExtraColumns').checked;
+  const extras = [];
+  const seen = new Set([...STANDARD_ELEMENTS, ...STANDARD_RATIOS, ...META_COLUMNS, INCLUSION_COLUMN].map((header) => header.toLowerCase()));
+
+  if (includeExtras) {
+    for (const entry of collatedState.entries) {
+      for (const header of entry.headers) {
+        if (!header) continue;
+        const key = header.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        extras.push(header);
+      }
+    }
+  }
+  return [...STANDARD_ELEMENTS, ...extras, ...STANDARD_RATIOS];
+}
+
+function validateCollatedMetadata() {
+  const problems = [];
+  collatedState.entries.forEach((entry) => {
+    const label = `${entry.fileName} — ${entry.sourceCode}`;
+    if (!normaliseText(entry.code)) problems.push(`${label}: Output Code is blank`);
+    if (!normaliseText(entry.compound)) problems.push(`${label}: Compound is blank`);
+    if (numericValue(entry.molkg) == null) problems.push(`${label}: Mol/Kg is blank or invalid`);
+    if (numericValue(entry.wt) == null) problems.push(`${label}: wt% is blank or invalid`);
+  });
+  return problems;
+}
+
+function collatedSummaryValue(entry, metricKey, header) {
+  const value = entry.summary[metricKey]?.[header];
+  return numericValue(value) ?? cleanValue(value);
+}
+
+function buildRowsFromCollated() {
+  const measurementHeaders = collatedMeasurementHeaders();
+  const headers = [...META_COLUMNS, ...measurementHeaders, INCLUSION_COLUMN];
+  const rows = [];
+
+  for (const entry of collatedState.entries) {
+    for (const metric of METRICS) {
+      const row = {};
+      row.Code = metric.key === 'average' ? normaliseText(entry.code) : null;
+      row.Compound = metric.key === 'average' ? normaliseText(entry.compound) : null;
+      row['Mol/Kg'] = metric.key === 'average' ? numericValue(entry.molkg) : null;
+      row['wt%'] = metric.key === 'average' ? numericValue(entry.wt) : null;
+      row.Metric = metric.label;
+      for (const header of measurementHeaders) row[header] = collatedSummaryValue(entry, metric.key, header);
+      row[INCLUSION_COLUMN] = metric.key === 'average' ? entry.inclusionCount : null;
+      rows.push(row);
+    }
+  }
+  return { headers, rows };
+}
+
+function buildCollatedQuickSheet() {
+  try {
+    const problems = validateCollatedMetadata();
+    if (problems.length) throw new Error(problems.join(' | '));
+
+    const result = buildRowsFromCollated();
+    collatedState.headers = result.headers;
+    collatedState.rows = result.rows;
+    collatedState.workbookBytes = makeWorkbookBytes(result.headers, result.rows, 'QuickSheet');
+
+    renderPreview('collatedPreview', result.headers, result.rows);
+    const filename = ensureXlsxName($('collatedFileName').value, 'laicpms_quicksheet_from_collated');
+    $('collatedOutputBadge').textContent = filename;
+    $('collatedPreviewNote').textContent = result.rows.length > MAX_PREVIEW_ROWS
+      ? `Showing the first ${MAX_PREVIEW_ROWS} of ${result.rows.length} rows.`
+      : `Showing all ${result.rows.length} rows.`;
+    renderSummary('collatedSummary', [
+      ['Subentries', collatedState.entries.length],
+      ['Metric rows', result.rows.length],
+      ['Columns', result.headers.length],
+      ['First-sheet import', 'Yes'],
+    ]);
+    $('collatedPreviewCard').classList.remove('hidden');
+    $('downloadCollatedQuickSheet').disabled = false;
+    setStatus('collatedBuilderStatus', `QuickSheet built successfully from ${collatedState.entries.length} collated subentry or subentries.`);
+  } catch (error) {
+    console.error(error);
+    invalidateCollatedOutput();
+    setStatus('collatedBuilderStatus', error.message || 'The collated QuickSheet could not be built.', true);
+  }
+}
+
+function resetCollated() {
+  collatedState.selectedFiles = [];
+  collatedState.entries = [];
+  collatedState.headers = [];
+  collatedState.rows = [];
+  collatedState.workbookBytes = null;
+  $('collatedFiles').value = '';
+  renderCollatedQueue();
+  clearNode($('collatedMetadataRows'));
+  $('collatedMetadataCard').classList.add('hidden');
+  $('collatedPreviewCard').classList.add('hidden');
+  $('downloadCollatedQuickSheet').disabled = true;
+  renderSummary('collatedSummary', []);
+  setStatus('collatedStatus', `Add one or more collated workbooks. Each workbook's first worksheet will be read.`);
+  setStatus('collatedBuilderStatus', '');
+  updateCollatedControls();
+}
+
+
 function findQuickSheetTable(workbook) {
   for (const sheetName of workbook.SheetNames) {
     const rows = rowsFromSheet(workbook.Sheets[sheetName]);
@@ -876,6 +1221,48 @@ function bindEvents() {
     downloadBytes(builderState.workbookBytes, ensureXlsxName($('builderFileName').value, 'laicpms_quicksheet'));
   });
 
+
+  $('collatedFiles').addEventListener('change', (event) => {
+    const incoming = Array.from(event.target.files || []);
+    const result = appendUniqueFiles(
+      collatedState.selectedFiles,
+      incoming,
+      loadedCollatedSignatures(),
+    );
+    collatedState.selectedFiles = result.files;
+    event.target.value = '';
+    renderCollatedQueue();
+    updateCollatedControls();
+
+    const queued = collatedState.selectedFiles.length;
+    const loaded = collatedState.entries.length;
+    const duplicateText = result.skipped ? ` ${result.skipped} duplicate file(s) were ignored.` : '';
+    setStatus(
+      'collatedStatus',
+      queued
+        ? `${queued} file(s) queued; ${loaded} subentry or subentries already loaded. Click Continue to read the queue.${duplicateText}`
+        : loaded
+          ? `${loaded} subentry or subentries loaded.${duplicateText}`
+          : `No new files were added.${duplicateText}`,
+    );
+  });
+  $('loadCollated').addEventListener('click', loadCollatedFiles);
+  $('clearCollated').addEventListener('click', resetCollated);
+  $('collatedIncludeExtraColumns').addEventListener('change', invalidateCollatedOutput);
+  $('collatedFileName').addEventListener('input', () => {
+    if (collatedState.workbookBytes) {
+      $('collatedOutputBadge').textContent = ensureXlsxName($('collatedFileName').value, 'laicpms_quicksheet_from_collated');
+    }
+  });
+  $('buildCollatedQuickSheet').addEventListener('click', buildCollatedQuickSheet);
+  $('downloadCollatedQuickSheet').addEventListener('click', () => {
+    if (!collatedState.workbookBytes) return;
+    downloadBytes(
+      collatedState.workbookBytes,
+      ensureXlsxName($('collatedFileName').value, 'laicpms_quicksheet_from_collated'),
+    );
+  });
+
   $('mergeFiles').addEventListener('change', (event) => {
     const incoming = Array.from(event.target.files || []);
     const result = appendUniqueFiles(mergeState.selectedFiles, incoming);
@@ -908,5 +1295,6 @@ function bindEvents() {
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
   resetProcessed();
+  resetCollated();
   resetMerge();
 });
