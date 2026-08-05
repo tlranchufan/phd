@@ -568,9 +568,100 @@ function buildRowsFromProcessed() {
   return { headers, rows };
 }
 
+const QUICK_SHEET_GREEN_HEADERS = new Set(['Y89', 'La139', 'Nd146', 'Yb172']);
+const QUICK_SHEET_GREEN_FILL = 'C6EFCE';
+const QUICK_SHEET_BORDER_COLOUR = '000000';
+
+function quickSheetEntryBoundaries(rows) {
+  const groups = [];
+  let start = null;
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const metric = canonicalMetric(rows[index]?.Metric);
+    const beginsEntry = metric === 'avg' || (start == null && !rowIsBlank(Object.values(rows[index] || {})));
+
+    if (beginsEntry) {
+      if (start != null && start < index) groups.push({ start, end: index - 1 });
+      start = index;
+    } else if (start == null) {
+      start = index;
+    }
+
+    if (metric === 'rsd' && start != null) {
+      groups.push({ start, end: index });
+      start = null;
+    }
+  }
+
+  if (start != null && start < rows.length) groups.push({ start, end: rows.length - 1 });
+  return groups;
+}
+
+function makeCellBorder({ top = false, bottom = false, left = false, right = false } = {}) {
+  const line = { style: 'thin', color: { rgb: QUICK_SHEET_BORDER_COLOUR } };
+  const border = {};
+  if (top) border.top = line;
+  if (bottom) border.bottom = line;
+  if (left) border.left = line;
+  if (right) border.right = line;
+  return border;
+}
+
+function styleQuickSheet(sheet, headers, rows) {
+  const groups = quickSheetEntryBoundaries(rows);
+  const topRows = new Set(groups.map((group) => group.start));
+  const bottomRows = new Set(groups.map((group) => group.end));
+  const lastColumn = headers.length - 1;
+
+  for (let columnIndex = 0; columnIndex < headers.length; columnIndex += 1) {
+    const address = XLSX.utils.encode_cell({ r: 0, c: columnIndex });
+    if (!sheet[address]) sheet[address] = { t: 's', v: headers[columnIndex] };
+    sheet[address].s = {
+      font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '000000' } },
+      alignment: { vertical: 'center' },
+    };
+  }
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const excelRow = rowIndex + 1;
+    const metric = canonicalMetric(rows[rowIndex]?.Metric);
+
+    for (let columnIndex = 0; columnIndex < headers.length; columnIndex += 1) {
+      const header = headers[columnIndex];
+      const address = XLSX.utils.encode_cell({ r: excelRow, c: columnIndex });
+      if (!sheet[address]) sheet[address] = { t: 's', v: '' };
+
+      const style = {
+        font: { name: 'Calibri', sz: 11, color: { rgb: '000000' } },
+        alignment: { vertical: 'center' },
+      };
+
+      if (!['Code', 'Compound', 'Metric'].includes(header)) style.numFmt = '0.00';
+
+      if (metric === 'avg' && QUICK_SHEET_GREEN_HEADERS.has(header)) {
+        style.fill = {
+          patternType: 'solid',
+          fgColor: { rgb: QUICK_SHEET_GREEN_FILL },
+        };
+      }
+
+      const border = makeCellBorder({
+        top: topRows.has(rowIndex),
+        bottom: bottomRows.has(rowIndex),
+        left: columnIndex === 0,
+        right: columnIndex === lastColumn,
+      });
+      if (Object.keys(border).length) style.border = border;
+
+      sheet[address].s = style;
+    }
+  }
+}
+
 function makeWorkbookBytes(headers, rows, sheetName = 'QuickSheet') {
-  const matrix = [headers, ...rows.map((row) => headers.map((header) => row[header] ?? null))];
+  const matrix = [headers, ...rows.map((row) => headers.map((header) => row[header] ?? ''))];
   const sheet = XLSX.utils.aoa_to_sheet(matrix);
+  styleQuickSheet(sheet, headers, rows);
   sheet['!cols'] = headers.map((header) => {
     if (header === 'Code') return { wch: 14 };
     if (header === 'Compound') return { wch: 17 };
@@ -607,12 +698,27 @@ function renderPreview(tableId, headers, rows, maxRows = MAX_PREVIEW_ROWS) {
   head.appendChild(headerRow);
   table.appendChild(head);
 
+  const previewRows = rows.slice(0, maxRows);
+  const groups = quickSheetEntryBoundaries(previewRows);
+  const topRows = new Set(groups.map((group) => group.start));
+  const bottomRows = new Set(groups.map((group) => group.end));
   const body = document.createElement('tbody');
-  for (const data of rows.slice(0, maxRows)) {
+
+  previewRows.forEach((data, rowIndex) => {
     const row = document.createElement('tr');
-    for (const header of headers) addCell(row, displayValue(data[header]));
+    const metric = canonicalMetric(data?.Metric);
+    headers.forEach((header, columnIndex) => {
+      const cell = addCell(row, displayValue(data[header]));
+      if (metric === 'avg' && QUICK_SHEET_GREEN_HEADERS.has(header)) {
+        cell.style.backgroundColor = '#C6EFCE';
+      }
+      if (topRows.has(rowIndex)) cell.style.borderTop = '1px solid #000';
+      if (bottomRows.has(rowIndex)) cell.style.borderBottom = '1px solid #000';
+      if (columnIndex === 0) cell.style.borderLeft = '1px solid #000';
+      if (columnIndex === headers.length - 1) cell.style.borderRight = '1px solid #000';
+    });
     body.appendChild(row);
-  }
+  });
   table.appendChild(body);
 }
 
