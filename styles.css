@@ -142,3 +142,21 @@ code { overflow-wrap:anywhere; }
   .nav-links{justify-content:flex-start;width:100%}
   .site-nav .nav-links a{padding:.5rem .65rem}
 }
+
+/* QuickSheet Builder */
+.metadata-table-wrap{max-height:520px}
+.metadata-table th,.metadata-table td{text-align:left;vertical-align:top}
+.metadata-table td:nth-child(6),.metadata-table th:nth-child(6){text-align:center}
+.metadata-table input{min-width:105px;margin:0;padding:.52rem .58rem}
+.metadata-table td:nth-child(2) input{min-width:120px}
+.metadata-table td:nth-child(3) input{min-width:145px}
+.source-cell{font-weight:700;max-width:240px;white-space:normal;overflow-wrap:anywhere}
+.detected-columns{max-width:360px;min-width:220px;white-space:normal;color:var(--muted);font-size:.78rem;line-height:1.35}
+.builder-options{margin-top:1rem;align-items:start}
+.quicksheet-preview-wrap{max-height:620px;margin-top:.8rem}
+.quicksheet-preview-wrap table{font-size:.8rem}
+.error-text{color:#a61b1b!important}
+@media(max-width:760px){
+  .metadata-table input{min-width:120px}
+  .builder-options{grid-template-columns:1fr}
+}

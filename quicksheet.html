@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QuickSheet Builder</title>
+  <meta name="description" content="Convert processed LA-ICP-MS workbooks into plotting-ready QuickSheets and merge QuickSheets with mismatched columns.">
+  <link rel="stylesheet" href="./styles.css?v=20260805-quicksheet">
+</head>
+<body>
+  <nav class="site-nav" aria-label="Primary navigation">
+    <div class="nav-inner">
+      <a class="site-brand" href="./index.html">REE Laboratory Tools</a>
+      <div class="nav-links">
+        <a href="./index.html">Excel Processor</a>
+        <a href="./quicksheet.html" class="active" aria-current="page">QuickSheet Builder</a>
+        <a href="./plotter.html">QuickSheet Plotter</a>
+        <a href="./extractor.html">Extractors</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <p class="eyebrow">REE Laboratory Tools · Browser-only data preparation</p>
+      <h1>QuickSheet Builder</h1>
+      <p class="lede">Convert one or more processed LA-ICP-MS workbooks into a plotting-ready QuickSheet, calculate missing K/Cs, Na/Cs and Rb/Cs ratios from inclusion rows, or merge QuickSheets whose columns do not match.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Processed workbooks → QuickSheet</h2>
+      <p>Upload one or more <code>_processed.xlsx</code> files. The builder reads the <strong>Average</strong>, <strong>Std Dev</strong> and <strong>RSD</strong> rows, ignores the limits-of-detection section, and turns values beginning with <code>&lt;</code> into blank cells.</p>
+
+      <label>Processed workbooks
+        <input id="processedFiles" type="file" accept=".xls,.xlsx" multiple>
+      </label>
+      <div class="actions upload-actions">
+        <button id="loadProcessed" type="button" class="primary" disabled>Continue — read processed files</button>
+        <button id="clearProcessed" type="button" disabled>Clear</button>
+      </div>
+      <div id="processedStatus" class="status" role="status">Choose one or more processed workbooks, then click Continue.</div>
+      <div id="processedFileList" class="file-list"></div>
+
+      <div id="metadataCard" class="subcard hidden">
+        <div class="section-head">
+          <div>
+            <h3>Sample metadata</h3>
+            <p class="hint">Enter the values used by the QuickSheet Plotter. Code defaults from the filename and remains editable.</p>
+          </div>
+          <span id="metadataCount" class="file-badge"></span>
+        </div>
+
+        <div class="table-wrap metadata-table-wrap">
+          <table class="metadata-table">
+            <thead>
+              <tr>
+                <th>Source workbook</th>
+                <th>Code</th>
+                <th>Compound</th>
+                <th>Mol/Kg</th>
+                <th>wt%</th>
+                <th>Inclusions</th>
+                <th>Detected columns</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="metadataRows"></tbody>
+          </table>
+        </div>
+
+        <div class="grid two builder-options">
+          <fieldset>
+            <legend>Output columns</legend>
+            <label class="toggle"><input id="includeExtraColumns" type="checkbox" checked> Include additional element and ratio columns found in processed workbooks</label>
+            <p class="hint">The standard QuickSheet element columns are always included. Additional columns such as <code>Au197</code> or <code>Ca/Cs</code> are retained when selected.</p>
+          </fieldset>
+          <label>Output filename
+            <input id="builderFileName" type="text" value="laicpms_quicksheet">
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="buildQuickSheet" type="button" class="primary">Build QuickSheet</button>
+          <button id="downloadQuickSheet" type="button" disabled>Download .xlsx</button>
+        </div>
+        <div id="builderStatus" class="status" role="status"></div>
+      </div>
+    </section>
+
+    <section id="builderPreviewCard" class="card hidden">
+      <div class="section-head">
+        <div>
+          <h2>QuickSheet preview</h2>
+          <p id="builderPreviewNote" class="hint"></p>
+        </div>
+        <span id="builderOutputBadge" class="file-badge"></span>
+      </div>
+      <div class="summary-pills" id="builderSummary"></div>
+      <div class="table-wrap quicksheet-preview-wrap">
+        <table id="builderPreview" class="preview-table"></table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Merge existing QuickSheets</h2>
+      <p>Upload multiple QuickSheets to append them into one workbook. The merger normalises common header variants, forms the union of all columns, and leaves cells blank where a source workbook does not contain a column.</p>
+
+      <label>QuickSheet workbooks
+        <input id="mergeFiles" type="file" accept=".xls,.xlsx" multiple>
+      </label>
+      <div class="grid two builder-options">
+        <div>
+          <div class="actions upload-actions">
+            <button id="mergeQuickSheets" type="button" class="primary" disabled>Merge QuickSheets</button>
+            <button id="clearMerge" type="button" disabled>Clear</button>
+            <button id="downloadMerged" type="button" disabled>Download merged .xlsx</button>
+          </div>
+        </div>
+        <label>Merged filename
+          <input id="mergeFileName" type="text" value="laicpms_quicksheet_merged">
+        </label>
+      </div>
+      <div id="mergeStatus" class="status" role="status">Choose two or more QuickSheets to merge.</div>
+      <div id="mergeFileList" class="file-list"></div>
+      <div id="mergeSummary" class="summary-pills"></div>
+
+      <div id="mergePreviewWrap" class="table-wrap quicksheet-preview-wrap hidden">
+        <table id="mergePreview" class="preview-table"></table>
+      </div>
+    </section>
+
+    <section class="card compact">
+      <h2>How ratios and blanks are handled</h2>
+      <p>If a processed workbook already contains a ratio summary, that summary is used. When K/Cs, Na/Cs or Rb/Cs is missing, the builder calculates the ratio for each valid inclusion and then calculates its average, sample standard deviation and RSD. Inclusion values that are blank, below detection, non-numeric, or have a zero Cs value are excluded from that ratio calculation.</p>
+      <p>All workbook processing happens locally in the browser. Uploaded data is not sent to the website.</p>
+    </section>
+  </main>
+
+  <footer>REE Laboratory Tools · Static GitHub Pages edition</footer>
+
+  <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script defer src="./quicksheet.js?v=20260805-1"></script>
+</body>
+</html>
