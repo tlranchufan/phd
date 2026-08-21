@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LA-ICPMS QuickSheet Plotter</title>
   <meta name="description" content="Browser-based LA-ICPMS QuickSheet plotter.">
-  <link rel="stylesheet" href="./styles.css?v=20260805-quicksheet">
+  <link rel="stylesheet" href="./styles.css?v=20260726-unified">
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary navigation">
@@ -13,7 +13,6 @@
       <a class="site-brand" href="./index.html">REE Laboratory Tools</a>
       <div class="nav-links">
         <a href="./index.html">Excel Processor</a>
-        <a href="./quicksheet.html">QuickSheet Builder</a>
         <a href="./plotter.html" class="active" aria-current="page">QuickSheet Plotter</a>
         <a href="./extractor.html">Extractors</a>
       </div>
@@ -57,6 +56,7 @@
           <legend>X axis</legend>
           <label class="inline-option"><input type="radio" name="xunit" value="Mol/Kg" checked> Mol/Kg</label>
           <label class="inline-option"><input type="radio" name="xunit" value="wt%"> wt%</label>
+          <p class="hint">If an entry is blank for the selected x-axis unit, that entry is omitted from the plot and reported in the warning box. Blank values are never inherited from the previous sample.</p>
         </fieldset>
 
         <fieldset>
@@ -157,6 +157,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20260721-4"></script>
+  <script defer src="./plotter.js?v=20260821-missing-x-fix"></script>
 </body>
 </html>

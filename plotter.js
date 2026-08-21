@@ -27,15 +27,43 @@ const sanitizeName = value => {
 const selectedValues = select => [...select.selectedOptions].map(o => o.value);
 const radioValue = name => document.querySelector(`input[name="${name}"]:checked`)?.value;
 
-function fillDown(rows, columns) {
-  const previous = {};
+function isBlank(value) {
+  return value === '' || value === null || value === undefined;
+}
+
+function metricKey(value) {
+  const key = String(value ?? '').trim().toLowerCase().replace(/[._-]+/g, ' ').replace(/\s+/g, ' ');
+  if (['avg', 'average', 'mean'].includes(key)) return 'avg';
+  if (['std dev', 'standard deviation', 'stdev', 'sd'].includes(key)) return 'std dev';
+  if (['rsd', 'relative standard deviation'].includes(key)) return 'rsd';
+  return key;
+}
+
+function fillDownWithinEntries(rows, columns) {
+  let current = Object.fromEntries(columns.map(col => [col, '']));
+
   return rows.map(row => {
     const out = {...row};
+    const metric = metricKey(out.Metric);
+
+    // An avg row starts a NEW QuickSheet entry. Reset every metadata field here.
+    // This is the key safeguard: a genuinely blank Mol/Kg or wt% on a new avg
+    // row must NOT inherit the previous sample's x value.
+    if (metric === 'avg') {
+      current = {};
+      columns.forEach(col => {
+        current[col] = isBlank(out[col]) ? '' : out[col];
+      });
+      return out;
+    }
+
+    // std dev / rsd rows belong to the current entry, so blank metadata on
+    // those rows should inherit only from that entry's avg row.
     columns.forEach(col => {
-      const v = out[col];
-      if (v === '' || v === null || v === undefined) out[col] = previous[col] ?? '';
-      else previous[col] = v;
+      if (isBlank(out[col])) out[col] = current[col] ?? '';
+      else current[col] = out[col];
     });
+
     return out;
   });
 }
@@ -68,7 +96,7 @@ function parseWorkbook(file, bytes) {
   const missing = required.filter(h => !headers.includes(h));
   if (missing.length) throw new Error(`Missing required columns: ${missing.join(', ')}`);
 
-  const filled = fillDown(rows, ['Code','Compound','Mol/Kg','wt%']);
+  const filled = fillDownWithinEntries(rows, ['Code','Compound','Mol/Kg','wt%']);
   const avgRows = findMetric(filled, 'avg');
   const sdRows = findMetric(filled, 'std dev');
   if (!avgRows.length) throw new Error('No rows with Metric = "avg" were found.');
@@ -332,11 +360,27 @@ function renderPlot() {
     const codes=new Set(selectedValues($('codes')));
     if(!codes.size) throw new Error('Select at least one Code.');
     const xField=radioValue('xunit');
-    const rawRows=state.avgRows.filter(r=>codes.has(String(r.Code)) && num(r[xField])!==null);
+    const selectedRows=state.avgRows.filter(r=>codes.has(String(r.Code)));
+    const missingXRows=selectedRows.filter(r=>num(r[xField])===null);
+    const rawRows=selectedRows.filter(r=>num(r[xField])!==null);
+
+    if(!rawRows.length) {
+      throw new Error(`None of the selected entries has a numeric ${xField} value.`);
+    }
+
     const mode=$('offsetMode').value, spread=Number($('offsetSpread').value);
     const rows=applyOffsets(rawRows,xField,mode,spread);
     const result=radioValue('plotMode')==='simple'?buildSimplePlot(rows,xField):buildRatioPlot(rows,xField);
     const warnings=result.warnings||[];
+
+    if(missingXRows.length) {
+      const labels=[...new Set(missingXRows.map(r=>String(r.Code||'unnamed entry')))];
+      const shown=labels.slice(0,8).join(', ');
+      const more=labels.length>8?` (+${labels.length-8} more)`:'';
+      warnings.unshift(
+        `${missingXRows.length} selected entr${missingXRows.length===1?'y was':'ies were'} omitted because ${xField} is blank or non-numeric${shown?`: ${shown}${more}`:''}.`
+      );
+    }
     const width=$('plot').clientWidth||900;
     const auto=$('autoAspect').checked;
     let aspect=Number($('aspectRatio').value)||.7;
@@ -361,6 +405,8 @@ function renderPlot() {
   } catch(err) {
     Plotly.purge('plot');
     $('plotStatus').textContent=`Cannot plot: ${err.message}`;
+    $('plotWarnings').textContent='';
+    $('plotWarnings').classList.add('hidden');
   }
 }
 
