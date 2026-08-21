@@ -6,6 +6,13 @@
   <title>QuickSheet Builder</title>
   <meta name="description" content="Convert processed or collated LA-ICP-MS workbooks into plotting-ready QuickSheets and merge QuickSheets with mismatched columns.">
   <link rel="stylesheet" href="./styles.css?v=20260805-quicksheet">
+  <style>
+    .missing-input { outline: 2px solid #d97706; background: #fff7ed; }
+    .metric-repair-stack { display: grid; gap: .35rem; min-width: 150px; }
+    .metric-repair-line { display: grid; grid-template-columns: 48px 1fr; gap: .45rem; align-items: center; }
+    .metric-repair-line span { font-size: .78rem; color: #5b6872; }
+    .metric-repair-line select { width: 100%; }
+  </style>
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary navigation">
@@ -181,7 +188,7 @@
 
     <section class="card">
       <h2>Merge existing QuickSheets</h2>
-      <p>Upload multiple QuickSheets to append them into one workbook. You can add them in several separate upload rounds. The merger normalises common header variants, forms the union of all columns, and leaves cells blank where a source workbook does not contain a column. It also recognises older QuickSheets where the avg / std dev / rsd column has no header.</p>
+      <p>Upload multiple QuickSheets to append them into one workbook. You can add them in several separate upload rounds. The merger normalises common header variants, forms the union of all columns, and leaves cells blank where a source workbook does not contain a column. It also recognises older QuickSheets where the avg / std dev / rsd column has no header. If required plotting metadata is missing, the page will pause and ask you to enter it manually before merging.</p>
 
       <label>Add QuickSheet workbooks
         <input id="mergeFiles" type="file" accept=".xls,.xlsx" multiple>
@@ -200,6 +207,39 @@
       </div>
       <div id="mergeStatus" class="status" role="status">Add QuickSheets in one or more upload rounds, then click Merge QuickSheets.</div>
       <div id="mergeFileList" class="file-list"></div>
+
+      <div id="mergeRepairCard" class="subcard hidden">
+        <div class="section-head">
+          <div>
+            <h3>Missing QuickSheet metadata</h3>
+            <p class="hint">If an uploaded QuickSheet is missing Code, Compound, Mol/Kg, wt%, or usable Metric values, enter them here before merging. Existing values are pre-filled. If Metric is absent entirely, rows default to avg / std dev / rsd for you to confirm.</p>
+          </div>
+          <span id="mergeRepairCount" class="file-badge"></span>
+        </div>
+
+        <div class="table-wrap metadata-table-wrap">
+          <table class="metadata-table">
+            <thead>
+              <tr>
+                <th>Source workbook</th>
+                <th>Entry</th>
+                <th>Code</th>
+                <th>Compound</th>
+                <th>Mol/Kg</th>
+                <th>wt%</th>
+                <th>Metric rows</th>
+              </tr>
+            </thead>
+            <tbody id="mergeRepairRows"></tbody>
+          </table>
+        </div>
+
+        <div class="actions">
+          <button id="continueMergeRepair" type="button" class="primary">Continue merge</button>
+        </div>
+        <div id="mergeRepairStatus" class="status" role="status"></div>
+      </div>
+
       <div id="mergeSummary" class="summary-pills"></div>
 
       <div id="mergePreviewWrap" class="table-wrap quicksheet-preview-wrap hidden">
@@ -218,6 +258,6 @@
   <footer>REE Laboratory Tools · Static GitHub Pages edition</footer>
 
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-  <script defer src="./quicksheet.js?v=20260821-legacy-merge-fix"></script>
+  <script defer src="./quicksheet.js?v=20260821-manual-metadata"></script>
 </body>
 </html>

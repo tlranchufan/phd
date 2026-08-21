@@ -25,6 +25,9 @@ const builderState = {
 
 const mergeState = {
   selectedFiles: [],
+  parsedFiles: [],
+  repairEntries: [],
+  parseErrors: [],
   headers: [],
   rows: [],
   workbookBytes: null,
@@ -513,8 +516,8 @@ async function loadProcessedFiles() {
 
 function measurementHeadersForBuilder() {
   const includeExtras = $('includeExtraColumns').checked;
-  const extras = [];
-  const seen = new Set([...STANDARD_ELEMENTS, ...STANDARD_RATIOS, 'File'].map((header) => header.toLowerCase()));
+  const headers = [...STANDARD_ELEMENTS, ...STANDARD_RATIOS];
+  const seen = new Set([...headers, 'File'].map((header) => header.toLowerCase()));
 
   if (includeExtras) {
     for (const sample of builderState.samples) {
@@ -523,11 +526,12 @@ function measurementHeadersForBuilder() {
         const key = header.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
-        extras.push(header);
+        headers.push(header);
       }
     }
   }
-  return [...STANDARD_ELEMENTS, ...extras, ...STANDARD_RATIOS];
+
+  return orderMeasurementHeaders(headers);
 }
 
 function validateSampleMetadata() {
@@ -573,6 +577,75 @@ const QUICK_SHEET_GREEN_FILL = 'C6EFCE';
 
 function isGreenElementHeader(header) {
   return /^(?:Y|La|Nd|Yb)\d*$/i.test(normaliseText(header));
+}
+
+function isotopeSortInfo(header) {
+  const match = normaliseText(header).match(/^([A-Za-z]{1,2})(\d{1,3})$/);
+  if (!match) return null;
+  return {
+    symbol: match[1][0].toUpperCase() + match[1].slice(1).toLowerCase(),
+    mass: Number(match[2]),
+  };
+}
+
+function isRatioHeader(header) {
+  return /^[A-Za-z]{1,2}\s*\/\s*[A-Za-z]{1,2}$/i.test(normaliseText(header));
+}
+
+function orderMeasurementHeaders(headers) {
+  const unique = [];
+  const seen = new Set();
+
+  for (const rawHeader of headers) {
+    const header = canonicalHeader(rawHeader);
+    if (!header) continue;
+    const key = header.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(header);
+  }
+
+  const isotopes = [];
+  const otherMeasurements = [];
+  const ratios = [];
+
+  for (const header of unique) {
+    const isotope = isotopeSortInfo(header);
+    if (isotope) {
+      isotopes.push({ header, ...isotope });
+    } else if (isRatioHeader(header)) {
+      ratios.push(header);
+    } else {
+      otherMeasurements.push(header);
+    }
+  }
+
+  isotopes.sort((a, b) =>
+    (a.mass - b.mass) ||
+    a.symbol.localeCompare(b.symbol, undefined, { sensitivity: 'base' })
+  );
+
+  // Keep the familiar QuickSheet ratio order first, then any extra ratios.
+  const standardRatioRank = new Map(
+    STANDARD_RATIOS.map((header, index) => [header.toLowerCase(), index]),
+  );
+  ratios.sort((a, b) => {
+    const rankA = standardRatioRank.has(a.toLowerCase())
+      ? standardRatioRank.get(a.toLowerCase())
+      : Number.POSITIVE_INFINITY;
+    const rankB = standardRatioRank.has(b.toLowerCase())
+      ? standardRatioRank.get(b.toLowerCase())
+      : Number.POSITIVE_INFINITY;
+
+    if (rankA !== rankB) return rankA - rankB;
+    return a.localeCompare(b, undefined, { sensitivity: 'base' });
+  });
+
+  return [
+    ...isotopes.map((entry) => entry.header),
+    ...otherMeasurements,
+    ...ratios,
+  ];
 }
 const QUICK_SHEET_BORDER_COLOUR = '000000';
 
@@ -1009,8 +1082,12 @@ async function loadCollatedFiles() {
 
 function collatedMeasurementHeaders() {
   const includeExtras = $('collatedIncludeExtraColumns').checked;
-  const extras = [];
-  const seen = new Set([...STANDARD_ELEMENTS, ...STANDARD_RATIOS, ...META_COLUMNS, INCLUSION_COLUMN].map((header) => header.toLowerCase()));
+  const headers = [...STANDARD_ELEMENTS, ...STANDARD_RATIOS];
+  const seen = new Set([
+    ...headers,
+    ...META_COLUMNS,
+    INCLUSION_COLUMN,
+  ].map((header) => header.toLowerCase()));
 
   if (includeExtras) {
     for (const entry of collatedState.entries) {
@@ -1019,11 +1096,12 @@ function collatedMeasurementHeaders() {
         const key = header.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
-        extras.push(header);
+        headers.push(header);
       }
     }
   }
-  return [...STANDARD_ELEMENTS, ...extras, ...STANDARD_RATIOS];
+
+  return orderMeasurementHeaders(headers);
 }
 
 function validateCollatedMetadata() {
@@ -1152,43 +1230,82 @@ function withInferredMetricHeader(headerEntries, metricColumnIndex) {
   return repaired;
 }
 
+function quickSheetHeaderScore(headerEntries) {
+  const headers = headerEntries.map((entry) => entry.header);
+  const headerSet = new Set(headers);
+  const measurementCount = headers.filter((header) =>
+    isotopeSortInfo(header) || isRatioHeader(header)
+  ).length;
+
+  let score = measurementCount * 10;
+  if (headerSet.has('Code')) score += 30;
+  if (headerSet.has('Compound')) score += 12;
+  if (headerSet.has('Mol/Kg')) score += 12;
+  if (headerSet.has('wt%')) score += 12;
+  if (headerSet.has('Metric')) score += 35;
+  if (headerSet.has(INCLUSION_COLUMN)) score += 5;
+  return { score, measurementCount, headerSet };
+}
+
 function findQuickSheetTable(workbook) {
+  let fallback = null;
+
   for (const sheetName of workbook.SheetNames) {
     const rows = rowsFromSheet(workbook.Sheets[sheetName]);
 
     for (let index = 0; index < Math.min(rows.length, 50); index += 1) {
       const headers = mapHeaders(rows[index]);
-      const headerSet = new Set(headers.map((entry) => entry.header));
+      if (!headers.length) continue;
 
-      if (headerSet.has('Code') && headerSet.has('Metric')) {
+      const info = quickSheetHeaderScore(headers);
+      const metricColumnIndex = inferQuickSheetMetricColumn(rows, index);
+
+      // Normal modern QuickSheet.
+      if (info.headerSet.has('Code') && info.headerSet.has('Metric')) {
         return {
           sheetName,
           rows,
           headerIndex: index,
           headerEntries: headers,
           inferredMetricColumn: false,
+          missingMetricColumn: false,
         };
       }
 
-      // Older QuickSheets used an unlabeled second column for avg / std dev / rsd.
-      // Detect that layout from the data and repair it in memory before merging.
-      if (headerSet.has('Code')) {
-        const metricColumnIndex = inferQuickSheetMetricColumn(rows, index);
-        if (metricColumnIndex >= 0) {
-          return {
-            sheetName,
-            rows,
-            headerIndex: index,
-            headerEntries: withInferredMetricHeader(headers, metricColumnIndex),
-            inferredMetricColumn: true,
-          };
-        }
+      // Legacy QuickSheet with avg/std dev/rsd in an unlabeled column.
+      if (metricColumnIndex >= 0 && (info.headerSet.has('Code') || info.measurementCount >= 2)) {
+        return {
+          sheetName,
+          rows,
+          headerIndex: index,
+          headerEntries: withInferredMetricHeader(headers, metricColumnIndex),
+          inferredMetricColumn: true,
+          missingMetricColumn: false,
+        };
+      }
+
+      // A QuickSheet can still be repaired manually if Code and/or Metric
+      // metadata columns are entirely absent. Require a convincing set of
+      // measurement headers so an arbitrary worksheet is not selected.
+      if (info.measurementCount >= 2 && info.score >= 20) {
+        const candidate = {
+          sheetName,
+          rows,
+          headerIndex: index,
+          headerEntries: headers,
+          inferredMetricColumn: false,
+          missingMetricColumn: !info.headerSet.has('Metric'),
+          score: info.score,
+        };
+        if (!fallback || candidate.score > fallback.score) fallback = candidate;
       }
     }
   }
 
+  if (fallback) return fallback;
+
   throw new Error(
-    'Could not identify a QuickSheet table. Expected a Code column plus either a Metric header or an avg / std dev / rsd metric column.',
+    'Could not identify a QuickSheet table. The sheet needs recognizable isotope/ratio columns; missing Code, Compound, Mol/Kg, wt% or Metric metadata can then be entered manually.',
   );
 }
 
@@ -1223,22 +1340,375 @@ async function parseQuickSheetFile(file) {
     headers,
     rows,
     inferredMetricColumn: Boolean(table.inferredMetricColumn),
+    missingMetricColumn: Boolean(table.missingMetricColumn),
   };
 }
 
-function orderedMergedHeaders(parsedFiles) {
-  const standardSet = new Set([...META_COLUMNS, ...STANDARD_ELEMENTS, ...STANDARD_RATIOS, INCLUSION_COLUMN].map((header) => header.toLowerCase()));
-  const extras = [];
-  const seen = new Set();
+
+function firstPresentValue(rows, header) {
+  for (const row of rows) {
+    const value = row?.[header];
+    if (value != null && normaliseText(value) !== '') return value;
+  }
+  return null;
+}
+
+function quickSheetEntryGroups(parsed) {
+  const rows = parsed.rows;
+  if (!rows.length) return [];
+
+  const recognisedMetrics = rows.filter((row) =>
+    CORE_QUICKSHEET_METRICS.has(canonicalMetric(row?.Metric))
+  ).length;
+
+  const groups = [];
+
+  if (recognisedMetrics > 0) {
+    let current = [];
+    for (const row of rows) {
+      const metric = canonicalMetric(row?.Metric);
+
+      if (metric === 'avg' && current.length) {
+        groups.push(current);
+        current = [];
+      }
+
+      current.push(row);
+
+      // Most QuickSheets are exactly avg / std dev / rsd. Closing at rsd
+      // prevents a malformed following row from being swallowed into the entry.
+      if (metric === 'rsd') {
+        groups.push(current);
+        current = [];
+      }
+    }
+    if (current.length) groups.push(current);
+    return groups.filter((group) => group.length);
+  }
+
+  // If Metric is completely absent, QuickSheets are still expected to use
+  // three consecutive statistic rows per entry. Default those rows to the
+  // standard avg / std dev / rsd pattern and let the user confirm/edit it.
+  for (let index = 0; index < rows.length; index += 3) {
+    groups.push(rows.slice(index, index + 3));
+  }
+  return groups.filter((group) => group.length);
+}
+
+function buildMergeRepairEntries(parsedFiles) {
+  const entries = [];
+
   for (const parsed of parsedFiles) {
-    for (const header of parsed.headers) {
-      const key = header.toLowerCase();
-      if (standardSet.has(key) || seen.has(key)) continue;
-      seen.add(key);
-      extras.push(header);
+    const groups = quickSheetEntryGroups(parsed);
+
+    groups.forEach((group, groupIndex) => {
+      const metrics = group.map((row, rowIndex) => {
+        const metric = canonicalMetric(row?.Metric);
+        if (CORE_QUICKSHEET_METRICS.has(metric)) return metric;
+        return METRICS[rowIndex]?.label || '';
+      });
+
+      const code = normaliseText(firstPresentValue(group, 'Code'));
+      const compound = normaliseText(firstPresentValue(group, 'Compound'));
+      const molkg = firstPresentValue(group, 'Mol/Kg');
+      const wt = firstPresentValue(group, 'wt%');
+
+      const metricNeedsRepair = group.some((row) =>
+        !CORE_QUICKSHEET_METRICS.has(canonicalMetric(row?.Metric))
+      );
+
+      const needsRepair =
+        !code ||
+        !compound ||
+        numericValue(molkg) == null ||
+        numericValue(wt) == null ||
+        metricNeedsRepair;
+
+      entries.push({
+        parsed,
+        group,
+        groupIndex,
+        code,
+        compound,
+        molkg: molkg ?? '',
+        wt: wt ?? '',
+        metrics,
+        metricNeedsRepair,
+        needsRepair,
+      });
+    });
+  }
+
+  return entries;
+}
+
+function clearMergeRepair() {
+  mergeState.parsedFiles = [];
+  mergeState.repairEntries = [];
+  mergeState.parseErrors = [];
+
+  const card = $('mergeRepairCard');
+  if (card) card.classList.add('hidden');
+
+  const body = $('mergeRepairRows');
+  if (body) clearNode(body);
+
+  const status = $('mergeRepairStatus');
+  if (status) setStatus('mergeRepairStatus', '');
+}
+
+function renderMergeRepairRows() {
+  const body = $('mergeRepairRows');
+  clearNode(body);
+
+  const repairEntries = mergeState.repairEntries.filter((entry) => entry.needsRepair);
+
+  repairEntries.forEach((entry, repairIndex) => {
+    const row = document.createElement('tr');
+
+    addCell(row, entry.parsed.fileName, 'source-cell');
+    addCell(row, String(entry.groupIndex + 1));
+
+    const metadataFields = [
+      ['code', 'text', entry.code],
+      ['compound', 'text', entry.compound],
+      ['molkg', 'number', entry.molkg],
+      ['wt', 'number', entry.wt],
+    ];
+
+    for (const [field, type, value] of metadataFields) {
+      const cell = document.createElement('td');
+      const input = document.createElement('input');
+      input.type = type;
+      input.value = value ?? '';
+      input.dataset.repairIndex = String(repairIndex);
+      input.dataset.field = field;
+
+      if (type === 'number') {
+        input.step = 'any';
+        input.inputMode = 'decimal';
+      }
+
+      if (
+        (field === 'code' && !normaliseText(value)) ||
+        (field === 'compound' && !normaliseText(value)) ||
+        (field === 'molkg' && numericValue(value) == null) ||
+        (field === 'wt' && numericValue(value) == null)
+      ) {
+        input.classList.add('missing-input');
+      }
+
+      input.addEventListener('input', () => {
+        entry[field] = input.value;
+        input.classList.remove('missing-input');
+      });
+
+      cell.appendChild(input);
+      row.appendChild(cell);
+    }
+
+    const metricCell = document.createElement('td');
+    const stack = document.createElement('div');
+    stack.className = 'metric-repair-stack';
+
+    entry.group.forEach((sourceRow, rowIndex) => {
+      const line = document.createElement('div');
+      line.className = 'metric-repair-line';
+
+      const label = document.createElement('span');
+      label.textContent = `Row ${rowIndex + 1}`;
+      line.appendChild(label);
+
+      const select = document.createElement('select');
+      const options = [
+        ['', 'Choose…'],
+        ['avg', 'avg'],
+        ['std dev', 'std dev'],
+        ['rsd', 'rsd'],
+      ];
+      for (const [value, text] of options) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = text;
+        select.appendChild(option);
+      }
+
+      select.value = entry.metrics[rowIndex] || '';
+      if (!CORE_QUICKSHEET_METRICS.has(canonicalMetric(sourceRow?.Metric))) {
+        select.classList.add('missing-input');
+      }
+
+      select.addEventListener('change', () => {
+        entry.metrics[rowIndex] = select.value;
+        select.classList.remove('missing-input');
+      });
+
+      line.appendChild(select);
+      stack.appendChild(line);
+    });
+
+    metricCell.appendChild(stack);
+    row.appendChild(metricCell);
+
+    body.appendChild(row);
+  });
+
+  $('mergeRepairCount').textContent =
+    `${repairEntries.length} entr${repairEntries.length === 1 ? 'y' : 'ies'} need input`;
+}
+
+function validateMergeRepairs() {
+  const problems = [];
+
+  for (const entry of mergeState.repairEntries.filter((item) => item.needsRepair)) {
+    const label = `${entry.parsed.fileName} — entry ${entry.groupIndex + 1}`;
+
+    if (!normaliseText(entry.code)) problems.push(`${label}: Code is blank`);
+    if (!normaliseText(entry.compound)) problems.push(`${label}: Compound is blank`);
+    if (numericValue(entry.molkg) == null) problems.push(`${label}: Mol/Kg is blank or invalid`);
+    if (numericValue(entry.wt) == null) problems.push(`${label}: wt% is blank or invalid`);
+
+    const metrics = entry.metrics.map(canonicalMetric);
+    if (metrics.some((metric) => !CORE_QUICKSHEET_METRICS.has(metric))) {
+      problems.push(`${label}: every row needs a valid Metric`);
+    }
+
+    if (entry.group.length === 3) {
+      const metricSet = new Set(metrics);
+      if (
+        metricSet.size !== 3 ||
+        !metricSet.has('avg') ||
+        !metricSet.has('std dev') ||
+        !metricSet.has('rsd')
+      ) {
+        problems.push(`${label}: the three rows must contain avg, std dev and rsd once each`);
+      }
     }
   }
-  return [...META_COLUMNS, ...STANDARD_ELEMENTS, ...extras, ...STANDARD_RATIOS, INCLUSION_COLUMN];
+
+  return problems;
+}
+
+function applyMergeRepairs() {
+  for (const entry of mergeState.repairEntries) {
+    const metrics = entry.metrics.map(canonicalMetric);
+    const avgIndex = Math.max(0, metrics.indexOf('avg'));
+
+    entry.group.forEach((row, rowIndex) => {
+      row.Metric = metrics[rowIndex] || row.Metric || null;
+
+      // Standardise metadata so it appears once per QuickSheet entry,
+      // matching the builder's normal output format.
+      row.Code = rowIndex === avgIndex ? normaliseText(entry.code) : null;
+      row.Compound = rowIndex === avgIndex ? normaliseText(entry.compound) : null;
+      row['Mol/Kg'] = rowIndex === avgIndex ? numericValue(entry.molkg) : null;
+      row['wt%'] = rowIndex === avgIndex ? numericValue(entry.wt) : null;
+    });
+  }
+}
+
+function showMergeRepair(parsedFiles, errors) {
+  mergeState.parsedFiles = parsedFiles;
+  mergeState.parseErrors = errors;
+  mergeState.repairEntries = buildMergeRepairEntries(parsedFiles);
+
+  const missing = mergeState.repairEntries.filter((entry) => entry.needsRepair);
+  if (!missing.length) return false;
+
+  renderMergeRepairRows();
+  $('mergeRepairCard').classList.remove('hidden');
+
+  const affectedFiles = new Set(missing.map((entry) => entry.parsed.fileName)).size;
+  setStatus(
+    'mergeRepairStatus',
+    `${missing.length} QuickSheet entr${missing.length === 1 ? 'y is' : 'ies are'} missing required plotting metadata. Fill the highlighted fields, then continue the merge.`,
+    false,
+  );
+  setStatus(
+    'mergeStatus',
+    `Manual metadata is required for ${missing.length} entr${missing.length === 1 ? 'y' : 'ies'} across ${affectedFiles} workbook${affectedFiles === 1 ? '' : 's'}.`,
+    false,
+  );
+  return true;
+}
+
+function finaliseQuickSheetMerge(parsedFiles, errors = []) {
+  const headers = orderedMergedHeaders(parsedFiles);
+  const rows = [];
+
+  for (const parsed of parsedFiles) {
+    for (const source of parsed.rows) {
+      const row = {};
+      for (const header of headers) row[header] = source[header] ?? null;
+      rows.push(row);
+    }
+  }
+
+  mergeState.headers = headers;
+  mergeState.rows = rows;
+  mergeState.workbookBytes = makeWorkbookBytes(headers, rows, 'Merged QuickSheet');
+
+  renderPreview('mergePreview', headers, rows);
+  $('mergePreviewWrap').classList.remove('hidden');
+  $('downloadMerged').disabled = false;
+
+  const legacyCount = parsedFiles.filter((parsed) => parsed.inferredMetricColumn).length;
+  renderSummary('mergeSummary', [
+    ['Workbooks merged', parsedFiles.length],
+    ['Rows', rows.length],
+    ['Columns', headers.length],
+    ['Legacy layouts repaired', legacyCount],
+    ['Files skipped', errors.length],
+  ]);
+
+  const skippedNote = errors.length ? ` ${errors.length} file(s) were skipped.` : '';
+  const legacyNote = legacyCount
+    ? ` Repaired ${legacyCount} older QuickSheet layout(s) with an unlabeled metric column.`
+    : '';
+
+  setStatus(
+    'mergeStatus',
+    `Merged ${parsedFiles.length} QuickSheet workbook(s) into ${rows.length} rows.${legacyNote}${skippedNote}`,
+    false,
+  );
+
+  $('mergeQuickSheets').disabled = false;
+}
+
+function continueMergeAfterRepair() {
+  const problems = validateMergeRepairs();
+  if (problems.length) {
+    setStatus('mergeRepairStatus', problems.slice(0, 8).join(' | '), true);
+    return;
+  }
+
+  applyMergeRepairs();
+  $('mergeRepairCard').classList.add('hidden');
+  finaliseQuickSheetMerge(mergeState.parsedFiles, mergeState.parseErrors);
+}
+
+
+function orderedMergedHeaders(parsedFiles) {
+  const measurementHeaders = [...STANDARD_ELEMENTS, ...STANDARD_RATIOS];
+  const excluded = new Set([...META_COLUMNS, INCLUSION_COLUMN].map((header) => header.toLowerCase()));
+  const seen = new Set(measurementHeaders.map((header) => header.toLowerCase()));
+
+  for (const parsed of parsedFiles) {
+    for (const rawHeader of parsed.headers) {
+      const header = canonicalHeader(rawHeader);
+      if (!header) continue;
+      const key = header.toLowerCase();
+      if (excluded.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      measurementHeaders.push(header);
+    }
+  }
+
+  return [
+    ...META_COLUMNS,
+    ...orderMeasurementHeaders(measurementHeaders),
+    INCLUSION_COLUMN,
+  ];
 }
 
 function invalidateMergeOutput() {
@@ -1249,6 +1719,7 @@ function invalidateMergeOutput() {
   $('mergePreviewWrap').classList.add('hidden');
   clearNode($('mergePreview'));
   renderSummary('mergeSummary', []);
+  clearMergeRepair();
 }
 
 function updateMergeControls() {
@@ -1280,15 +1751,18 @@ async function mergeQuickSheets() {
 
   const parsedFiles = [];
   const errors = [];
+
   for (let index = 0; index < mergeState.selectedFiles.length; index += 1) {
     const file = mergeState.selectedFiles[index];
     setStatus('mergeStatus', `Reading ${file.name} (${index + 1} of ${mergeState.selectedFiles.length})…`);
+
     try {
       parsedFiles.push(await parseQuickSheetFile(file));
     } catch (error) {
       console.error(error);
       errors.push(`${file.name}: ${error.message}`);
     }
+
     await yieldToBrowser();
   }
 
@@ -1298,40 +1772,18 @@ async function mergeQuickSheets() {
     return;
   }
 
-  const headers = orderedMergedHeaders(parsedFiles);
-  const rows = [];
-  for (const parsed of parsedFiles) {
-    for (const source of parsed.rows) {
-      const row = {};
-      for (const header of headers) row[header] = source[header] ?? null;
-      rows.push(row);
-    }
+  if (showMergeRepair(parsedFiles, errors)) {
+    $('mergeQuickSheets').disabled = false;
+    return;
   }
 
-  mergeState.headers = headers;
-  mergeState.rows = rows;
-  mergeState.workbookBytes = makeWorkbookBytes(headers, rows, 'Merged QuickSheet');
-  renderPreview('mergePreview', headers, rows);
-  $('mergePreviewWrap').classList.remove('hidden');
-  $('downloadMerged').disabled = false;
-  const legacyCount = parsedFiles.filter((parsed) => parsed.inferredMetricColumn).length;
-  renderSummary('mergeSummary', [
-    ['Workbooks merged', parsedFiles.length],
-    ['Rows', rows.length],
-    ['Columns', headers.length],
-    ['Legacy layouts repaired', legacyCount],
-    ['Files skipped', errors.length],
-  ]);
-  const skippedNote = errors.length ? ` ${errors.length} file(s) were skipped.` : '';
-  const legacyNote = legacyCount
-    ? ` Repaired ${legacyCount} older QuickSheet layout(s) with an unlabeled metric column.`
-    : '';
-  setStatus(
-    'mergeStatus',
-    `Merged ${parsedFiles.length} QuickSheet workbook(s) into ${rows.length} rows.${legacyNote}${skippedNote}`,
-    false,
-  );
-  $('mergeQuickSheets').disabled = false;
+  mergeState.parsedFiles = parsedFiles;
+  mergeState.parseErrors = errors;
+  mergeState.repairEntries = buildMergeRepairEntries(parsedFiles);
+
+  // Even when no prompting is needed, normalise the entry metadata layout.
+  applyMergeRepairs();
+  finaliseQuickSheetMerge(parsedFiles, errors);
 }
 
 function resetProcessed() {
@@ -1357,6 +1809,9 @@ function resetProcessed() {
 
 function resetMerge() {
   mergeState.selectedFiles = [];
+  mergeState.parsedFiles = [];
+  mergeState.repairEntries = [];
+  mergeState.parseErrors = [];
   mergeState.headers = [];
   mergeState.rows = [];
   mergeState.workbookBytes = null;
@@ -1471,6 +1926,7 @@ function bindEvents() {
     );
   });
   $('mergeQuickSheets').addEventListener('click', mergeQuickSheets);
+  $('continueMergeRepair').addEventListener('click', continueMergeAfterRepair);
   $('clearMerge').addEventListener('click', resetMerge);
   $('mergeFileName').addEventListener('input', () => {
     if (mergeState.workbookBytes) $('downloadMerged').disabled = false;
