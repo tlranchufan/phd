@@ -181,7 +181,7 @@
 
     <section class="card">
       <h2>Merge existing QuickSheets</h2>
-      <p>Upload multiple QuickSheets to append them into one workbook. You can add them in several separate upload rounds. The merger normalises common header variants, forms the union of all columns, and leaves cells blank where a source workbook does not contain a column.</p>
+      <p>Upload multiple QuickSheets to append them into one workbook. You can add them in several separate upload rounds. The merger normalises common header variants, forms the union of all columns, and leaves cells blank where a source workbook does not contain a column. It also recognises older QuickSheets where the avg / std dev / rsd column has no header.</p>
 
       <label>Add QuickSheet workbooks
         <input id="mergeFiles" type="file" accept=".xls,.xlsx" multiple>
@@ -218,6 +218,6 @@
   <footer>REE Laboratory Tools · Static GitHub Pages edition</footer>
 
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-  <script defer src="./quicksheet.js?v=20260805-formatted-output"></script>
+  <script defer src="./quicksheet.js?v=20260821-legacy-merge-fix"></script>
 </body>
 </html>

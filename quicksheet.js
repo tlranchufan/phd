@@ -141,6 +141,7 @@ function canonicalHeader(value) {
     ['metric', 'Metric'],
     ['statistic', 'Metric'],
     ['statistics', 'Metric'],
+    ['stats', 'Metric'],
     ['no.inclusions', INCLUSION_COLUMN],
     ['noinclusions', INCLUSION_COLUMN],
     ['numberofinclusions', INCLUSION_COLUMN],
@@ -568,8 +569,11 @@ function buildRowsFromProcessed() {
   return { headers, rows };
 }
 
-const QUICK_SHEET_GREEN_HEADERS = new Set(['Y89', 'La139', 'Nd146', 'Yb172']);
 const QUICK_SHEET_GREEN_FILL = 'C6EFCE';
+
+function isGreenElementHeader(header) {
+  return /^(?:Y|La|Nd|Yb)\d*$/i.test(normaliseText(header));
+}
 const QUICK_SHEET_BORDER_COLOUR = '000000';
 
 function quickSheetEntryBoundaries(rows) {
@@ -638,7 +642,7 @@ function styleQuickSheet(sheet, headers, rows) {
 
       if (!['Code', 'Compound', 'Metric'].includes(header)) style.numFmt = '0.00';
 
-      if (metric === 'avg' && QUICK_SHEET_GREEN_HEADERS.has(header)) {
+      if (metric === 'avg' && isGreenElementHeader(header)) {
         style.fill = {
           patternType: 'solid',
           fgColor: { rgb: QUICK_SHEET_GREEN_FILL },
@@ -709,7 +713,7 @@ function renderPreview(tableId, headers, rows, maxRows = MAX_PREVIEW_ROWS) {
     const metric = canonicalMetric(data?.Metric);
     headers.forEach((header, columnIndex) => {
       const cell = addCell(row, displayValue(data[header]));
-      if (metric === 'avg' && QUICK_SHEET_GREEN_HEADERS.has(header)) {
+      if (metric === 'avg' && isGreenElementHeader(header)) {
         cell.style.backgroundColor = '#C6EFCE';
       }
       if (topRows.has(rowIndex)) cell.style.borderTop = '1px solid #000';
@@ -1111,18 +1115,81 @@ function resetCollated() {
 }
 
 
+const CORE_QUICKSHEET_METRICS = new Set(['avg', 'std dev', 'rsd']);
+
+function inferQuickSheetMetricColumn(rows, headerIndex) {
+  const sampleEnd = Math.min(rows.length, headerIndex + 31);
+  const maxColumns = rows
+    .slice(headerIndex, sampleEnd)
+    .reduce((maximum, row) => Math.max(maximum, row?.length || 0), 0);
+
+  let best = null;
+
+  for (let columnIndex = 0; columnIndex < maxColumns; columnIndex += 1) {
+    const hits = [];
+    for (let rowIndex = headerIndex + 1; rowIndex < sampleEnd; rowIndex += 1) {
+      const metric = canonicalMetric(rows[rowIndex]?.[columnIndex]);
+      if (CORE_QUICKSHEET_METRICS.has(metric)) hits.push(metric);
+    }
+
+    const distinct = new Set(hits);
+    if (hits.length < 3 || distinct.size < 3) continue;
+
+    const score = (hits.length * 10) + (distinct.size * 100);
+    if (!best || score > best.score) best = { columnIndex, score };
+  }
+
+  return best?.columnIndex ?? -1;
+}
+
+function withInferredMetricHeader(headerEntries, metricColumnIndex) {
+  const repaired = headerEntries
+    .filter((entry) => entry.index !== metricColumnIndex && entry.header !== 'Metric')
+    .map((entry) => ({ ...entry }));
+
+  repaired.push({ header: 'Metric', index: metricColumnIndex });
+  repaired.sort((a, b) => a.index - b.index);
+  return repaired;
+}
+
 function findQuickSheetTable(workbook) {
   for (const sheetName of workbook.SheetNames) {
     const rows = rowsFromSheet(workbook.Sheets[sheetName]);
+
     for (let index = 0; index < Math.min(rows.length, 50); index += 1) {
       const headers = mapHeaders(rows[index]);
       const headerSet = new Set(headers.map((entry) => entry.header));
+
       if (headerSet.has('Code') && headerSet.has('Metric')) {
-        return { sheetName, rows, headerIndex: index, headerEntries: headers };
+        return {
+          sheetName,
+          rows,
+          headerIndex: index,
+          headerEntries: headers,
+          inferredMetricColumn: false,
+        };
+      }
+
+      // Older QuickSheets used an unlabeled second column for avg / std dev / rsd.
+      // Detect that layout from the data and repair it in memory before merging.
+      if (headerSet.has('Code')) {
+        const metricColumnIndex = inferQuickSheetMetricColumn(rows, index);
+        if (metricColumnIndex >= 0) {
+          return {
+            sheetName,
+            rows,
+            headerIndex: index,
+            headerEntries: withInferredMetricHeader(headers, metricColumnIndex),
+            inferredMetricColumn: true,
+          };
+        }
       }
     }
   }
-  throw new Error('Could not find a QuickSheet header row containing Code and Metric.');
+
+  throw new Error(
+    'Could not identify a QuickSheet table. Expected a Code column plus either a Metric header or an avg / std dev / rsd metric column.',
+  );
 }
 
 function cleanQuickSheetRow(row, headerEntries) {
@@ -1149,7 +1216,14 @@ async function parseQuickSheetFile(file) {
     if (Object.values(object).every((value) => value == null || value === '')) continue;
     rows.push(object);
   }
-  return { file, fileName: file.name, sheetName: table.sheetName, headers, rows };
+  return {
+    file,
+    fileName: file.name,
+    sheetName: table.sheetName,
+    headers,
+    rows,
+    inferredMetricColumn: Boolean(table.inferredMetricColumn),
+  };
 }
 
 function orderedMergedHeaders(parsedFiles) {
@@ -1240,14 +1314,23 @@ async function mergeQuickSheets() {
   renderPreview('mergePreview', headers, rows);
   $('mergePreviewWrap').classList.remove('hidden');
   $('downloadMerged').disabled = false;
+  const legacyCount = parsedFiles.filter((parsed) => parsed.inferredMetricColumn).length;
   renderSummary('mergeSummary', [
     ['Workbooks merged', parsedFiles.length],
     ['Rows', rows.length],
     ['Columns', headers.length],
+    ['Legacy layouts repaired', legacyCount],
     ['Files skipped', errors.length],
   ]);
-  const note = errors.length ? ` ${errors.length} file(s) were skipped.` : '';
-  setStatus('mergeStatus', `Merged ${parsedFiles.length} QuickSheet workbook(s) into ${rows.length} rows.${note}`, false);
+  const skippedNote = errors.length ? ` ${errors.length} file(s) were skipped.` : '';
+  const legacyNote = legacyCount
+    ? ` Repaired ${legacyCount} older QuickSheet layout(s) with an unlabeled metric column.`
+    : '';
+  setStatus(
+    'mergeStatus',
+    `Merged ${parsedFiles.length} QuickSheet workbook(s) into ${rows.length} rows.${legacyNote}${skippedNote}`,
+    false,
+  );
   $('mergeQuickSheets').disabled = false;
 }
 
