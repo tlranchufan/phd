@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>REE Excel Processor</title>
-  <meta name="description" content="Browser-based LA-ICP-MS composition summary processor and collator.">
+  <meta name="description" content="LA-ICP-MS composition summary processor and collator.">
   <link rel="stylesheet" href="./styles.css?v=20260805-quicksheet">
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary navigation">
     <div class="nav-inner">
-      <a class="site-brand" href="./index.html">REE Laboratory Tools</a>
+      <a class="site-brand" href="./index.html">Data Processing Tools</a>
       <div class="nav-links">
         <a href="./index.html" class="active" aria-current="page">Excel Processor</a>
         <a href="./quicksheet.html">QuickSheet Builder</a>
@@ -21,16 +21,16 @@
   </nav>
   <header class="hero">
     <div>
-      <p class="eyebrow">REE Laboratory Tools · Browser-only processing</p>
-      <h1>REE Excel Processor</h1>
-      <p class="lede">Upload analytical Excel files, choose ratios and SD-band colouring, exclude rows, and download processed or collated workbooks. Files remain in your browser.</p>
+      <p class="eyebrow">Data Processing Tools · Browser-only</p>
+      <h1>Excel Processor</h1>
+      <p class="lede">Upload Excel files from SILLs -> Choose element ratios and SD-band colouring -> Exclude rows -> Download processed or collated workbooks.</p>
     </div>
   </header>
 
   <main class="container">
     <section class="card">
       <h2>1. Upload source files</h2>
-      <p>Accepted: <code>.xls</code> and <code>.xlsx</code>. The first worksheet must contain a <strong>SAMPLES: Composition Summary</strong> section.</p>
+      <p>Accepted: <code>.xls</code> and <code>.xlsx</code>. NOTE: The first worksheet must contain a <strong>SAMPLES: Composition Summary</strong> section.</p>
       <input id="files" type="file" accept=".xls,.xlsx" multiple>
       <div class="actions upload-actions">
         <button id="continueUpload" type="button" class="primary" disabled>Continue — process selected files</button>
@@ -87,11 +87,11 @@
 
     <section class="card compact">
       <h2>Privacy and limitations</h2>
-      <p>Processing happens locally in the browser. Uploaded data is not sent to this website. Very large workbooks may be slower than the desktop R version. This browser version reads the first worksheet and writes new <code>.xlsx</code> files.</p>
+      <p>Processing happens locally in the browser. Uploaded data is not sent to this website. Very large workbooks may take a long time. This browser version reads the first worksheet and writes new <code>.xlsx</code> files.</p>
     </section>
   </main>
 
-  <footer>REE Laboratory Tools · Static GitHub Pages edition</footer>
+  <footer>Data Processing Tools · Timothy Leong</footer>
 
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
