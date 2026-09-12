@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LA-ICPMS QuickSheet Plotter</title>
-  <meta name="description" content="Browser-based LA-ICPMS QuickSheet plotter.">
+  <meta name="description" content="LA-ICPMS QuickSheet plotter.">
   <link rel="stylesheet" href="./styles.css?v=20260726-unified">
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary navigation">
     <div class="nav-inner">
-      <a class="site-brand" href="./index.html">REE Laboratory Tools</a>
+      <a class="site-brand" href="./index.html">Data Processing Tools</a>
       <div class="nav-links">
         <a href="./index.html">Excel Processor</a>
         <a href="./plotter.html" class="active" aria-current="page">QuickSheet Plotter</a>
@@ -21,9 +21,9 @@
 
   <header class="hero">
     <div>
-      <p class="eyebrow">REE Laboratory Tools · Browser-only plotting</p>
+      <p class="eyebrow">Data Processing Tools · Browser-only plotting</p>
       <h1>LA-ICPMS QuickSheet Plotter</h1>
-      <p class="lede">Load a QuickSheet workbook, choose samples and elements, separate repeated x-values, and export an interactive or publication-ready plot. Files remain in your browser.</p>
+      <p class="lede">Load a QuickSheet workbook (see example if needed) -> Choose samples and elements -> Export an interactive or publication-ready plot</p>
     </div>
   </header>
 
@@ -73,7 +73,7 @@
             <input id="offsetSpread" type="range" min="0.02" max="0.30" step="0.01" value="0.12">
             <span id="offsetSpreadValue">12%</span> of nearest x-spacing
           </label>
-          <p class="hint">Offsets change display positions only. Hover labels and calculations retain the original x-value.</p>
+          <p class="hint">Offsets change display positions only -> hover labels and calculations retain the original x-value</p>
         </fieldset>
 
         <fieldset>
@@ -152,7 +152,7 @@
     </section>
   </main>
 
-  <footer>REE Laboratory Tools · Static GitHub Pages edition</footer>
+  <footer>Data Processing Tools · Timothy Leong</footer>
 
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
