@@ -6,6 +6,17 @@
   <title>LA-ICPMS QuickSheet Plotter</title>
   <meta name="description" content="LA-ICPMS QuickSheet plotter.">
   <link rel="stylesheet" href="./styles.css?v=20260726-unified">
+  <style>
+    .axis-bound-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(140px, 220px));
+      gap: .75rem;
+      align-items: end;
+    }
+    @media (max-width: 620px) {
+      .axis-bound-grid { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary navigation">
@@ -147,6 +158,24 @@
           </div>
           <button id="resetZoom" type="button" disabled>Reset zoom</button>
         </div>
+
+        <div id="yBoundsControls" class="subcard hidden">
+          <h3>Manual Y-axis bounds</h3>
+          <p class="hint">Optional. Enter the actual minimum and maximum values you want displayed, then click Apply Y bounds. The same bounds are applied to every facet. For log10 plots, enter the real values (for example 10 and 10000), not the exponents.</p>
+          <div class="axis-bound-grid">
+            <label>Y minimum
+              <input id="yMin" type="number" step="any" placeholder="Auto">
+            </label>
+            <label>Y maximum
+              <input id="yMax" type="number" step="any" placeholder="Auto">
+            </label>
+          </div>
+          <div class="actions mini-actions">
+            <button id="applyYBounds" class="primary" type="button">Apply Y bounds</button>
+            <button id="autoYBounds" type="button">Auto Y</button>
+          </div>
+        </div>
+
         <div id="plot" class="plot-surface"></div>
         <div id="plotWarnings" class="warning-box hidden"></div>
       </div>
@@ -158,6 +187,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20260821-missing-x-fix"></script>
+  <script defer src="./plotter.js?v=20260917-y-bounds"></script>
 </body>
 </html>

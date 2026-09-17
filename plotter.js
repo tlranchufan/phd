@@ -1,7 +1,17 @@
 'use strict';
 
 const $ = id => document.getElementById(id);
-const state = { pending: null, file: null, rows: [], avgRows: [], sdRows: [], elements: [], codes: [] };
+const state = {
+  pending: null,
+  file: null,
+  rows: [],
+  avgRows: [],
+  sdRows: [],
+  elements: [],
+  codes: [],
+  yMin: null,
+  yMax: null
+};
 
 const atomicWeights = {
   Na:22.98976928, Al:26.9815385, Si:28.085, K:39.0983, Ca:40.078, Ti:47.867,
@@ -129,8 +139,20 @@ function setOptions(select, values, selected=[]) {
 }
 
 function clearWorkbook() {
-  state.pending = null; state.file = null; state.rows=[]; state.avgRows=[]; state.sdRows=[]; state.elements=[]; state.codes=[];
+  state.pending = null;
+  state.file = null;
+  state.rows = [];
+  state.avgRows = [];
+  state.sdRows = [];
+  state.elements = [];
+  state.codes = [];
+  state.yMin = null;
+  state.yMax = null;
+
   $('plotFile').value='';
+  $('yMin').value='';
+  $('yMax').value='';
+  $('yBoundsControls').classList.add('hidden');
   $('loadPlotFile').disabled=true; $('clearPlotFile').disabled=true;
   $('plotConfig').classList.add('hidden'); $('exportCard').classList.add('hidden');
   $('plotFileSummary').innerHTML=''; $('plotLoadStatus').textContent='Choose a workbook, then click Continue.';
@@ -145,8 +167,11 @@ function renderLoaded() {
   setOptions($('numerator'), state.elements, state.elements.slice(0,1));
   setOptions($('denominator'), state.elements, state.elements.slice(1,2));
   $('plotFileSummary').innerHTML = `<div class="file-item"><div class="file-meta"><div class="file-name">${state.file.name}</div><div class="file-detail">Sheet: ${state.file.sheetName} · ${state.avgRows.length} avg rows · ${state.elements.length} elements</div></div></div>`;
-  $('plotConfig').classList.remove('hidden'); $('exportCard').classList.remove('hidden');
-  $('clearPlotFile').disabled=false; $('resetZoom').disabled=false;
+  $('plotConfig').classList.remove('hidden');
+  $('exportCard').classList.remove('hidden');
+  $('yBoundsControls').classList.remove('hidden');
+  $('clearPlotFile').disabled=false;
+  $('resetZoom').disabled=false;
   renderPlot();
 }
 
@@ -212,6 +237,20 @@ function subplotDomains(count) {
   });
 }
 
+function manualYBounds(logY) {
+  const min = state.yMin;
+  const max = state.yMax;
+
+  if (min === null || max === null) return null;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  if (min >= max) throw new Error('Y-axis minimum must be smaller than the maximum.');
+  if (logY && (min <= 0 || max <= 0)) {
+    throw new Error('Manual Y-axis bounds must both be greater than zero when using a log10 y-axis.');
+  }
+
+  return logY ? [Math.log10(min), Math.log10(max)] : [min, max];
+}
+
 function makeLayout(panelNames, xLabel, yLabel, logY) {
   const isFaceted = panelNames.length > 1;
   const layout = {
@@ -246,6 +285,12 @@ function makeLayout(panelNames, xLabel, yLabel, logY) {
       zeroline: false,
       automargin: true
     };
+
+    const yBounds = manualYBounds(logY);
+    if (yBounds) {
+      yAxis.range = yBounds;
+      yAxis.autorange = false;
+    }
 
     // Show clean powers of ten (10^2, 10^3, …), rather than 100, 1000,
     // and suppress the crowded minor-number labels seen on log facets.
@@ -400,7 +445,10 @@ function renderPlot() {
     }
     result.layout.autosize=true;
     Plotly.react('plot',result.traces,result.layout,{responsive:true,displaylogo:false,scrollZoom:true,toImageButtonOptions:{format:'png',filename:sanitizeName($('plotName').value),scale:2}});
-    $('plotStatus').textContent=`${rawRows.length} sample row(s), ${codes.size} Code(s), x = ${xField}; offset mode: ${mode}.`;
+    const yBoundText = state.yMin !== null && state.yMax !== null
+      ? `; Y bounds = ${state.yMin} to ${state.yMax}`
+      : '';
+    $('plotStatus').textContent=`${rawRows.length} sample row(s), ${codes.size} Code(s), x = ${xField}; offset mode: ${mode}${yBoundText}.`;
     $('plotWarnings').textContent=warnings.join(' '); $('plotWarnings').classList.toggle('hidden',warnings.length===0);
   } catch(err) {
     Plotly.purge('plot');
@@ -464,7 +512,80 @@ $('selectAllElements').addEventListener('click',()=>{[...$('elements').options].
 $('clearElements').addEventListener('click',()=>{[...$('elements').options].forEach(o=>o.selected=false);renderPlot();});
 $('offsetSpread').addEventListener('input',()=>{$('offsetSpreadValue').textContent=`${Math.round(Number($('offsetSpread').value)*100)}%`;renderPlot();});
 $('autoAspect').addEventListener('change',()=>{$('aspectWrap').classList.toggle('hidden',$('autoAspect').checked);renderPlot();});
-$('resetZoom').addEventListener('click',()=>Plotly.relayout('plot',{'xaxis.autorange':true,'yaxis.autorange':true}));
+function applyManualYBounds() {
+  const minText = $('yMin').value.trim();
+  const maxText = $('yMax').value.trim();
+
+  if (!minText && !maxText) {
+    state.yMin = null;
+    state.yMax = null;
+    renderPlot();
+    return;
+  }
+
+  const min = num(minText);
+  const max = num(maxText);
+
+  if (min === null || max === null) {
+    $('plotWarnings').textContent = 'Enter numeric values for both Y minimum and Y maximum, or use Auto Y.';
+    $('plotWarnings').classList.remove('hidden');
+    return;
+  }
+  if (min >= max) {
+    $('plotWarnings').textContent = 'Y-axis minimum must be smaller than the maximum.';
+    $('plotWarnings').classList.remove('hidden');
+    return;
+  }
+
+  const logY = radioValue('plotMode') === 'ratio' ? $('ratioLogY').checked : $('logY').checked;
+  if (logY && (min <= 0 || max <= 0)) {
+    $('plotWarnings').textContent = 'For a log10 y-axis, both manual Y bounds must be greater than zero.';
+    $('plotWarnings').classList.remove('hidden');
+    return;
+  }
+
+  state.yMin = min;
+  state.yMax = max;
+  renderPlot();
+}
+
+function clearManualYBounds() {
+  state.yMin = null;
+  state.yMax = null;
+  $('yMin').value = '';
+  $('yMax').value = '';
+  renderPlot();
+}
+
+function resetInteractiveZoom() {
+  if (!state.file) return;
+
+  const graph = $('plot');
+  const layout = graph.layout || {};
+  const update = {};
+
+  Object.keys(layout).forEach((key) => {
+    if (!/^xaxis\d*$/.test(key) && !/^yaxis\d*$/.test(key)) return;
+
+    if (/^yaxis\d*$/.test(key) && state.yMin !== null && state.yMax !== null) {
+      const logAxis = layout[key]?.type === 'log';
+      update[`${key}.range`] = logAxis
+        ? [Math.log10(state.yMin), Math.log10(state.yMax)]
+        : [state.yMin, state.yMax];
+      update[`${key}.autorange`] = false;
+    } else {
+      update[`${key}.autorange`] = true;
+    }
+  });
+
+  Plotly.relayout('plot', update);
+}
+
+$('applyYBounds').addEventListener('click', applyManualYBounds);
+$('autoYBounds').addEventListener('click', clearManualYBounds);
+$('yMin').addEventListener('keydown', e => { if (e.key === 'Enter') applyManualYBounds(); });
+$('yMax').addEventListener('keydown', e => { if (e.key === 'Enter') applyManualYBounds(); });
+$('resetZoom').addEventListener('click', resetInteractiveZoom);
 $('downloadPng').addEventListener('click',()=>exportImage('png'));
 $('downloadSvg').addEventListener('click',()=>exportImage('svg'));
 $('downloadPdf').addEventListener('click',exportPdf);
