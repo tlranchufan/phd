@@ -30,6 +30,12 @@ const num = v => {
   return Number.isFinite(n) ? n : null;
 };
 const elemSymbol = name => (String(name).match(/^[A-Za-z]+/) || [''])[0];
+
+function elementDisplayName(name) {
+  const full = String(name ?? '');
+  return $('showIsotopeLabels')?.checked ? full : (elemSymbol(full) || full);
+}
+
 const sanitizeName = value => {
   const s = String(value || 'laicpms_plot').trim().replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,'_');
   return s || 'laicpms_plot';
@@ -251,7 +257,7 @@ function manualYBounds(logY) {
   return logY ? [Math.log10(min), Math.log10(max)] : [min, max];
 }
 
-function makeLayout(panelNames, xLabel, yLabel, logY) {
+function makeLayout(panelNames, xLabel, yLabel, logY, panelLabels = panelNames) {
   const isFaceted = panelNames.length > 1;
   const layout = {
     margin: {l: isFaceted ? 82 : 70, r: 30, t: isFaceted ? 72 : 30, b: isFaceted ? 78 : 65},
@@ -315,7 +321,7 @@ function makeLayout(panelNames, xLabel, yLabel, logY) {
 
     if (isFaceted) {
       layout.annotations = (layout.annotations || []).concat({
-        text: name,
+        text: panelLabels[i] ?? name,
         x: (domain.x[0] + domain.x[1]) / 2,
         y: domain.y[1] + (domain.row === 0 ? 0.030 : 0.025),
         xref: 'paper',
@@ -341,6 +347,17 @@ function buildSimplePlot(rows, xField) {
     : facetElements ? selectedElements
     : facetCompounds ? [...new Set(rows.map(r=>String(r.Compound||'Unknown')))]
     : ['Plot'];
+
+  const panelLabels = panelNames.map(panel => {
+    if (facetElements && facetCompounds) {
+      const matchingElement = selectedElements.find(element => panel.startsWith(`${element} · `));
+      if (!matchingElement) return panel;
+      return `${elementDisplayName(matchingElement)}${panel.slice(matchingElement.length)}`;
+    }
+    if (facetElements) return elementDisplayName(panel);
+    return panel;
+  });
+
   const traces=[];
   panelNames.forEach((panel,panelIndex)=>{
     selectedElements.forEach(element=>{
@@ -362,17 +379,17 @@ function buildSimplePlot(rows, xField) {
         pts.sort((a,b)=>a.r.__displayX-b.r.__displayX);
         const axis=panelIndex+1, suffix=axis===1?'':axis;
         traces.push({
-          type:'scatter', mode:'lines+markers', name:panelNames.length>1?`${element} · ${comp}`:`${element}${byCompound.size>1?' · '+comp:''}`,
+          type:'scatter', mode:'lines+markers', name:panelNames.length>1?`${elementDisplayName(element)} · ${comp}`:`${elementDisplayName(element)}${byCompound.size>1?' · '+comp:''}`,
           x:pts.map(p=>p.r.__displayX), y:pts.map(p=>p.y), xaxis:`x${suffix}`, yaxis:`y${suffix}`,
           marker:{size:10}, line:{width:2},
           error_y:showErr?{type:'data',array:pts.map(p=>p.err??0),visible:true,thickness:1.2,width:4}:undefined,
-          customdata:pts.map(p=>[p.r.Code,p.r.Compound,p.r[xField],p.r.__offset,p.r.File||'',element]),
+          customdata:pts.map(p=>[p.r.Code,p.r.Compound,p.r[xField],p.r.__offset,p.r.File||'',elementDisplayName(element)]),
           hovertemplate:'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Element: %{customdata[5]}<br>Y: %{y:.10~f}<extra></extra>'
         });
       });
     });
   });
-  return {traces, layout:makeLayout(panelNames,xField,yMode==='mol'?'Element (mol/kg)':'ppm',logY)};
+  return {traces, layout:makeLayout(panelNames,xField,yMode==='mol'?'Element (mol/kg)':'ppm',logY,panelLabels)};
 }
 
 function buildRatioPlot(rows,xField) {
@@ -396,7 +413,7 @@ function buildRatioPlot(rows,xField) {
     pts.sort((a,b)=>a.r.__displayX-b.r.__displayX);
     traces.push({type:'scatter',mode:'lines+markers',name:comp,x:pts.map(p=>p.r.__displayX),y:pts.map(p=>p.ratio),marker:{size:10},line:{width:2},customdata:pts.map(p=>[p.r.Code,p.r.Compound,p.r[xField],p.r.__offset]),hovertemplate:'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Ratio: %{y:.10~f}<extra></extra>'});
   });
-  return {traces,layout:makeLayout(['Plot'],xField,`${numerator}/${denominator} (${basis==='mm'?'mol/mol':'w/w'})`,logY),warnings:skippedZero?[`${skippedZero} row(s) were skipped because the denominator was zero.`]:[]};
+  return {traces,layout:makeLayout(['Plot'],xField,`${elementDisplayName(numerator)}/${elementDisplayName(denominator)} (${basis==='mm'?'mol/mol':'w/w'})`,logY),warnings:skippedZero?[`${skippedZero} row(s) were skipped because the denominator was zero.`]:[]};
 }
 
 function renderPlot() {
