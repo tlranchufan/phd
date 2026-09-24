@@ -144,6 +144,61 @@ function setOptions(select, values, selected=[]) {
   select.innerHTML = values.map(v => `<option value="${String(v).replaceAll('&','&amp;').replaceAll('"','&quot;')}" ${chosen.has(v)?'selected':''}>${v}</option>`).join('');
 }
 
+function eligibleElementsForCodes(codes) {
+  if (!state.file || !codes.size) return [];
+
+  const rows = state.avgRows.filter(row => codes.has(String(row.Code)));
+  return state.elements.filter(element =>
+    rows.some(row => num(row[element]) !== null)
+  );
+}
+
+function updateElementChoices({initial=false} = {}) {
+  if (!state.file) return;
+
+  const codes = new Set(selectedValues($('codes')));
+  const eligible = eligibleElementsForCodes(codes);
+
+  const previousElements = selectedValues($('elements'));
+  const retainedElements = previousElements.filter(element => eligible.includes(element));
+
+  let selectedElements = retainedElements;
+  if (initial && !selectedElements.length) {
+    selectedElements = eligible.slice(0, Math.min(6, eligible.length));
+  }
+
+  setOptions($('elements'), eligible, selectedElements);
+
+  const previousNumerator = $('numerator').value;
+  const previousDenominator = $('denominator').value;
+
+  const numeratorSelection = eligible.includes(previousNumerator)
+    ? [previousNumerator]
+    : eligible.slice(0, 1);
+
+  let denominatorSelection = eligible.includes(previousDenominator)
+    ? [previousDenominator]
+    : [];
+
+  if (!denominatorSelection.length) {
+    denominatorSelection = eligible.filter(element => element !== numeratorSelection[0]).slice(0, 1);
+  }
+
+  setOptions($('numerator'), eligible, numeratorSelection);
+  setOptions($('denominator'), eligible, denominatorSelection);
+
+  const hint = $('elementAvailabilityHint');
+  if (hint) {
+    if (!codes.size) {
+      hint.textContent = 'Select at least one Code to make element choices available.';
+    } else if (!eligible.length) {
+      hint.textContent = 'No element columns contain numeric avg values for the selected Codes.';
+    } else {
+      hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} available for the selected Code${codes.size === 1 ? '' : 's'}.`;
+    }
+  }
+}
+
 function clearWorkbook() {
   state.pending = null;
   state.file = null;
@@ -169,10 +224,9 @@ function clearWorkbook() {
 
 function renderLoaded() {
   setOptions($('codes'), state.codes, state.codes);
-  setOptions($('elements'), state.elements, state.elements.slice(0, Math.min(6,state.elements.length)));
-  setOptions($('numerator'), state.elements, state.elements.slice(0,1));
-  setOptions($('denominator'), state.elements, state.elements.slice(1,2));
-  $('plotFileSummary').innerHTML = `<div class="file-item"><div class="file-meta"><div class="file-name">${state.file.name}</div><div class="file-detail">Sheet: ${state.file.sheetName} · ${state.avgRows.length} avg rows · ${state.elements.length} elements</div></div></div>`;
+  updateElementChoices({initial:true});
+
+  $('plotFileSummary').innerHTML = `<div class="file-item"><div class="file-meta"><div class="file-name">${state.file.name}</div><div class="file-detail">Sheet: ${state.file.sheetName} · ${state.avgRows.length} avg rows · ${state.elements.length} detected element columns</div></div></div>`;
   $('plotConfig').classList.remove('hidden');
   $('exportCard').classList.remove('hidden');
   $('yBoundsControls').classList.remove('hidden');
@@ -523,8 +577,16 @@ $('loadPlotFile').addEventListener('click',async()=>{
   }catch(err){console.error(err);$('plotLoadStatus').textContent=`Error: ${err.message}`;$('loadPlotFile').disabled=false;}
 });
 $('clearPlotFile').addEventListener('click',clearWorkbook);
-$('selectAllCodes').addEventListener('click',()=>{[...$('codes').options].forEach(o=>o.selected=true);renderPlot();});
-$('clearCodes').addEventListener('click',()=>{[...$('codes').options].forEach(o=>o.selected=false);renderPlot();});
+$('selectAllCodes').addEventListener('click',()=>{
+  [...$('codes').options].forEach(o=>o.selected=true);
+  updateElementChoices();
+  renderPlot();
+});
+$('clearCodes').addEventListener('click',()=>{
+  [...$('codes').options].forEach(o=>o.selected=false);
+  updateElementChoices();
+  renderPlot();
+});
 $('selectAllElements').addEventListener('click',()=>{[...$('elements').options].forEach(o=>o.selected=true);renderPlot();});
 $('clearElements').addEventListener('click',()=>{[...$('elements').options].forEach(o=>o.selected=false);renderPlot();});
 $('offsetSpread').addEventListener('input',()=>{$('offsetSpreadValue').textContent=`${Math.round(Number($('offsetSpread').value)*100)}%`;renderPlot();});
@@ -609,8 +671,12 @@ $('downloadPdf').addEventListener('click',exportPdf);
 $('downloadHtml').addEventListener('click',exportHtml);
 
 document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>el.addEventListener('change',()=>{
+  if (el.id === 'codes') updateElementChoices();
+
   const ratio=radioValue('plotMode')==='ratio';
-  $('simpleControls').classList.toggle('hidden',ratio);$('ratioControls').classList.toggle('hidden',!ratio);renderPlot();
+  $('simpleControls').classList.toggle('hidden',ratio);
+  $('ratioControls').classList.toggle('hidden',!ratio);
+  renderPlot();
 }));
 $('plotName').addEventListener('change',renderPlot);
 window.addEventListener('resize',()=>{if(state.file)renderPlot();});

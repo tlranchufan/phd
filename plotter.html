@@ -100,6 +100,7 @@
           <label>Elements to show
             <select id="elements" multiple size="10"></select>
           </label>
+          <p id="elementAvailabilityHint" class="hint">Available elements update automatically from the selected Codes. An element is selectable only when at least one selected Code has a numeric avg value in that element column.</p>
           <div class="actions mini-actions">
             <button id="selectAllElements" type="button">Select all</button>
             <button id="clearElements" type="button">Clear</button>
@@ -189,6 +190,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20260924-isotope-labels"></script>
+  <script defer src="./plotter.js?v=20260924-realtime-elements"></script>
 </body>
 </html>
