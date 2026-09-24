@@ -313,9 +313,16 @@ function manualYBounds(logY) {
 
 function makeLayout(panelNames, xLabel, yLabel, logY, panelLabels = panelNames) {
   const isFaceted = panelNames.length > 1;
+  const textSize = Math.max(8, Math.min(28, Number($('plotTextSize')?.value) || 14));
+  const thickGrid = Boolean($('thickGridLines')?.checked);
+  const thickAxes = Boolean($('thickAxes')?.checked);
+  const gridWidth = thickGrid ? 2.25 : 1;
+  const axisWidth = thickAxes ? 3 : 1;
+
   const layout = {
     margin: {l: isFaceted ? 82 : 70, r: 30, t: isFaceted ? 72 : 30, b: isFaceted ? 78 : 65},
-    legend: {orientation: 'h', y: -0.18},
+    font: {size: textSize},
+    legend: {orientation: 'h', y: -0.18, font: {size: textSize}},
     hovermode: 'closest',
     paper_bgcolor: '#fff',
     plot_bgcolor: '#fff'
@@ -330,8 +337,13 @@ function makeLayout(panelNames, xLabel, yLabel, logY, panelLabels = panelNames) 
     const xAxis = {
       domain: domain.x,
       anchor: `y${suffix}`,
-      title: {text: xLabel, standoff: isFaceted ? 24 : 14},
+      title: {text: xLabel, standoff: isFaceted ? 24 : 14, font: {size: textSize + 1}},
+      tickfont: {size: textSize},
       showgrid: true,
+      gridwidth: gridWidth,
+      showline: thickAxes,
+      linewidth: axisWidth,
+      linecolor: '#222',
       zeroline: false,
       automargin: true
     };
@@ -339,9 +351,14 @@ function makeLayout(panelNames, xLabel, yLabel, logY, panelLabels = panelNames) 
     const yAxis = {
       domain: domain.y,
       anchor: `x${suffix}`,
-      title: {text: yLabel, standoff: isFaceted ? 24 : 14},
+      title: {text: yLabel, standoff: isFaceted ? 24 : 14, font: {size: textSize + 1}},
+      tickfont: {size: textSize},
       type: logY ? 'log' : 'linear',
       showgrid: true,
+      gridwidth: gridWidth,
+      showline: thickAxes,
+      linewidth: axisWidth,
+      linecolor: '#222',
       zeroline: false,
       automargin: true
     };
@@ -358,7 +375,7 @@ function makeLayout(panelNames, xLabel, yLabel, logY, panelLabels = panelNames) 
       yAxis.dtick = 1;
       yAxis.exponentformat = 'power';
       yAxis.showexponent = 'all';
-      yAxis.minor = {showgrid: true, gridcolor: '#eeeeee', ticks: ''};
+      yAxis.minor = {showgrid: true, gridcolor: '#eeeeee', gridwidth: thickGrid ? 1.5 : 1, ticks: ''};
     } else {
       // In regular (linear) mode, always show the full value instead of
       // Plotly's abbreviated SI labels such as 2k or 3k.
@@ -381,7 +398,7 @@ function makeLayout(panelNames, xLabel, yLabel, logY, panelLabels = panelNames) 
         xref: 'paper',
         yref: 'paper',
         showarrow: false,
-        font: {size: 13},
+        font: {size: textSize + 1},
         xanchor: 'center',
         yanchor: 'bottom'
       });
@@ -590,6 +607,10 @@ $('clearCodes').addEventListener('click',()=>{
 $('selectAllElements').addEventListener('click',()=>{[...$('elements').options].forEach(o=>o.selected=true);renderPlot();});
 $('clearElements').addEventListener('click',()=>{[...$('elements').options].forEach(o=>o.selected=false);renderPlot();});
 $('offsetSpread').addEventListener('input',()=>{$('offsetSpreadValue').textContent=`${Math.round(Number($('offsetSpread').value)*100)}%`;renderPlot();});
+$('plotTextSize').addEventListener('input',()=>{
+  $('plotTextSizeValue').textContent=`${$('plotTextSize').value} px`;
+  renderPlot();
+});
 $('autoAspect').addEventListener('change',()=>{$('aspectWrap').classList.toggle('hidden',$('autoAspect').checked);renderPlot();});
 function applyManualYBounds() {
   const minText = $('yMin').value.trim();

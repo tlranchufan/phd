@@ -96,6 +96,17 @@
 
         <label class="toggle"><input id="showIsotopeLabels" type="checkbox" checked> Show isotope numbers in graph labels (e.g. Y89 instead of Y)</label>
 
+        <fieldset>
+          <legend>Plot appearance</legend>
+          <label>Text size
+            <input id="plotTextSize" type="range" min="8" max="28" step="1" value="14">
+            <span id="plotTextSizeValue">14 px</span>
+          </label>
+          <label class="toggle"><input id="thickGridLines" type="checkbox"> Thick grid lines</label>
+          <label class="toggle"><input id="thickAxes" type="checkbox"> Thick axes</label>
+          <p class="hint">These settings apply to the on-screen plot and exported PNG, SVG, PDF, and interactive HTML.</p>
+        </fieldset>
+
         <div id="simpleControls">
           <label>Elements to show
             <select id="elements" multiple size="10"></select>
@@ -190,6 +201,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20260924-realtime-elements"></script>
+  <script defer src="./plotter.js?v=20260924-appearance-controls"></script>
 </body>
 </html>
