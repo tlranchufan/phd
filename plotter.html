@@ -64,14 +64,14 @@
           <button id="clearCodes" type="button">Clear</button>
         </div>
 
-        <fieldset>
+        <fieldset id="xAxisControls">
           <legend>X axis</legend>
           <label class="inline-option"><input type="radio" name="xunit" value="Mol/Kg" checked> Mol/Kg</label>
           <label class="inline-option"><input type="radio" name="xunit" value="wt%"> wt%</label>
           <p class="hint">If an entry is blank for the selected x-axis unit, that entry is omitted from the plot and reported in the warning box. Blank values are never inherited from the previous sample.</p>
         </fieldset>
 
-        <fieldset>
+        <fieldset id="offsetControls">
           <legend>Repeated x-values</legend>
           <label>Offset mode
             <select id="offsetMode">
@@ -92,6 +92,7 @@
           <legend>Plot type</legend>
           <label class="inline-option"><input type="radio" name="plotMode" value="simple" checked> Simple</label>
           <label class="inline-option"><input type="radio" name="plotMode" value="ratio"> Element/element ratio</label>
+          <label class="inline-option"><input type="radio" name="plotMode" value="compare"> Compare</label>
         </fieldset>
 
         <label class="toggle"><input id="showIsotopeLabels" type="checkbox" checked> Show isotope numbers in graph labels (e.g. Y89 instead of Y)</label>
@@ -107,7 +108,7 @@
           <p class="hint">These settings apply to the on-screen plot and exported PNG, SVG, PDF, and interactive HTML.</p>
         </fieldset>
 
-        <div id="simpleControls">
+        <div id="elementSelectionControls">
           <label>Elements to show
             <select id="elements" multiple size="10"></select>
           </label>
@@ -116,7 +117,9 @@
             <button id="selectAllElements" type="button">Select all</button>
             <button id="clearElements" type="button">Clear</button>
           </div>
+        </div>
 
+        <div id="simpleControls">
           <fieldset>
             <legend>Y-axis quantity</legend>
             <label class="inline-option"><input type="radio" name="yMode" value="ppm" checked> ppm</label>
@@ -127,6 +130,28 @@
           <label class="toggle"><input id="logY" type="checkbox"> Log10 y-axis</label>
           <label class="toggle"><input id="showErr" type="checkbox" checked> Show avg ± standard deviation</label>
           <label class="toggle"><input id="facetCompounds" type="checkbox"> Facet by compound</label>
+        </div>
+
+
+        <div id="compareControls" class="hidden">
+          <fieldset>
+            <legend>Compare settings</legend>
+            <p class="hint">Compare two or more Codes at one shared Mol/Kg. Only Mol/Kg values present in every selected Code are available.</p>
+
+            <label>Common Mol/Kg
+              <select id="compareMolKg"></select>
+            </label>
+            <p id="compareMolHint" class="hint">Select at least two Codes to find common Mol/Kg values.</p>
+
+            <fieldset>
+              <legend>Y-axis quantity</legend>
+              <label class="inline-option"><input type="radio" name="compareYMode" value="ppm" checked> ppm</label>
+              <label class="inline-option"><input type="radio" name="compareYMode" value="mol"> Element (mol/kg)</label>
+            </fieldset>
+
+            <label class="toggle"><input id="compareShowErr" type="checkbox" checked> Show avg ± standard deviation</label>
+            <label class="toggle"><input id="compareLogY" type="checkbox"> Log10 y-axis</label>
+          </fieldset>
         </div>
 
         <div id="ratioControls" class="hidden">
@@ -201,6 +226,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20260924-appearance-controls"></script>
+  <script defer src="./plotter.js?v=20260925-compare-mode"></script>
 </body>
 </html>

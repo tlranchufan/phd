@@ -144,8 +144,102 @@ function setOptions(select, values, selected=[]) {
   select.innerHTML = values.map(v => `<option value="${String(v).replaceAll('&','&amp;').replaceAll('"','&quot;')}" ${chosen.has(v)?'selected':''}>${v}</option>`).join('');
 }
 
+function sameNumericValue(a, b) {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  return Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+}
+
+function uniqueNumericValues(values) {
+  const out = [];
+  values.forEach(value => {
+    if (!Number.isFinite(value)) return;
+    if (!out.some(existing => sameNumericValue(existing, value))) out.push(value);
+  });
+  return out.sort((a, b) => a - b);
+}
+
+function commonMolKgValues(codes) {
+  const selectedCodes = [...codes];
+  if (selectedCodes.length < 2) return [];
+
+  const valuesByCode = selectedCodes.map(code =>
+    uniqueNumericValues(
+      state.avgRows
+        .filter(row => String(row.Code) === code)
+        .map(row => num(row['Mol/Kg']))
+        .filter(Number.isFinite)
+    )
+  );
+
+  if (valuesByCode.some(values => !values.length)) return [];
+
+  return valuesByCode[0].filter(value =>
+    valuesByCode.slice(1).every(values =>
+      values.some(other => sameNumericValue(value, other))
+    )
+  );
+}
+
+function formatMolKg(value) {
+  if (!Number.isFinite(value)) return '';
+  return String(Number(value.toPrecision(12)));
+}
+
+function updateCompareMolChoices() {
+  if (!state.file) return;
+
+  const select = $('compareMolKg');
+  const hint = $('compareMolHint');
+  const codes = new Set(selectedValues($('codes')));
+  const previous = num(select.value);
+  const common = commonMolKgValues(codes);
+
+  let chosen = null;
+  if (previous !== null) {
+    chosen = common.find(value => sameNumericValue(value, previous)) ?? null;
+  }
+  if (chosen === null && common.length) chosen = common[0];
+
+  select.innerHTML = common.length
+    ? common.map(value => `<option value="${value}" ${chosen !== null && sameNumericValue(value, chosen) ? 'selected' : ''}>${formatMolKg(value)}</option>`).join('')
+    : '<option value="">No common Mol/Kg</option>';
+
+  select.disabled = common.length === 0;
+
+  if (codes.size < 2) {
+    hint.textContent = 'Select at least two Codes to find common Mol/Kg values.';
+  } else if (!common.length) {
+    hint.textContent = 'The selected Codes do not share a Mol/Kg value.';
+  } else {
+    hint.textContent = `${common.length} common Mol/Kg value${common.length === 1 ? '' : 's'} available across ${codes.size} selected Codes.`;
+  }
+}
+
+function compareRowsForCode(code, molkg) {
+  return state.avgRows.filter(row =>
+    String(row.Code) === code &&
+    sameNumericValue(num(row['Mol/Kg']), molkg)
+  );
+}
+
 function eligibleElementsForCodes(codes) {
   if (!state.file || !codes.size) return [];
+
+  const plotMode = radioValue('plotMode');
+
+  if (plotMode === 'compare') {
+    const molkg = num($('compareMolKg')?.value);
+    if (codes.size < 2 || molkg === null) return [];
+
+    // In Compare mode, every selected Code must contain a numeric value for
+    // the element at the chosen shared Mol/Kg. This guarantees a complete
+    // double/triple/etc. bar group for each eligible element.
+    return state.elements.filter(element =>
+      [...codes].every(code =>
+        compareRowsForCode(code, molkg).some(row => num(row[element]) !== null)
+      )
+    );
+  }
 
   const rows = state.avgRows.filter(row => codes.has(String(row.Code)));
   return state.elements.filter(element =>
@@ -153,7 +247,7 @@ function eligibleElementsForCodes(codes) {
   );
 }
 
-function updateElementChoices({initial=false} = {}) {
+function updateElementChoices({initial=false, autoSelectIfEmpty=false} = {}) {
   if (!state.file) return;
 
   const codes = new Set(selectedValues($('codes')));
@@ -163,7 +257,7 @@ function updateElementChoices({initial=false} = {}) {
   const retainedElements = previousElements.filter(element => eligible.includes(element));
 
   let selectedElements = retainedElements;
-  if (initial && !selectedElements.length) {
+  if ((initial || autoSelectIfEmpty) && !selectedElements.length) {
     selectedElements = eligible.slice(0, Math.min(6, eligible.length));
   }
 
@@ -189,10 +283,19 @@ function updateElementChoices({initial=false} = {}) {
 
   const hint = $('elementAvailabilityHint');
   if (hint) {
+    const plotMode = radioValue('plotMode');
     if (!codes.size) {
       hint.textContent = 'Select at least one Code to make element choices available.';
+    } else if (plotMode === 'compare' && codes.size < 2) {
+      hint.textContent = 'Compare mode requires at least two selected Codes.';
+    } else if (plotMode === 'compare' && num($('compareMolKg')?.value) === null) {
+      hint.textContent = 'No common Mol/Kg is available for the selected Codes.';
     } else if (!eligible.length) {
-      hint.textContent = 'No element columns contain numeric avg values for the selected Codes.';
+      hint.textContent = plotMode === 'compare'
+        ? 'No element has a numeric avg value in every selected Code at this Mol/Kg.'
+        : 'No element columns contain numeric avg values for the selected Codes.';
+    } else if (plotMode === 'compare') {
+      hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} available in every selected Code at ${formatMolKg(num($('compareMolKg').value))} Mol/Kg.`;
     } else {
       hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} available for the selected Code${codes.size === 1 ? '' : 's'}.`;
     }
@@ -224,6 +327,7 @@ function clearWorkbook() {
 
 function renderLoaded() {
   setOptions($('codes'), state.codes, state.codes);
+  updateCompareMolChoices();
   updateElementChoices({initial:true});
 
   $('plotFileSummary').innerHTML = `<div class="file-item"><div class="file-meta"><div class="file-name">${state.file.name}</div><div class="file-detail">Sheet: ${state.file.sheetName} · ${state.avgRows.length} avg rows · ${state.elements.length} detected element columns</div></div></div>`;
@@ -487,43 +591,159 @@ function buildRatioPlot(rows,xField) {
   return {traces,layout:makeLayout(['Plot'],xField,`${elementDisplayName(numerator)}/${elementDisplayName(denominator)} (${basis==='mm'?'mol/mol':'w/w'})`,logY),warnings:skippedZero?[`${skippedZero} row(s) were skipped because the denominator was zero.`]:[]};
 }
 
+function buildComparePlot(codes) {
+  if (codes.size < 2) throw new Error('Compare mode requires at least two selected Codes.');
+
+  const molkg = num($('compareMolKg').value);
+  if (molkg === null) throw new Error('The selected Codes do not share a Mol/Kg value.');
+
+  const selectedElements = selectedValues($('elements'));
+  if (!selectedElements.length) throw new Error('Select at least one eligible element to compare.');
+
+  const yMode = radioValue('compareYMode');
+  const showErr = $('compareShowErr').checked;
+  const logY = $('compareLogY').checked;
+  const warnings = [];
+  const traces = [];
+
+  [...codes].forEach(code => {
+    const matchingRows = compareRowsForCode(code, molkg);
+    if (!matchingRows.length) return;
+
+    if (matchingRows.length > 1) {
+      warnings.push(
+        `${code} has ${matchingRows.length} avg rows at ${formatMolKg(molkg)} Mol/Kg; the first numeric row for each element is used.`
+      );
+    }
+
+    const x = [];
+    const y = [];
+    const errors = [];
+    const customdata = [];
+
+    selectedElements.forEach(element => {
+      const row = matchingRows.find(candidate => num(candidate[element]) !== null);
+      if (!row) return;
+
+      const raw = num(row[element]);
+      const aw = atomicWeights[elemSymbol(element)];
+      if (yMode === 'mol' && !aw) return;
+
+      const value = yMode === 'mol' ? raw / aw : raw;
+      if (logY && value <= 0) {
+        warnings.push(`${code} ${elementDisplayName(element)} was omitted because its value is not positive on a log10 axis.`);
+        return;
+      }
+
+      const sdRaw = num(row.__sd?.[element]);
+      const error = sdRaw === null
+        ? null
+        : (yMode === 'mol' ? sdRaw / aw : sdRaw);
+
+      x.push(elementDisplayName(element));
+      y.push(value);
+      errors.push(error ?? 0);
+      customdata.push([
+        code,
+        row.Compound || '',
+        formatMolKg(molkg),
+        elementDisplayName(element),
+        row.File || ''
+      ]);
+    });
+
+    if (!x.length) return;
+
+    traces.push({
+      type: 'bar',
+      name: code,
+      x,
+      y,
+      error_y: showErr
+        ? {type:'data', array:errors, visible:true, thickness:1.2, width:4}
+        : undefined,
+      customdata,
+      hovertemplate:
+        'Code: %{customdata[0]}<br>' +
+        'Compound: %{customdata[1]}<br>' +
+        'Mol/Kg: %{customdata[2]}<br>' +
+        'Element: %{customdata[3]}<br>' +
+        'Y: %{y:.10~f}<extra></extra>'
+    });
+  });
+
+  if (!traces.length) throw new Error('No comparable numeric values were found.');
+
+  const layout = makeLayout(
+    ['Plot'],
+    'Element',
+    yMode === 'mol' ? 'Element (mol/kg)' : 'ppm',
+    logY
+  );
+  layout.barmode = 'group';
+  layout.bargap = 0.18;
+  layout.bargroupgap = 0.06;
+
+  return {traces, layout, warnings};
+}
+
 function renderPlot() {
   if(!state.file) return;
   try {
-    const codes=new Set(selectedValues($('codes')));
+    const codes = new Set(selectedValues($('codes')));
     if(!codes.size) throw new Error('Select at least one Code.');
-    const xField=radioValue('xunit');
-    const selectedRows=state.avgRows.filter(r=>codes.has(String(r.Code)));
-    const missingXRows=selectedRows.filter(r=>num(r[xField])===null);
-    const rawRows=selectedRows.filter(r=>num(r[xField])!==null);
 
-    if(!rawRows.length) {
-      throw new Error(`None of the selected entries has a numeric ${xField} value.`);
+    const plotMode = radioValue('plotMode');
+    let result;
+    let statusText;
+
+    if (plotMode === 'compare') {
+      result = buildComparePlot(codes);
+      const molkg = num($('compareMolKg').value);
+      const elementCount = selectedValues($('elements')).length;
+      statusText = `Compare: ${codes.size} Codes at ${formatMolKg(molkg)} Mol/Kg; ${elementCount} selected element${elementCount === 1 ? '' : 's'}.`;
+    } else {
+      const xField = radioValue('xunit');
+      const selectedRows = state.avgRows.filter(r=>codes.has(String(r.Code)));
+      const missingXRows = selectedRows.filter(r=>num(r[xField])===null);
+      const rawRows = selectedRows.filter(r=>num(r[xField])!==null);
+
+      if(!rawRows.length) {
+        throw new Error(`None of the selected entries has a numeric ${xField} value.`);
+      }
+
+      const offsetMode = $('offsetMode').value;
+      const spread = Number($('offsetSpread').value);
+      const rows = applyOffsets(rawRows,xField,offsetMode,spread);
+
+      result = plotMode === 'simple'
+        ? buildSimplePlot(rows,xField)
+        : buildRatioPlot(rows,xField);
+
+      if(missingXRows.length) {
+        const labels=[...new Set(missingXRows.map(r=>String(r.Code||'unnamed entry')))];
+        const shown=labels.slice(0,8).join(', ');
+        const more=labels.length>8?` (+${labels.length-8} more)`:'';
+        result.warnings = result.warnings || [];
+        result.warnings.unshift(
+          `${missingXRows.length} selected entr${missingXRows.length===1?'y was':'ies were'} omitted because ${xField} is blank or non-numeric${shown?`: ${shown}${more}`:''}.`
+        );
+      }
+
+      statusText = `${rawRows.length} sample row(s), ${codes.size} Code(s), x = ${xField}; offset mode: ${offsetMode}.`;
     }
 
-    const mode=$('offsetMode').value, spread=Number($('offsetSpread').value);
-    const rows=applyOffsets(rawRows,xField,mode,spread);
-    const result=radioValue('plotMode')==='simple'?buildSimplePlot(rows,xField):buildRatioPlot(rows,xField);
-    const warnings=result.warnings||[];
+    const warnings = result.warnings || [];
+    const width = $('plot').clientWidth || 900;
+    const auto = $('autoAspect').checked;
+    let aspect = Number($('aspectRatio').value) || .7;
 
-    if(missingXRows.length) {
-      const labels=[...new Set(missingXRows.map(r=>String(r.Code||'unnamed entry')))];
-      const shown=labels.slice(0,8).join(', ');
-      const more=labels.length>8?` (+${labels.length-8} more)`:'';
-      warnings.unshift(
-        `${missingXRows.length} selected entr${missingXRows.length===1?'y was':'ies were'} omitted because ${xField} is blank or non-numeric${shown?`: ${shown}${more}`:''}.`
-      );
-    }
-    const width=$('plot').clientWidth||900;
-    const auto=$('autoAspect').checked;
-    let aspect=Number($('aspectRatio').value)||.7;
     if(auto){
-      const faceted=radioValue('plotMode')==='simple' && ($('facetElements').checked||$('facetCompounds').checked);
-      const count=faceted ? Math.max(1,(result.layout.annotations||[]).length) : 1;
+      const faceted = plotMode === 'simple' && ($('facetElements').checked || $('facetCompounds').checked);
+      const count = faceted ? Math.max(1,(result.layout.annotations||[]).length) : 1;
       if (faceted) {
         const cols=Math.ceil(Math.sqrt(count));
         const facetRows=Math.ceil(count/cols);
-        // Allocate a full plotting panel plus title/axis-label clearance per row.
         result.layout.height=Math.max(620, facetRows*430);
       } else {
         result.layout.height=Math.max(520,Math.round(width*.7));
@@ -531,13 +751,31 @@ function renderPlot() {
     } else {
       result.layout.height=Math.max(520,Math.round(width*aspect));
     }
+
     result.layout.autosize=true;
-    Plotly.react('plot',result.traces,result.layout,{responsive:true,displaylogo:false,scrollZoom:true,toImageButtonOptions:{format:'png',filename:sanitizeName($('plotName').value),scale:2}});
+    Plotly.react(
+      'plot',
+      result.traces,
+      result.layout,
+      {
+        responsive:true,
+        displaylogo:false,
+        scrollZoom:true,
+        toImageButtonOptions:{
+          format:'png',
+          filename:sanitizeName($('plotName').value),
+          scale:2
+        }
+      }
+    );
+
     const yBoundText = state.yMin !== null && state.yMax !== null
-      ? `; Y bounds = ${state.yMin} to ${state.yMax}`
+      ? ` Y bounds = ${state.yMin} to ${state.yMax}.`
       : '';
-    $('plotStatus').textContent=`${rawRows.length} sample row(s), ${codes.size} Code(s), x = ${xField}; offset mode: ${mode}${yBoundText}.`;
-    $('plotWarnings').textContent=warnings.join(' '); $('plotWarnings').classList.toggle('hidden',warnings.length===0);
+
+    $('plotStatus').textContent = `${statusText}${yBoundText}`;
+    $('plotWarnings').textContent = warnings.join(' ');
+    $('plotWarnings').classList.toggle('hidden',warnings.length===0);
   } catch(err) {
     Plotly.purge('plot');
     $('plotStatus').textContent=`Cannot plot: ${err.message}`;
@@ -596,11 +834,13 @@ $('loadPlotFile').addEventListener('click',async()=>{
 $('clearPlotFile').addEventListener('click',clearWorkbook);
 $('selectAllCodes').addEventListener('click',()=>{
   [...$('codes').options].forEach(o=>o.selected=true);
-  updateElementChoices();
+  updateCompareMolChoices();
+  updateElementChoices({autoSelectIfEmpty: radioValue('plotMode') === 'compare'});
   renderPlot();
 });
 $('clearCodes').addEventListener('click',()=>{
   [...$('codes').options].forEach(o=>o.selected=false);
+  updateCompareMolChoices();
   updateElementChoices();
   renderPlot();
 });
@@ -637,7 +877,12 @@ function applyManualYBounds() {
     return;
   }
 
-  const logY = radioValue('plotMode') === 'ratio' ? $('ratioLogY').checked : $('logY').checked;
+  const currentPlotMode = radioValue('plotMode');
+  const logY = currentPlotMode === 'ratio'
+    ? $('ratioLogY').checked
+    : currentPlotMode === 'compare'
+      ? $('compareLogY').checked
+      : $('logY').checked;
   if (logY && (min <= 0 || max <= 0)) {
     $('plotWarnings').textContent = 'For a log10 y-axis, both manual Y bounds must be greater than zero.';
     $('plotWarnings').classList.remove('hidden');
@@ -692,11 +937,29 @@ $('downloadPdf').addEventListener('click',exportPdf);
 $('downloadHtml').addEventListener('click',exportHtml);
 
 document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>el.addEventListener('change',()=>{
-  if (el.id === 'codes') updateElementChoices();
+  const plotMode = radioValue('plotMode');
 
-  const ratio=radioValue('plotMode')==='ratio';
-  $('simpleControls').classList.toggle('hidden',ratio);
-  $('ratioControls').classList.toggle('hidden',!ratio);
+  if (el.id === 'codes') {
+    updateCompareMolChoices();
+    updateElementChoices({autoSelectIfEmpty: plotMode === 'compare'});
+  } else if (el.name === 'plotMode') {
+    updateCompareMolChoices();
+    updateElementChoices({autoSelectIfEmpty: plotMode === 'compare'});
+  } else if (el.id === 'compareMolKg') {
+    updateElementChoices({autoSelectIfEmpty:true});
+  }
+
+  const simple = plotMode === 'simple';
+  const ratio = plotMode === 'ratio';
+  const compare = plotMode === 'compare';
+
+  $('simpleControls').classList.toggle('hidden', !simple);
+  $('ratioControls').classList.toggle('hidden', !ratio);
+  $('compareControls').classList.toggle('hidden', !compare);
+  $('elementSelectionControls').classList.toggle('hidden', ratio);
+  $('xAxisControls').classList.toggle('hidden', compare);
+  $('offsetControls').classList.toggle('hidden', compare);
+
   renderPlot();
 }));
 $('plotName').addEventListener('change',renderPlot);
