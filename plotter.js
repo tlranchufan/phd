@@ -9,6 +9,7 @@ const state = {
   sdRows: [],
   elements: [],
   codes: [],
+  compareElementOrder: [],
   yMin: null,
   yMax: null
 };
@@ -247,6 +248,67 @@ function eligibleElementsForCodes(codes) {
   );
 }
 
+function syncCompareElementOrder({reset=false} = {}) {
+  const orderSelect = $('compareElementOrder');
+  if (!orderSelect) return;
+
+  const selected = selectedValues($('elements'));
+  const selectedSet = new Set(selected);
+
+  if (reset) {
+    state.compareElementOrder = [...selected];
+  } else {
+    const kept = state.compareElementOrder.filter(element => selectedSet.has(element));
+    const appended = selected.filter(element => !kept.includes(element));
+    state.compareElementOrder = [...kept, ...appended];
+  }
+
+  const previousFocus = orderSelect.value;
+  orderSelect.innerHTML = state.compareElementOrder
+    .map(element => `<option value="${String(element).replaceAll('&','&amp;').replaceAll('"','&quot;')}">${elementDisplayName(element)}</option>`)
+    .join('');
+
+  if (state.compareElementOrder.includes(previousFocus)) {
+    orderSelect.value = previousFocus;
+  } else if (state.compareElementOrder.length) {
+    orderSelect.value = state.compareElementOrder[0];
+  }
+
+  const hasSelection = state.compareElementOrder.length > 0;
+  $('moveCompareElementLeft').disabled = !hasSelection;
+  $('moveCompareElementRight').disabled = !hasSelection;
+  $('resetCompareElementOrder').disabled = !hasSelection;
+}
+
+function orderedCompareElements() {
+  const selected = selectedValues($('elements'));
+  const selectedSet = new Set(selected);
+  const ordered = state.compareElementOrder.filter(element => selectedSet.has(element));
+  const missing = selected.filter(element => !ordered.includes(element));
+  return [...ordered, ...missing];
+}
+
+function moveCompareElement(direction) {
+  syncCompareElementOrder();
+
+  const select = $('compareElementOrder');
+  const element = select.value;
+  if (!element) return;
+
+  const index = state.compareElementOrder.indexOf(element);
+  if (index < 0) return;
+
+  const target = index + direction;
+  if (target < 0 || target >= state.compareElementOrder.length) return;
+
+  [state.compareElementOrder[index], state.compareElementOrder[target]] =
+    [state.compareElementOrder[target], state.compareElementOrder[index]];
+
+  syncCompareElementOrder();
+  select.value = element;
+  renderPlot();
+}
+
 function updateElementChoices({initial=false, autoSelectIfEmpty=false} = {}) {
   if (!state.file) return;
 
@@ -300,6 +362,8 @@ function updateElementChoices({initial=false, autoSelectIfEmpty=false} = {}) {
       hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} available for the selected Code${codes.size === 1 ? '' : 's'}.`;
     }
   }
+
+  syncCompareElementOrder();
 }
 
 function clearWorkbook() {
@@ -310,10 +374,15 @@ function clearWorkbook() {
   state.sdRows = [];
   state.elements = [];
   state.codes = [];
+  state.compareElementOrder = [];
   state.yMin = null;
   state.yMax = null;
 
   $('plotFile').value='';
+  $('compareElementOrder').innerHTML='';
+  $('moveCompareElementLeft').disabled=true;
+  $('moveCompareElementRight').disabled=true;
+  $('resetCompareElementOrder').disabled=true;
   $('yMin').value='';
   $('yMax').value='';
   $('yBoundsControls').classList.add('hidden');
@@ -597,7 +666,7 @@ function buildComparePlot(codes) {
   const molkg = num($('compareMolKg').value);
   if (molkg === null) throw new Error('The selected Codes do not share a Mol/Kg value.');
 
-  const selectedElements = selectedValues($('elements'));
+  const selectedElements = orderedCompareElements();
   if (!selectedElements.length) throw new Error('Select at least one eligible element to compare.');
 
   const yMode = radioValue('compareYMode');
@@ -700,7 +769,7 @@ function renderPlot() {
     if (plotMode === 'compare') {
       result = buildComparePlot(codes);
       const molkg = num($('compareMolKg').value);
-      const elementCount = selectedValues($('elements')).length;
+      const elementCount = orderedCompareElements().length;
       statusText = `Compare: ${codes.size} Codes at ${formatMolKg(molkg)} Mol/Kg; ${elementCount} selected element${elementCount === 1 ? '' : 's'}.`;
     } else {
       const xField = radioValue('xunit');
@@ -844,8 +913,22 @@ $('clearCodes').addEventListener('click',()=>{
   updateElementChoices();
   renderPlot();
 });
-$('selectAllElements').addEventListener('click',()=>{[...$('elements').options].forEach(o=>o.selected=true);renderPlot();});
-$('clearElements').addEventListener('click',()=>{[...$('elements').options].forEach(o=>o.selected=false);renderPlot();});
+$('selectAllElements').addEventListener('click',()=>{
+  [...$('elements').options].forEach(o=>o.selected=true);
+  syncCompareElementOrder();
+  renderPlot();
+});
+$('clearElements').addEventListener('click',()=>{
+  [...$('elements').options].forEach(o=>o.selected=false);
+  syncCompareElementOrder();
+  renderPlot();
+});
+$('moveCompareElementLeft').addEventListener('click',()=>moveCompareElement(-1));
+$('moveCompareElementRight').addEventListener('click',()=>moveCompareElement(1));
+$('resetCompareElementOrder').addEventListener('click',()=>{
+  syncCompareElementOrder({reset:true});
+  renderPlot();
+});
 $('offsetSpread').addEventListener('input',()=>{$('offsetSpreadValue').textContent=`${Math.round(Number($('offsetSpread').value)*100)}%`;renderPlot();});
 $('plotTextSize').addEventListener('input',()=>{
   $('plotTextSizeValue').textContent=`${$('plotTextSize').value} px`;
@@ -939,12 +1022,18 @@ $('downloadHtml').addEventListener('click',exportHtml);
 document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>el.addEventListener('change',()=>{
   const plotMode = radioValue('plotMode');
 
+  if (el.id === 'elements') {
+    syncCompareElementOrder();
+  }
+
   if (el.id === 'codes') {
     updateCompareMolChoices();
     updateElementChoices({autoSelectIfEmpty: plotMode === 'compare'});
   } else if (el.name === 'plotMode') {
     updateCompareMolChoices();
     updateElementChoices({autoSelectIfEmpty: plotMode === 'compare'});
+  } else if (el.id === 'showIsotopeLabels') {
+    syncCompareElementOrder();
   } else if (el.id === 'compareMolKg') {
     updateElementChoices({autoSelectIfEmpty:true});
   }

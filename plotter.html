@@ -143,6 +143,16 @@
             </label>
             <p id="compareMolHint" class="hint">Select at least two Codes to find common Mol/Kg values.</p>
 
+            <label>Element order (left → right)
+              <select id="compareElementOrder" size="8"></select>
+            </label>
+            <p class="hint">Select an element here, then move it left or right. Only elements selected in “Elements to show” appear in this list.</p>
+            <div class="actions mini-actions">
+              <button id="moveCompareElementLeft" type="button">← Move left</button>
+              <button id="moveCompareElementRight" type="button">Move right →</button>
+              <button id="resetCompareElementOrder" type="button">Reset order</button>
+            </div>
+
             <fieldset>
               <legend>Y-axis quantity</legend>
               <label class="inline-option"><input type="radio" name="compareYMode" value="ppm" checked> ppm</label>
@@ -226,6 +236,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20260925-compare-mode"></script>
+  <script defer src="./plotter.js?v=20260929-compare-order"></script>
 </body>
 </html>
