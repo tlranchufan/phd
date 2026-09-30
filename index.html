@@ -30,7 +30,7 @@
   <main class="container">
     <section class="card">
       <h2>1. Upload source files</h2>
-      <p>Accepted: <code>.xls</code> and <code>.xlsx</code>. NOTE: The first worksheet must contain a <strong>SAMPLES: Composition Summary</strong> section.</p>
+      <p>Accepted: <code>.xls</code> and <code>.xlsx</code>. NOTE: The first worksheet must contain a <strong>SAMPLES: Composition Summary</strong> section. Loaded files can be duplicated into independent working versions when a sample contains more than one population.</p>
       <input id="files" type="file" accept=".xls,.xlsx" multiple>
       <div class="actions upload-actions">
         <button id="continueUpload" type="button" class="primary" disabled>Continue — process selected files</button>
@@ -65,11 +65,16 @@
       <div class="section-head">
         <div>
           <h2>3. Review and exclude rows</h2>
-          <p>Select a file, then toggle rows between KEEP and EXCLUDE. Statistics and colours use kept rows only.</p>
+          <p>Select a file, then toggle rows between KEEP and EXCLUDE. Statistics and colours use kept rows only. Duplicate versions have independent KEEP / EXCLUDE decisions.</p>
         </div>
-        <label>File
-          <select id="reviewFile"></select>
-        </label>
+        <div>
+          <label>File
+            <select id="reviewFile"></select>
+          </label>
+          <div class="actions mini-actions">
+            <button id="duplicateReviewFile" type="button">Duplicate current file</button>
+          </div>
+        </div>
       </div>
       <div id="reviewSummary" class="stats"></div>
       <div class="table-wrap"><table id="reviewTable"></table></div>
@@ -96,6 +101,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script defer src="./app.js?v=20260721-verified"></script>
+  <script defer src="./app.js?v=20260930-duplicate-versions"></script>
 </body>
 </html>

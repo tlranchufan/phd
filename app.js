@@ -22,6 +22,10 @@ const stats = values => {
 };
 const fmt = v => typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : (v ?? '');
 const baseName = n => n.replace(/\.(xls|xlsx)$/i,'');
+const duplicateName = (sourceName, copyNumber) => {
+  const match = String(sourceName).match(/^(.*?)(\.(?:xls|xlsx))$/i);
+  return match ? `${match[1]}_copy${copyNumber}${match[2]}` : `${sourceName}_copy${copyNumber}`;
+};
 const fileKey = file => `${file.name}::${file.size}::${file.lastModified}`;
 const humanSize = bytes => bytes < 1024 ? `${bytes} B` : bytes < 1024**2 ? `${(bytes/1024).toFixed(1)} KB` : `${(bytes/1024**2).toFixed(1)} MB`;
 
@@ -73,7 +77,7 @@ function refreshElements(){
 }
 
 async function loadFiles(fileList){
-  const existing=new Set(state.files.map(f=>f.key));
+  const existing=new Set(state.files.map(f=>f.sourceKey||f.key));
   let added=0, skipped=0;
   for(const file of fileList){
     const key=fileKey(file);
@@ -87,7 +91,20 @@ async function loadFiles(fileList){
     const lod=getSection(sections,'SAMPLES','Limits of Detection Summary');
     if(!comp||!comp.length||!Object.hasOwn(comp[0],'File')) throw new Error(`${file.name}: missing SAMPLES: Composition Summary or File column.`);
     const elements=Object.keys(comp[0]).filter(h=>elementRx.test(h));
-    state.files.push({key,name:file.name,size:file.size,lastModified:file.lastModified,comp,lod,elements,keep:Array(comp.length).fill(true),preview:null});
+    state.files.push({
+      key,
+      sourceKey:key,
+      sourceName:file.name,
+      copyNumber:1,
+      name:file.name,
+      size:file.size,
+      lastModified:file.lastModified,
+      comp,
+      lod,
+      elements,
+      keep:Array(comp.length).fill(true),
+      preview:null
+    });
     existing.add(key); added++;
   }
   refreshElements();
@@ -99,12 +116,67 @@ function renderLoadedFiles(){
   box.innerHTML='';
   state.files.forEach((f,i)=>{
     const row=document.createElement('div'); row.className='file-item';
-    row.innerHTML=`<div class="file-meta"><div class="file-name">${f.name}</div><div class="file-detail">${humanSize(f.size)} · ${f.comp.length} composition rows</div></div>`;
-    const btn=document.createElement('button'); btn.type='button'; btn.className='file-remove'; btn.textContent='Remove'; btn.onclick=()=>removeFile(i);
-    row.appendChild(btn); box.appendChild(row);
+    const duplicateDetail=f.copyNumber>1 ? ` · independent copy of ${f.sourceName||f.name}` : '';
+    row.innerHTML=`<div class="file-meta"><div class="file-name">${f.name}</div><div class="file-detail">${humanSize(f.size)} · ${f.comp.length} composition rows${duplicateDetail}</div></div>`;
+
+    const controls=document.createElement('div');
+    controls.className='actions mini-actions';
+
+    const duplicateBtn=document.createElement('button');
+    duplicateBtn.type='button';
+    duplicateBtn.textContent='Duplicate';
+    duplicateBtn.onclick=()=>duplicateFile(i);
+
+    const removeBtn=document.createElement('button');
+    removeBtn.type='button';
+    removeBtn.className='file-remove';
+    removeBtn.textContent='Remove';
+    removeBtn.onclick=()=>removeFile(i);
+
+    controls.appendChild(duplicateBtn);
+    controls.appendChild(removeBtn);
+    row.appendChild(controls);
+    box.appendChild(row);
   });
   $('clearFiles').disabled=state.files.length===0;
-  $('loadStatus').textContent=state.files.length ? `Loaded ${state.files.length} file(s); discovered ${state.elements.length} element columns. Add more files at any time, including from other folders.` : 'No files loaded.';
+  $('loadStatus').textContent=state.files.length ? `Loaded ${state.files.length} working version(s); discovered ${state.elements.length} element columns. Use Duplicate when you want independent KEEP / EXCLUDE populations from the same source workbook.` : 'No files loaded.';
+}
+
+function duplicateFile(index){
+  const source=state.files[index];
+  if(!source)return;
+
+  const sourceKey=source.sourceKey||source.key;
+  const sourceName=source.sourceName||source.name;
+  const existingCopies=state.files
+    .filter(f=>(f.sourceKey||f.key)===sourceKey)
+    .map(f=>Number(f.copyNumber)||1);
+  const copyNumber=Math.max(1,...existingCopies)+1;
+
+  const clone={
+    ...source,
+    key:`${sourceKey}::copy::${copyNumber}::${Date.now()}::${Math.random().toString(36).slice(2)}`,
+    sourceKey,
+    sourceName,
+    copyNumber,
+    name:duplicateName(sourceName,copyNumber),
+    elements:[...source.elements],
+    keep:[...source.keep],
+    preview:source.preview ? source.preview.map(row=>({...row})) : null
+  };
+
+  state.files.splice(index+1,0,clone);
+  refreshElements();
+  renderLoadedFiles();
+
+  // If the user is already reviewing exclusions, move directly to the new
+  // independent version so it can be edited immediately.
+  if(clone.preview && !$('reviewCard').classList.contains('hidden')){
+    renderReview(index+1);
+    $('loadStatus').textContent=`Created ${clone.name}. It starts with the same current KEEP / EXCLUDE decisions as ${source.name}; changes to either version are now independent.`;
+  } else {
+    $('loadStatus').textContent=`Created ${clone.name}. It is an independent working version of ${sourceName}.`;
+  }
 }
 
 function resetDownstream(){
@@ -112,7 +184,11 @@ function resetDownstream(){
   $('configCard').classList.add('hidden');
   $('reviewCard').classList.add('hidden');
   $('downloadCard').classList.add('hidden');
-  $('reviewFile').innerHTML=''; $('reviewTable').innerHTML=''; $('reviewSummary').innerHTML=''; $('buildStatus').textContent='';
+  $('reviewFile').innerHTML='';
+  $('reviewTable').innerHTML='';
+  $('reviewSummary').innerHTML='';
+  $('duplicateReviewFile').disabled=true;
+  $('buildStatus').textContent='';
 }
 
 function removeFile(index){
@@ -166,12 +242,27 @@ function styleCode(v,s){
 function currentStats(f){
   const kept=f.preview.filter((_,i)=>f.keep[i]); const out={}; state.colors.forEach(c=>{if(c in (f.preview[0]||{}))out[c]=stats(kept.map(r=>r[c]));}); return out;
 }
-function renderReview(){
+function renderReview(selectedIndex=null){
+  const currentIndex=Number($('reviewFile').value);
+  const desired=selectedIndex===null
+    ? (Number.isInteger(currentIndex)&&currentIndex>=0&&currentIndex<state.files.length ? currentIndex : 0)
+    : selectedIndex;
+
   $('reviewFile').innerHTML=state.files.map((f,i)=>`<option value="${i}">${f.name}</option>`).join('');
-  $('reviewCard').classList.remove('hidden'); $('downloadCard').classList.remove('hidden'); renderTable();
+  if(state.files.length)$('reviewFile').value=String(Math.max(0,Math.min(desired,state.files.length-1)));
+  $('reviewCard').classList.remove('hidden');
+  $('downloadCard').classList.remove('hidden');
+  $('duplicateReviewFile').disabled=state.files.length===0;
+  renderTable();
 }
 function renderTable(){
-  const f=state.files[Number($('reviewFile').value)||0], st=currentStats(f); const cols=Object.keys(f.preview[0]||{});
+  const f=state.files[Number($('reviewFile').value)||0];
+  if(!f||!f.preview){
+    $('reviewSummary').innerHTML='';
+    $('reviewTable').innerHTML='';
+    return;
+  }
+  const st=currentStats(f); const cols=Object.keys(f.preview[0]||{});
   $('reviewSummary').innerHTML=`<span class="stat-pill">Kept ${f.keep.filter(Boolean).length} / ${f.keep.length}</span>`+Object.entries(st).map(([c,s])=>`<span class="stat-pill"><b>${c}</b>: ${s.mean===null?'—':fmt(s.mean)} ± ${s.sd===null?'—':fmt(s.sd)} (n=${s.n})</span>`).join('');
   const t=$('reviewTable'); t.innerHTML=`<thead><tr><th>Decision</th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody></tbody>`; const tb=t.querySelector('tbody');
   f.preview.forEach((r,i)=>{const tr=document.createElement('tr'); if(!f.keep[i])tr.className='excluded';
@@ -243,6 +334,10 @@ $('denom').addEventListener('change',()=>{renderNumerators();renderColors();});
 $('numerators').addEventListener('change',renderColors);
 $('applyConfig').addEventListener('click',()=>{state.denom=$('denom').value;state.numerators=selected('num').filter(x=>x!==state.denom);state.colors=selected('color');if(!state.numerators.length){alert('Select at least one numerator.');return;}state.files.forEach(buildPreview);renderReview();});
 $('reviewFile').addEventListener('change',renderTable);
+$('duplicateReviewFile').addEventListener('click',()=>{
+  const index=Number($('reviewFile').value);
+  if(Number.isInteger(index)&&index>=0)duplicateFile(index);
+});
 $('downloadZip').addEventListener('click',downloadZip);
 $('downloadCollated').addEventListener('click',downloadCollated);
 
