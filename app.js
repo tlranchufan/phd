@@ -103,7 +103,9 @@ async function loadFiles(fileList){
       lod,
       elements,
       keep:Array(comp.length).fill(true),
-      preview:null
+      preview:null,
+      viewOrder:Array.from({length:comp.length},(_,i)=>i),
+      sortState:{column:null,direction:null}
     });
     existing.add(key); added++;
   }
@@ -162,7 +164,9 @@ function duplicateFile(index){
     name:duplicateName(sourceName,copyNumber),
     elements:[...source.elements],
     keep:[...source.keep],
-    preview:source.preview ? source.preview.map(row=>({...row})) : null
+    preview:source.preview ? source.preview.map(row=>({...row})) : null,
+    viewOrder:[...(source.viewOrder || Array.from({length:source.comp.length},(_,i)=>i))],
+    sortState:{...(source.sortState || {column:null,direction:null})}
   };
 
   state.files.splice(index+1,0,clone);
@@ -188,6 +192,7 @@ function resetDownstream(){
   $('reviewTable').innerHTML='';
   $('reviewSummary').innerHTML='';
   $('duplicateReviewFile').disabled=true;
+  $('resetCurrentSort').disabled=true;
   $('buildStatus').textContent='';
 }
 
@@ -226,6 +231,79 @@ function renderColors(){
   choices.forEach(e=>box.appendChild(checkbox(e,e,defaults.includes(e),'color')));
 }
 
+function originalOrderFor(f){
+  return Array.from({length:(f.preview?.length ?? f.comp.length)},(_,i)=>i);
+}
+
+function ensureViewOrder(f){
+  const n=f.preview?.length ?? f.comp.length;
+  if(!Array.isArray(f.viewOrder) || f.viewOrder.length!==n){
+    f.viewOrder=Array.from({length:n},(_,i)=>i);
+  }
+  if(!f.sortState)f.sortState={column:null,direction:null};
+}
+
+function compareSortValues(a,b,column){
+  const av=a?.[column], bv=b?.[column];
+  const an=numeric(av), bn=numeric(bv);
+
+  if(an!==null || bn!==null){
+    if(an===null && bn===null)return String(av??'').localeCompare(String(bv??''),undefined,{numeric:true,sensitivity:'base'});
+    if(an===null)return 1;
+    if(bn===null)return -1;
+    return an-bn;
+  }
+
+  return String(av??'').localeCompare(String(bv??''),undefined,{numeric:true,sensitivity:'base'});
+}
+
+function sortCurrentFile(column){
+  const index=Number($('reviewFile').value)||0;
+  const f=state.files[index];
+  if(!f||!f.preview||!column)return;
+
+  ensureViewOrder(f);
+
+  const direction =
+    f.sortState.column===column && f.sortState.direction==='desc'
+      ? 'asc'
+      : 'desc';
+
+  let order=originalOrderFor(f);
+  const numericColumn=order.some(i=>numeric(f.preview[i]?.[column])!==null);
+
+  if(numericColumn){
+    const valid=order.filter(i=>numeric(f.preview[i]?.[column])!==null);
+    const other=order.filter(i=>numeric(f.preview[i]?.[column])===null);
+
+    valid.sort((ia,ib)=>{
+      const cmp=compareSortValues(f.preview[ia],f.preview[ib],column);
+      return cmp===0 ? ia-ib : (direction==='asc' ? cmp : -cmp);
+    });
+
+    f.viewOrder=[...valid,...other];
+  }else{
+    order.sort((ia,ib)=>{
+      const cmp=compareSortValues(f.preview[ia],f.preview[ib],column);
+      return cmp===0 ? ia-ib : (direction==='asc' ? cmp : -cmp);
+    });
+    f.viewOrder=order;
+  }
+
+  f.sortState={column,direction};
+  renderTable();
+}
+
+function resetCurrentFileSort(){
+  const index=Number($('reviewFile').value)||0;
+  const f=state.files[index];
+  if(!f)return;
+
+  f.viewOrder=originalOrderFor(f);
+  f.sortState={column:null,direction:null};
+  renderTable();
+}
+
 function buildPreview(f){
   const rows=f.comp.map(r=>{const o={File:r.File}; f.elements.forEach(e=>o[e]=r[e]??'');
     state.numerators.forEach(n=>{const rn=`${sym(n)}/${sym(state.denom)}`; const nv=r[n],dv=r[state.denom];
@@ -234,6 +312,8 @@ function buildPreview(f){
   const candidates=Object.keys(rows[0]||{}).filter(c=>c!=='File');
   const valid=candidates.filter(c=>rows.map(r=>numeric(r[c])).filter(x=>x!==null).length>=2||state.colors.includes(c));
   f.preview=rows.map(r=>Object.fromEntries(['File',...valid].map(c=>[c,r[c]])));
+  f.viewOrder=originalOrderFor(f);
+  f.sortState={column:null,direction:null};
 }
 function styleCode(v,s){
   if(isLt(v))return'gray'; const n=numeric(v); if(n===null||s.mean===null||s.sd===null||s.sd===0)return'';
@@ -253,6 +333,7 @@ function renderReview(selectedIndex=null){
   $('reviewCard').classList.remove('hidden');
   $('downloadCard').classList.remove('hidden');
   $('duplicateReviewFile').disabled=state.files.length===0;
+  $('resetCurrentSort').disabled=true;
   renderTable();
 }
 function renderTable(){
@@ -262,19 +343,68 @@ function renderTable(){
     $('reviewTable').innerHTML='';
     return;
   }
+  ensureViewOrder(f);
   const st=currentStats(f); const cols=Object.keys(f.preview[0]||{});
-  $('reviewSummary').innerHTML=`<span class="stat-pill">Kept ${f.keep.filter(Boolean).length} / ${f.keep.length}</span>`+Object.entries(st).map(([c,s])=>`<span class="stat-pill"><b>${c}</b>: ${s.mean===null?'—':fmt(s.mean)} ± ${s.sd===null?'—':fmt(s.sd)} (n=${s.n})</span>`).join('');
-  const t=$('reviewTable'); t.innerHTML=`<thead><tr><th>Decision</th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody></tbody>`; const tb=t.querySelector('tbody');
-  f.preview.forEach((r,i)=>{const tr=document.createElement('tr'); if(!f.keep[i])tr.className='excluded';
-    const dc=document.createElement('td'); dc.className='decision'; dc.textContent=f.keep[i]?'KEEP':'EXCLUDE'; dc.onclick=()=>{f.keep[i]=!f.keep[i];renderTable();}; tr.appendChild(dc);
-    cols.forEach(c=>{const td=document.createElement('td'); td.textContent=fmt(r[c]); if(state.colors.includes(c)){const sc=styleCode(r[c],st[c]||{});if(sc)td.classList.add(`bg-${sc}`);} tr.appendChild(td);}); tb.appendChild(tr);
+
+  $('reviewSummary').innerHTML=
+    `<span class="stat-pill">Kept ${f.keep.filter(Boolean).length} / ${f.keep.length}</span>`+
+    `<span class="stat-pill">Row order: ${f.sortState?.column ? `${f.sortState.column} ${f.sortState.direction==='desc'?'↓':'↑'}` : 'original'}</span>`+
+    Object.entries(st).map(([c,s])=>`<span class="stat-pill"><b>${c}</b>: ${s.mean===null?'—':fmt(s.mean)} ± ${s.sd===null?'—':fmt(s.sd)} (n=${s.n})</span>`).join('');
+
+  const headerCells=cols.map(c=>{
+    const active=f.sortState?.column===c;
+    const arrow=active ? (f.sortState.direction==='desc'?'↓':'↑') : '';
+    const safe=String(c).replaceAll('&','&amp;').replaceAll('"','&quot;');
+    return `<th class="sortable" role="button" tabindex="0" data-sort-column="${safe}" title="Sort ${safe}"><span>${safe}</span><span class="sort-indicator">${arrow}</span></th>`;
+  }).join('');
+
+  const t=$('reviewTable');
+  t.innerHTML=`<thead><tr><th>Decision</th>${headerCells}</tr></thead><tbody></tbody>`;
+  const tb=t.querySelector('tbody');
+
+  t.querySelectorAll('th[data-sort-column]').forEach(th=>{
+    const activate=()=>sortCurrentFile(th.dataset.sortColumn);
+    th.addEventListener('click',activate);
+    th.addEventListener('keydown',e=>{
+      if(e.key==='Enter'||e.key===' '){
+        e.preventDefault();
+        activate();
+      }
+    });
   });
+
+  f.viewOrder.forEach(i=>{
+    const r=f.preview[i];
+    const tr=document.createElement('tr');
+    if(!f.keep[i])tr.className='excluded';
+
+    const dc=document.createElement('td');
+    dc.className='decision';
+    dc.textContent=f.keep[i]?'KEEP':'EXCLUDE';
+    dc.onclick=()=>{f.keep[i]=!f.keep[i];renderTable();};
+    tr.appendChild(dc);
+
+    cols.forEach(c=>{
+      const td=document.createElement('td');
+      td.textContent=fmt(r[c]);
+      if(state.colors.includes(c)){
+        const sc=styleCode(r[c],st[c]||{});
+        if(sc)td.classList.add(`bg-${sc}`);
+      }
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+
+  $('resetCurrentSort').disabled=!f.sortState?.column;
 }
 
 function styleCell(cell,code){const fills={gray:'BFBFBF',green:'C6EFCE',blue:'BDD7EE',orange:'F8CBAD',red:'FFC7CE'};if(fills[code])cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF'+fills[code]}};}
 function addFormattedSheet(wb,f,sheetName){
   const ws=wb.addWorksheet(sheetName.slice(0,31).replace(/[:\\/?*\[\]]/g,'_')||'Sheet');
-  const kept=f.preview.filter((_,i)=>f.keep[i]); const cols=Object.keys(f.preview[0]||{}); const sts={}; cols.filter(c=>c!=='File').forEach(c=>sts[c]=stats(kept.map(r=>r[c])));
+  ensureViewOrder(f);
+  const kept=f.viewOrder.filter(i=>f.keep[i]).map(i=>f.preview[i]);
+  const cols=Object.keys(f.preview[0]||{}); const sts={}; cols.filter(c=>c!=='File').forEach(c=>sts[c]=stats(kept.map(r=>r[c])));
   ws.addRow(cols); kept.forEach(r=>ws.addRow(cols.map(c=>{const n=numeric(r[c]);return isLt(r[c])?String(r[c]):n===null?String(r[c]??''):n;})));
   ['Average','Std Dev','RSD'].forEach((lab,k)=>ws.addRow(cols.map(c=>c==='File'?lab:[sts[c]?.mean,sts[c]?.sd,sts[c]?.rsd][k])));
   ws.getRow(1).font={bold:true}; ws.getRow(1).border={bottom:{style:'thin'}};
@@ -288,7 +418,7 @@ function addFormattedSheet(wb,f,sheetName){
   return {cols,sts,keptCount:kept.length};
 }
 async function workbookBlob(f){const wb=new ExcelJS.Workbook();addFormattedSheet(wb,f,'Processed');return new Blob([await wb.xlsx.writeBuffer()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});}
-function csvFor(f){const rows=[['source_file','File','decision','timestamp']];const ts=new Date().toISOString().slice(0,19).replace('T',' ');f.comp.forEach((r,i)=>rows.push([f.name,r.File,f.keep[i]?'KEEP':'EXCLUDE',ts]));return rows.map(row=>row.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\r\n');}
+function csvFor(f){const rows=[['source_file','File','decision','timestamp']];const ts=new Date().toISOString().slice(0,19).replace('T',' ');ensureViewOrder(f);f.viewOrder.forEach(i=>{const r=f.comp[i];rows.push([f.name,r.File,f.keep[i]?'KEEP':'EXCLUDE',ts]);});return rows.map(row=>row.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\r\n');}
 async function downloadZip(){
   $('buildStatus').textContent='Building files…'; const zip=new JSZip();
   for(const f of state.files){zip.file(`${baseName(f.name)}_processed.xlsx`,await workbookBlob(f));zip.file(`${baseName(f.name)}_keep_exclude.csv`,csvFor(f));}
@@ -338,6 +468,7 @@ $('duplicateReviewFile').addEventListener('click',()=>{
   const index=Number($('reviewFile').value);
   if(Number.isInteger(index)&&index>=0)duplicateFile(index);
 });
+$('resetCurrentSort').addEventListener('click',resetCurrentFileSort);
 $('downloadZip').addEventListener('click',downloadZip);
 $('downloadCollated').addEventListener('click',downloadCollated);
 

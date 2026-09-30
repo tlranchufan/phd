@@ -6,6 +6,33 @@
   <title>REE Excel Processor</title>
   <meta name="description" content="LA-ICP-MS composition summary processor and collator.">
   <link rel="stylesheet" href="./styles.css?v=20260805-quicksheet">
+  <style>
+    #reviewTable th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+    #reviewTable th.sortable:hover { text-decoration: underline; }
+    #reviewTable th.sortable:focus { outline: 2px solid currentColor; outline-offset: -2px; }
+    #reviewTable .sort-indicator { display: inline-block; min-width: 1.1em; margin-left: .25rem; font-size: .85em; }
+
+    /* Keep the KEEP / EXCLUDE column visible while scrolling horizontally. */
+    #reviewTable th:first-child,
+    #reviewTable td:first-child {
+      position: sticky;
+      left: 0;
+      min-width: 92px;
+      white-space: nowrap;
+      box-shadow: 2px 0 4px rgba(0, 0, 0, .10);
+    }
+    #reviewTable th:first-child {
+      z-index: 4;
+      background: #f3f6f8;
+    }
+    #reviewTable td:first-child {
+      z-index: 3;
+      background: #ffffff;
+    }
+    #reviewTable tr.excluded td:first-child {
+      background: #f3f4f6;
+    }
+  </style>
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary navigation">
@@ -65,7 +92,7 @@
       <div class="section-head">
         <div>
           <h2>3. Review and exclude rows</h2>
-          <p>Select a file, then toggle rows between KEEP and EXCLUDE. Statistics and colours use kept rows only. Duplicate versions have independent KEEP / EXCLUDE decisions.</p>
+          <p>Select a file, then toggle rows between KEEP and EXCLUDE. Statistics and colours use kept rows only. Duplicate versions have independent KEEP / EXCLUDE decisions. Click any data-column header to sort high → low; click it again for low → high. Reset row order affects only the current working version.</p>
         </div>
         <div>
           <label>File
@@ -73,6 +100,7 @@
           </label>
           <div class="actions mini-actions">
             <button id="duplicateReviewFile" type="button">Duplicate current file</button>
+            <button id="resetCurrentSort" type="button">Reset row order</button>
           </div>
         </div>
       </div>
@@ -101,6 +129,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script defer src="./app.js?v=20260930-duplicate-versions"></script>
+  <script defer src="./app.js?v=20260930-column-sort-sticky"></script>
 </body>
 </html>
