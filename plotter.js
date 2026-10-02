@@ -24,6 +24,139 @@ const atomicWeights = {
   Hf:178.49, Ta:180.94788, Pb:207.2, Th:232.0377, U:238.02891
 };
 
+const CHONDRITE_REFERENCE_META = {
+  name: 'CI chondrite',
+  citation: 'McDonough & Sun (1995)',
+  title: 'The composition of the Earth',
+  doi: '10.1016/0009-2541(94)00140-4'
+};
+
+// Table 2 values transcribed from the user-supplied workbook.
+// Units intentionally remain in their source form and are converted to ppm
+// at runtime so wt%, ppm, and ppb cannot be mixed accidentally.
+// The uploaded workbook contains a second "Ti" row at 140 ppb. Table 2 of
+// McDonough & Sun (1995) identifies that row as Tl, so it is represented as Tl.
+const CI_CHONDRITE_SOURCE = [
+  {element:"Li", value:1.5, unit:"ppm"},
+  {element:"Be", value:0.025, unit:"ppm"},
+  {element:"B", value:0.9, unit:"ppm"},
+  {element:"C", value:3.5, unit:"%"},
+  {element:"N", value:3180, unit:"ppm"},
+  {element:"F", value:60, unit:"ppm"},
+  {element:"Na", value:5100, unit:"ppm"},
+  {element:"Mg", value:9.65, unit:"%"},
+  {element:"Al", value:0.86, unit:"%"},
+  {element:"Si", value:10.65, unit:"%"},
+  {element:"P", value:1080, unit:"ppm"},
+  {element:"S", value:5.4, unit:"%"},
+  {element:"Cl", value:680, unit:"ppm"},
+  {element:"K", value:550, unit:"ppm"},
+  {element:"Ca", value:0.925, unit:"%"},
+  {element:"Sc", value:5.92, unit:"ppm"},
+  {element:"Ti", value:440, unit:"ppm"},
+  {element:"V", value:56, unit:"ppm"},
+  {element:"Cr", value:2650, unit:"ppm"},
+  {element:"Mn", value:1920, unit:"ppm"},
+  {element:"Fe", value:18.1, unit:"%"},
+  {element:"Co", value:500, unit:"ppm"},
+  {element:"Ni", value:10500, unit:"ppm"},
+  {element:"Cu", value:120, unit:"ppm"},
+  {element:"Zn", value:310, unit:"ppm"},
+  {element:"Ga", value:9.2, unit:"ppm"},
+  {element:"Ge", value:31, unit:"ppm"},
+  {element:"As", value:1.85, unit:"ppm"},
+  {element:"Se", value:21, unit:"ppm"},
+  {element:"Br", value:3.57, unit:"ppm"},
+  {element:"Rb", value:2.3, unit:"ppm"},
+  {element:"Sr", value:7.25, unit:"ppm"},
+  {element:"Y", value:1.57, unit:"ppm"},
+  {element:"Zr", value:3.82, unit:"ppm"},
+  {element:"Nb", value:240, unit:"ppb"},
+  {element:"Mo", value:900, unit:"ppb"},
+  {element:"Ru", value:710, unit:"ppb"},
+  {element:"Rh", value:130, unit:"ppb"},
+  {element:"Pd", value:550, unit:"ppb"},
+  {element:"Ag", value:200, unit:"ppb"},
+  {element:"Cd", value:710, unit:"ppb"},
+  {element:"In", value:80, unit:"ppb"},
+  {element:"Sn", value:1650, unit:"ppb"},
+  {element:"Sb", value:140, unit:"ppb"},
+  {element:"Te", value:2330, unit:"ppb"},
+  {element:"I", value:450, unit:"ppb"},
+  {element:"Cs", value:190, unit:"ppb"},
+  {element:"Ba", value:2410, unit:"ppb"},
+  {element:"La", value:237, unit:"ppb"},
+  {element:"Ce", value:613, unit:"ppb"},
+  {element:"Pr", value:92.8, unit:"ppb"},
+  {element:"Nd", value:457, unit:"ppb"},
+  {element:"Sm", value:148, unit:"ppb"},
+  {element:"Eu", value:56.3, unit:"ppb"},
+  {element:"Gd", value:199, unit:"ppb"},
+  {element:"Tb", value:36.1, unit:"ppb"},
+  {element:"Dy", value:246, unit:"ppb"},
+  {element:"Ho", value:54.6, unit:"ppb"},
+  {element:"Er", value:160, unit:"ppb"},
+  {element:"Tm", value:24.7, unit:"ppb"},
+  {element:"Yb", value:161, unit:"ppb"},
+  {element:"Lu", value:24.6, unit:"ppb"},
+  {element:"Hf", value:103, unit:"ppb"},
+  {element:"Ta", value:13.6, unit:"ppb"},
+  {element:"W", value:93, unit:"ppb"},
+  {element:"Re", value:40, unit:"ppb"},
+  {element:"Os", value:490, unit:"ppb"},
+  {element:"Ir", value:455, unit:"ppb"},
+  {element:"Pt", value:1010, unit:"ppb"},
+  {element:"Au", value:140, unit:"ppb"},
+  {element:"Hg", value:300, unit:"ppb"},
+  {element:"Tl", value:140, unit:"ppb"},
+  {element:"Pb", value:2470, unit:"ppb"},
+  {element:"Bi", value:110, unit:"ppb"},
+  {element:"Th", value:29, unit:"ppb"},
+  {element:"U", value:7.4, unit:"ppb"}
+];
+
+function referenceUnitToPpm(value, unit) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const key = String(unit ?? '').trim().toLowerCase().replaceAll(' ', '');
+  if (key === 'ppm') return n;
+  if (key === 'ppb') return n / 1000;
+  if (key === '%' || key === 'wt%' || key === 'wt.%') return n * 10000;
+  return null;
+}
+
+const CI_CHONDRITE_BY_ELEMENT = new Map(
+  CI_CHONDRITE_SOURCE.map(entry => [
+    entry.element,
+    {...entry, ppm: referenceUnitToPpm(entry.value, entry.unit)}
+  ])
+);
+
+function isElementColumnName(name) {
+  return /^[A-Z][a-z]?\d*$/.test(String(name ?? '').trim());
+}
+
+function chondriteReferenceForElement(columnName) {
+  if (!isElementColumnName(columnName)) return null;
+  return CI_CHONDRITE_BY_ELEMENT.get(elemSymbol(columnName)) || null;
+}
+
+function chondritePpmForElement(columnName) {
+  const ref = chondriteReferenceForElement(columnName);
+  return ref && Number.isFinite(ref.ppm) && ref.ppm > 0 ? ref.ppm : null;
+}
+
+function chondriteSourceText(columnName) {
+  const ref = chondriteReferenceForElement(columnName);
+  if (!ref) return '';
+  return `${ref.value} ${ref.unit} = ${Number(ref.ppm.toPrecision(10))} ppm`;
+}
+
+function chondriteNormalizationEnabled() {
+  return Boolean($('normalizeChondrite')?.checked);
+}
+
+
 const META = new Set(['Code','Compound','Mol/Kg','wt%','Metric','no. inclusions','File','DECISION','K/Cs','Na/Cs','Rb/Cs']);
 const num = v => {
   if (v === null || v === undefined || v === '') return null;
@@ -236,6 +369,7 @@ function eligibleElementsForCodes(codes) {
     // the element at the chosen shared Mol/Kg. This guarantees a complete
     // double/triple/etc. bar group for each eligible element.
     return state.elements.filter(element =>
+      (!chondriteNormalizationEnabled() || chondritePpmForElement(element) !== null) &&
       [...codes].every(code =>
         compareRowsForCode(code, molkg).some(row => num(row[element]) !== null)
       )
@@ -244,6 +378,7 @@ function eligibleElementsForCodes(codes) {
 
   const rows = state.avgRows.filter(row => codes.has(String(row.Code)));
   return state.elements.filter(element =>
+    (!chondriteNormalizationEnabled() || chondritePpmForElement(element) !== null) &&
     rows.some(row => num(row[element]) !== null)
   );
 }
@@ -360,6 +495,10 @@ function updateElementChoices({initial=false, autoSelectIfEmpty=false} = {}) {
       hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} available in every selected Code at ${formatMolKg(num($('compareMolKg').value))} Mol/Kg.`;
     } else {
       hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} available for the selected Code${codes.size === 1 ? '' : 's'}.`;
+    }
+
+    if (chondriteNormalizationEnabled()) {
+      hint.textContent += ' CI normalization is on, so elements without a McDonough & Sun (1995) reference value are excluded.';
     }
   }
 
@@ -584,6 +723,7 @@ function buildSimplePlot(rows, xField) {
   const selectedElements = selectedValues($('elements'));
   if (!selectedElements.length) throw new Error('Select at least one element.');
   const yMode=radioValue('yMode');
+  const normalize=chondriteNormalizationEnabled();
   const facetElements=$('facetElements').checked, facetCompounds=$('facetCompounds').checked;
   const showErr=$('showErr').checked, logY=$('logY').checked;
   const panelNames = facetElements && facetCompounds
@@ -612,9 +752,21 @@ function buildSimplePlot(rows, xField) {
         if(!panelMatch) return;
         const raw=num(r[element]); if(raw===null) return;
         const aw=atomicWeights[elemSymbol(element)];
-        if(yMode==='mol' && !aw) return;
-        const y=yMode==='mol'?raw/aw:raw;
-        const sdRaw=num(r.__sd?.[element]); const err=sdRaw===null?null:(yMode==='mol'?sdRaw/aw:sdRaw);
+        const ciPpm=normalize ? chondritePpmForElement(element) : null;
+        if(normalize && ciPpm===null) return;
+        if(!normalize && yMode==='mol' && !aw) return;
+
+        const y=normalize
+          ? raw/ciPpm
+          : (yMode==='mol'?raw/aw:raw);
+
+        const sdRaw=num(r.__sd?.[element]);
+        const err=sdRaw===null
+          ? null
+          : normalize
+            ? sdRaw/ciPpm
+            : (yMode==='mol'?sdRaw/aw:sdRaw);
+
         if(logY && y<=0) return;
         if(!byCompound.has(comp)) byCompound.set(comp,[]);
         byCompound.get(comp).push({r,y,err});
@@ -627,13 +779,29 @@ function buildSimplePlot(rows, xField) {
           x:pts.map(p=>p.r.__displayX), y:pts.map(p=>p.y), xaxis:`x${suffix}`, yaxis:`y${suffix}`,
           marker:{size:10}, line:{width:2},
           error_y:showErr?{type:'data',array:pts.map(p=>p.err??0),visible:true,thickness:1.2,width:4}:undefined,
-          customdata:pts.map(p=>[p.r.Code,p.r.Compound,p.r[xField],p.r.__offset,p.r.File||'',elementDisplayName(element)]),
-          hovertemplate:'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Element: %{customdata[5]}<br>Y: %{y:.10~f}<extra></extra>'
+          customdata:pts.map(p=>[
+            p.r.Code,p.r.Compound,p.r[xField],p.r.__offset,p.r.File||'',
+            elementDisplayName(element),
+            normalize ? chondritePpmForElement(element) : '',
+            normalize ? chondriteSourceText(element) : ''
+          ]),
+          hovertemplate:normalize
+            ? 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Element: %{customdata[5]}<br>CI reference: %{customdata[7]}<br>Sample / CI: %{y:.10~f}<extra></extra>'
+            : 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Element: %{customdata[5]}<br>Y: %{y:.10~f}<extra></extra>'
         });
       });
     });
   });
-  return {traces, layout:makeLayout(panelNames,xField,yMode==='mol'?'Element (mol/kg)':'ppm',logY,panelLabels)};
+  return {
+    traces,
+    layout:makeLayout(
+      panelNames,
+      xField,
+      normalize ? 'Sample / CI chondrite' : (yMode==='mol'?'Element (mol/kg)':'ppm'),
+      logY,
+      panelLabels
+    )
+  };
 }
 
 function buildRatioPlot(rows,xField) {
@@ -641,13 +809,28 @@ function buildRatioPlot(rows,xField) {
   if(!numerator||!denominator) throw new Error('Choose numerator and denominator elements.');
   if(numerator===denominator) throw new Error('Choose two different elements.');
   const basis=radioValue('ratioBasis'), logY=$('ratioLogY').checked;
+  const normalize=chondriteNormalizationEnabled();
   const numAw=atomicWeights[elemSymbol(numerator)], denAw=atomicWeights[elemSymbol(denominator)];
-  if(basis==='mm' && (!numAw || !denAw)) throw new Error('An atomic weight is missing for the selected ratio.');
+  const ciNum=normalize ? chondritePpmForElement(numerator) : null;
+  const ciDen=normalize ? chondritePpmForElement(denominator) : null;
+
+  if(normalize && (ciNum===null || ciDen===null)) {
+    throw new Error('A CI chondrite reference value is missing for the selected ratio.');
+  }
+  if(!normalize && basis==='mm' && (!numAw || !denAw)) throw new Error('An atomic weight is missing for the selected ratio.');
   const groups=new Map(); let skippedZero=0;
   rows.forEach(r=>{
     const a=num(r[numerator]), b=num(r[denominator]);
     if(a===null||b===null||b===0){ if(b===0) skippedZero++; return; }
-    let ratio=basis==='mm'?(a/numAw)/(b/denAw):a/b;
+    let ratio;
+    if(normalize) {
+      // (sample numerator / CI numerator) / (sample denominator / CI denominator).
+      // Atomic weights cancel, so the normalized result is identical for
+      // weight/weight and mol/mol bases.
+      ratio=(a/ciNum)/(b/ciDen);
+    } else {
+      ratio=basis==='mm'?(a/numAw)/(b/denAw):a/b;
+    }
     if(logY && ratio<=0) return;
     const comp=String(r.Compound||'Unknown'); if(!groups.has(comp))groups.set(comp,[]);
     groups.get(comp).push({r,ratio});
@@ -655,9 +838,32 @@ function buildRatioPlot(rows,xField) {
   const traces=[];
   groups.forEach((pts,comp)=>{
     pts.sort((a,b)=>a.r.__displayX-b.r.__displayX);
-    traces.push({type:'scatter',mode:'lines+markers',name:comp,x:pts.map(p=>p.r.__displayX),y:pts.map(p=>p.ratio),marker:{size:10},line:{width:2},customdata:pts.map(p=>[p.r.Code,p.r.Compound,p.r[xField],p.r.__offset]),hovertemplate:'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Ratio: %{y:.10~f}<extra></extra>'});
+    traces.push({
+      type:'scatter',mode:'lines+markers',name:comp,
+      x:pts.map(p=>p.r.__displayX),y:pts.map(p=>p.ratio),
+      marker:{size:10},line:{width:2},
+      customdata:pts.map(p=>[
+        p.r.Code,p.r.Compound,p.r[xField],p.r.__offset,
+        normalize ? chondriteSourceText(numerator) : '',
+        normalize ? chondriteSourceText(denominator) : ''
+      ]),
+      hovertemplate:normalize
+        ? 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>CI numerator: %{customdata[4]}<br>CI denominator: %{customdata[5]}<br>Normalized ratio: %{y:.10~f}<extra></extra>'
+        : 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Ratio: %{y:.10~f}<extra></extra>'
+    });
   });
-  return {traces,layout:makeLayout(['Plot'],xField,`${elementDisplayName(numerator)}/${elementDisplayName(denominator)} (${basis==='mm'?'mol/mol':'w/w'})`,logY),warnings:skippedZero?[`${skippedZero} row(s) were skipped because the denominator was zero.`]:[]};
+  return {
+    traces,
+    layout:makeLayout(
+      ['Plot'],
+      xField,
+      normalize
+        ? `Chondrite-normalized ${elementDisplayName(numerator)}/${elementDisplayName(denominator)}`
+        : `${elementDisplayName(numerator)}/${elementDisplayName(denominator)} (${basis==='mm'?'mol/mol':'w/w'})`,
+      logY
+    ),
+    warnings:skippedZero?[`${skippedZero} row(s) were skipped because the denominator was zero.`]:[]
+  };
 }
 
 function buildComparePlot(codes) {
@@ -670,6 +876,7 @@ function buildComparePlot(codes) {
   if (!selectedElements.length) throw new Error('Select at least one eligible element to compare.');
 
   const yMode = radioValue('compareYMode');
+  const normalize = chondriteNormalizationEnabled();
   const showErr = $('compareShowErr').checked;
   const logY = $('compareLogY').checked;
   const warnings = [];
@@ -696,9 +903,15 @@ function buildComparePlot(codes) {
 
       const raw = num(row[element]);
       const aw = atomicWeights[elemSymbol(element)];
-      if (yMode === 'mol' && !aw) return;
+      const ciPpm = normalize ? chondritePpmForElement(element) : null;
 
-      const value = yMode === 'mol' ? raw / aw : raw;
+      if (normalize && ciPpm === null) return;
+      if (!normalize && yMode === 'mol' && !aw) return;
+
+      const value = normalize
+        ? raw / ciPpm
+        : (yMode === 'mol' ? raw / aw : raw);
+
       if (logY && value <= 0) {
         warnings.push(`${code} ${elementDisplayName(element)} was omitted because its value is not positive on a log10 axis.`);
         return;
@@ -707,7 +920,9 @@ function buildComparePlot(codes) {
       const sdRaw = num(row.__sd?.[element]);
       const error = sdRaw === null
         ? null
-        : (yMode === 'mol' ? sdRaw / aw : sdRaw);
+        : normalize
+          ? sdRaw / ciPpm
+          : (yMode === 'mol' ? sdRaw / aw : sdRaw);
 
       x.push(elementDisplayName(element));
       y.push(value);
@@ -717,7 +932,8 @@ function buildComparePlot(codes) {
         row.Compound || '',
         formatMolKg(molkg),
         elementDisplayName(element),
-        row.File || ''
+        row.File || '',
+        normalize ? chondriteSourceText(element) : ''
       ]);
     });
 
@@ -732,12 +948,18 @@ function buildComparePlot(codes) {
         ? {type:'data', array:errors, visible:true, thickness:1.2, width:4}
         : undefined,
       customdata,
-      hovertemplate:
-        'Code: %{customdata[0]}<br>' +
-        'Compound: %{customdata[1]}<br>' +
-        'Mol/Kg: %{customdata[2]}<br>' +
-        'Element: %{customdata[3]}<br>' +
-        'Y: %{y:.10~f}<extra></extra>'
+      hovertemplate:normalize
+        ? 'Code: %{customdata[0]}<br>' +
+          'Compound: %{customdata[1]}<br>' +
+          'Mol/Kg: %{customdata[2]}<br>' +
+          'Element: %{customdata[3]}<br>' +
+          'CI reference: %{customdata[5]}<br>' +
+          'Sample / CI: %{y:.10~f}<extra></extra>'
+        : 'Code: %{customdata[0]}<br>' +
+          'Compound: %{customdata[1]}<br>' +
+          'Mol/Kg: %{customdata[2]}<br>' +
+          'Element: %{customdata[3]}<br>' +
+          'Y: %{y:.10~f}<extra></extra>'
     });
   });
 
@@ -746,7 +968,7 @@ function buildComparePlot(codes) {
   const layout = makeLayout(
     ['Plot'],
     'Element',
-    yMode === 'mol' ? 'Element (mol/kg)' : 'ppm',
+    normalize ? 'Sample / CI chondrite' : (yMode === 'mol' ? 'Element (mol/kg)' : 'ppm'),
     logY
   );
   layout.barmode = 'group';
@@ -842,7 +1064,11 @@ function renderPlot() {
       ? ` Y bounds = ${state.yMin} to ${state.yMax}.`
       : '';
 
-    $('plotStatus').textContent = `${statusText}${yBoundText}`;
+    const normalizationText = chondriteNormalizationEnabled()
+      ? ` CI-normalized to ${CHONDRITE_REFERENCE_META.citation}.`
+      : '';
+
+    $('plotStatus').textContent = `${statusText}${normalizationText}${yBoundText}`;
     $('plotWarnings').textContent = warnings.join(' ');
     $('plotWarnings').classList.toggle('hidden',warnings.length===0);
   } catch(err) {
@@ -1034,6 +1260,8 @@ document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>e
     updateElementChoices({autoSelectIfEmpty: plotMode === 'compare'});
   } else if (el.id === 'showIsotopeLabels') {
     syncCompareElementOrder();
+  } else if (el.id === 'normalizeChondrite') {
+    updateElementChoices({autoSelectIfEmpty: plotMode === 'compare'});
   } else if (el.id === 'compareMolKg') {
     updateElementChoices({autoSelectIfEmpty:true});
   }
