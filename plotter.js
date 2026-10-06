@@ -10,6 +10,7 @@ const state = {
   elements: [],
   codes: [],
   compareElementOrder: [],
+  creeResults: [],
   yMin: null,
   yMax: null
 };
@@ -356,10 +357,190 @@ function compareRowsForCode(code, molkg) {
   );
 }
 
+
+function creeValidRowsForElement(rows, element, compound=null) {
+  const normalize = chondriteNormalizationEnabled();
+  const ciPpm = normalize ? chondritePpmForElement(element) : null;
+  if (normalize && ciPpm === null) return [];
+
+  return rows
+    .filter(row => compound === null || String(row.Compound || 'Unknown') === compound)
+    .map(row => {
+      const solute = num(row['Mol/Kg']);
+      const raw = num(row[element]);
+      if (solute === null || solute <= 0 || raw === null || raw <= 0) return null;
+
+      const concentration = normalize ? raw / ciPpm : raw;
+      if (!Number.isFinite(concentration) || concentration <= 0) return null;
+
+      return {
+        row,
+        solute,
+        concentration,
+        x: Math.log10(solute),
+        y: Math.log10(concentration)
+      };
+    })
+    .filter(Boolean);
+}
+
+function linearRegression(xs, ys) {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 2) return null;
+
+  const meanX = xs.reduce((a,b)=>a+b,0) / n;
+  const meanY = ys.reduce((a,b)=>a+b,0) / n;
+
+  let sxx = 0, sxy = 0, syy = 0;
+  for (let i=0; i<n; i++) {
+    const dx = xs[i] - meanX;
+    const dy = ys[i] - meanY;
+    sxx += dx * dx;
+    sxy += dx * dy;
+    syy += dy * dy;
+  }
+
+  if (!Number.isFinite(sxx) || sxx <= 0) return null;
+
+  const slope = sxy / sxx;
+  const intercept = meanY - slope * meanX;
+
+  let ssRes = 0;
+  for (let i=0; i<n; i++) {
+    const predicted = intercept + slope * xs[i];
+    const residual = ys[i] - predicted;
+    ssRes += residual * residual;
+  }
+
+  const r2 = syy > 0 ? 1 - ssRes / syy : 1;
+  return {
+    slope,
+    intercept,
+    r2: Number.isFinite(r2) ? Math.max(-1, Math.min(1, r2)) : null,
+    n,
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs)
+  };
+}
+
+function creeRegressionLabel(element, compound, fit) {
+  const base = `${elementDisplayName(element)} · ${compound}`;
+  if (!$('creeShowEquation')?.checked || !fit) return base;
+  const nText = Number.isFinite(fit.slope) ? fit.slope.toFixed(2) : '—';
+  const r2Text = Number.isFinite(fit.r2) ? fit.r2.toFixed(3) : '—';
+  return `${base} (n=${nText}, R²=${r2Text})`;
+}
+
+function creeLogError(raw, sdRaw, ciPpm=null) {
+  if (!Number.isFinite(raw) || raw <= 0 || !Number.isFinite(sdRaw) || sdRaw < 0) {
+    return {plus:0, minus:0, lowerClipped:false};
+  }
+
+  const scale = ciPpm && ciPpm > 0 ? ciPpm : 1;
+  const value = raw / scale;
+  const sd = sdRaw / scale;
+  if (!(value > 0) || !(sd >= 0)) return {plus:0, minus:0, lowerClipped:false};
+
+  const center = Math.log10(value);
+  const upper = Math.log10(value + sd) - center;
+
+  if (value - sd <= 0) {
+    return {plus:Number.isFinite(upper)?upper:0, minus:0, lowerClipped:true};
+  }
+
+  const lower = center - Math.log10(value - sd);
+  return {
+    plus:Number.isFinite(upper)?upper:0,
+    minus:Number.isFinite(lower)?lower:0,
+    lowerClipped:false
+  };
+}
+
+function renderCreeResults(results) {
+  state.creeResults = results || [];
+  const card = $('creeResultsCard');
+  const body = $('creeResultsBody');
+  const button = $('downloadCreeCsv');
+
+  if (radioValue('plotMode') !== 'cree' || !state.creeResults.length) {
+    card.classList.add('hidden');
+    body.innerHTML = '';
+    button.disabled = true;
+    return;
+  }
+
+  body.innerHTML = state.creeResults.map(result => `
+    <tr>
+      <td>${elementDisplayName(result.element)}</td>
+      <td>${result.compound}</td>
+      <td>${Number.isFinite(result.slope) ? result.slope.toFixed(4) : '—'}</td>
+      <td>${Number.isFinite(result.intercept) ? result.intercept.toFixed(4) : '—'}</td>
+      <td>${Number.isFinite(result.A) ? Number(result.A.toPrecision(6)) : '—'}</td>
+      <td>${Number.isFinite(result.r2) ? result.r2.toFixed(4) : '—'}</td>
+      <td>${result.n}</td>
+      <td>${formatMolKg(result.minSolute)}–${formatMolKg(result.maxSolute)}</td>
+    </tr>
+  `).join('');
+
+  card.classList.remove('hidden');
+  button.disabled = false;
+}
+
+function downloadCreeResultsCsv() {
+  if (!state.creeResults.length) return;
+
+  const rows = [
+    ['Element','Compound','Slope_n','log10_A','A','R2','N','Min_MolKg','Max_MolKg','CI_normalized'],
+    ...state.creeResults.map(result => [
+      elementDisplayName(result.element),
+      result.compound,
+      result.slope,
+      result.intercept,
+      result.A,
+      result.r2,
+      result.n,
+      result.minSolute,
+      result.maxSolute,
+      chondriteNormalizationEnabled() ? 'YES' : 'NO'
+    ])
+  ];
+
+  const csv = rows.map(row =>
+    row.map(value => `"${String(value ?? '').replaceAll('"','""')}"`).join(',')
+  ).join('\r\n');
+
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${sanitizeName($('plotName').value)}_cree_regression.csv`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+function updateYBoundsHint() {
+  const hint = $('yBoundsHint');
+  if (!hint) return;
+
+  if (radioValue('plotMode') === 'cree') {
+    hint.textContent = 'Optional. CREE mode already plots log10-transformed values, so enter Y minimum and maximum directly in log10 units (for example 2 to 5).';
+  } else {
+    hint.textContent = 'Optional. Enter the actual minimum and maximum values you want displayed, then click Apply Y bounds. The same bounds are applied to every facet. For log10 plots, enter the real values (for example 10 and 10000), not the exponents.';
+  }
+}
+
 function eligibleElementsForCodes(codes) {
   if (!state.file || !codes.size) return [];
 
   const plotMode = radioValue('plotMode');
+
+  if (plotMode === 'cree') {
+    const rows = state.avgRows.filter(row => codes.has(String(row.Code)));
+    return state.elements.filter(element => {
+      if (chondriteNormalizationEnabled() && chondritePpmForElement(element) === null) return false;
+      const compounds = [...new Set(rows.map(row => String(row.Compound || 'Unknown')))];
+      return compounds.some(compound => creeValidRowsForElement(rows, element, compound).length >= 2);
+    });
+  }
 
   if (plotMode === 'compare') {
     const molkg = num($('compareMolKg')?.value);
@@ -490,9 +671,13 @@ function updateElementChoices({initial=false, autoSelectIfEmpty=false} = {}) {
     } else if (!eligible.length) {
       hint.textContent = plotMode === 'compare'
         ? 'No element has a numeric avg value in every selected Code at this Mol/Kg.'
-        : 'No element columns contain numeric avg values for the selected Codes.';
+        : plotMode === 'cree'
+          ? 'No element has at least two positive concentration points at positive Mol/Kg for the selected Codes.'
+          : 'No element columns contain numeric avg values for the selected Codes.';
     } else if (plotMode === 'compare') {
       hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} available in every selected Code at ${formatMolKg(num($('compareMolKg').value))} Mol/Kg.`;
+    } else if (plotMode === 'cree') {
+      hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} have enough positive data for at least one log–log fit across the selected Codes.`;
     } else {
       hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} available for the selected Code${codes.size === 1 ? '' : 's'}.`;
     }
@@ -514,6 +699,7 @@ function clearWorkbook() {
   state.elements = [];
   state.codes = [];
   state.compareElementOrder = [];
+  state.creeResults = [];
   state.yMin = null;
   state.yMax = null;
 
@@ -529,6 +715,9 @@ function clearWorkbook() {
   $('plotConfig').classList.add('hidden'); $('exportCard').classList.add('hidden');
   $('plotFileSummary').innerHTML=''; $('plotLoadStatus').textContent='Choose a workbook, then click Continue.';
   $('plotStatus').textContent='Load a workbook to begin.'; $('plotWarnings').classList.add('hidden');
+  $('creeResultsCard').classList.add('hidden');
+  $('creeResultsBody').innerHTML='';
+  $('downloadCreeCsv').disabled=true;
   $('resetZoom').disabled=true;
   if (typeof Plotly !== 'undefined') Plotly.purge('plot');
 }
@@ -978,6 +1167,167 @@ function buildComparePlot(codes) {
   return {traces, layout, warnings};
 }
 
+
+function buildCreePlot(codes) {
+  const selectedElements = selectedValues($('elements'));
+  if (!selectedElements.length) {
+    throw new Error('Select at least one element with enough positive data for a log–log fit.');
+  }
+
+  const selectedRows = state.avgRows.filter(row => codes.has(String(row.Code)));
+  const normalize = chondriteNormalizationEnabled();
+  const facetElements = $('creeFacetElements').checked;
+  const showFit = $('creeShowFit').checked;
+  const showErr = $('creeShowErr').checked;
+  const warnings = [];
+  const results = [];
+  const traces = [];
+
+  const panelNames = facetElements ? selectedElements : ['Plot'];
+  const panelLabels = facetElements ? selectedElements.map(elementDisplayName) : ['Plot'];
+
+  selectedElements.forEach(element => {
+    const compounds = [...new Set(selectedRows.map(row => String(row.Compound || 'Unknown')))];
+    const ciPpm = normalize ? chondritePpmForElement(element) : null;
+
+    compounds.forEach(compound => {
+      const points = creeValidRowsForElement(selectedRows, element, compound)
+        .sort((a,b)=>a.x-b.x);
+
+      if (points.length < 2) {
+        if (points.length === 1) {
+          warnings.push(`${elementDisplayName(element)} · ${compound} has only one valid positive point and was not fitted.`);
+        }
+        return;
+      }
+
+      const distinctX = uniqueNumericValues(points.map(point => point.solute));
+      if (distinctX.length < 2) {
+        warnings.push(`${elementDisplayName(element)} · ${compound} has fewer than two distinct positive Mol/Kg values and was not fitted.`);
+        return;
+      }
+
+      const fit = linearRegression(points.map(point=>point.x), points.map(point=>point.y));
+      if (!fit) {
+        warnings.push(`${elementDisplayName(element)} · ${compound} could not be fitted.`);
+        return;
+      }
+
+      const panelIndex = facetElements ? selectedElements.indexOf(element) : 0;
+      const axis = panelIndex + 1;
+      const suffix = axis === 1 ? '' : axis;
+      const seriesName = creeRegressionLabel(element, compound, fit);
+
+      const errPlus = [];
+      const errMinus = [];
+      let clippedErrorCount = 0;
+
+      points.forEach(point => {
+        const sdRaw = num(point.row.__sd?.[element]);
+        const raw = num(point.row[element]);
+        const logErr = creeLogError(raw, sdRaw, normalize ? ciPpm : null);
+        errPlus.push(logErr.plus);
+        errMinus.push(logErr.minus);
+        if (logErr.lowerClipped) clippedErrorCount++;
+      });
+
+      if (clippedErrorCount) {
+        warnings.push(`${elementDisplayName(element)} · ${compound}: ${clippedErrorCount} SD lower bound(s) reached zero or below, so only the upper transformed error is shown for those points.`);
+      }
+
+      traces.push({
+        type:'scatter',
+        mode:'markers',
+        name:seriesName,
+        legendgroup:`${element}||${compound}`,
+        x:points.map(point=>point.x),
+        y:points.map(point=>point.y),
+        xaxis:`x${suffix}`,
+        yaxis:`y${suffix}`,
+        marker:{size:10},
+        error_y:showErr ? {
+          type:'data',
+          array:errPlus,
+          arrayminus:errMinus,
+          symmetric:false,
+          visible:true,
+          thickness:1.2,
+          width:4
+        } : undefined,
+        customdata:points.map(point=>[
+          point.row.Code,
+          point.row.Compound,
+          point.solute,
+          elementDisplayName(element),
+          point.concentration,
+          normalize ? chondriteSourceText(element) : ''
+        ]),
+        hovertemplate:normalize
+          ? 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>Element: %{customdata[3]}<br>C/CI: %{customdata[4]:.10~f}<br>log10 Mol/Kg: %{x:.5f}<br>log10(C/CI): %{y:.5f}<br>CI reference: %{customdata[5]}<extra></extra>'
+          : 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>Element: %{customdata[3]}<br>C: %{customdata[4]:.10~f} ppm<br>log10 Mol/Kg: %{x:.5f}<br>log10 C: %{y:.5f}<extra></extra>'
+      });
+
+      if (showFit) {
+        const x0 = fit.minX;
+        const x1 = fit.maxX;
+        traces.push({
+          type:'scatter',
+          mode:'lines',
+          name:`${seriesName} fit`,
+          showlegend:false,
+          legendgroup:`${element}||${compound}`,
+          x:[x0,x1],
+          y:[fit.intercept + fit.slope*x0, fit.intercept + fit.slope*x1],
+          xaxis:`x${suffix}`,
+          yaxis:`y${suffix}`,
+          line:{width:2},
+          hovertemplate:`${elementDisplayName(element)} · ${compound}<br>n=${fit.slope.toFixed(4)}<br>log10 A=${fit.intercept.toFixed(4)}<br>R²=${fit.r2.toFixed(4)}<extra></extra>`
+        });
+      }
+
+      results.push({
+        element,
+        compound,
+        slope:fit.slope,
+        intercept:fit.intercept,
+        A:Math.pow(10, fit.intercept),
+        r2:fit.r2,
+        n:fit.n,
+        minSolute:Math.min(...points.map(point=>point.solute)),
+        maxSolute:Math.max(...points.map(point=>point.solute))
+      });
+
+      if (fit.n < 3) {
+        warnings.push(`${elementDisplayName(element)} · ${compound} fit uses only ${fit.n} points; slope n is mathematically defined but should be interpreted cautiously.`);
+      }
+    });
+  });
+
+  if (!results.length) {
+    throw new Error('No selected element/Compound group has at least two valid positive concentrations at distinct positive Mol/Kg values.');
+  }
+
+  const layout = makeLayout(
+    panelNames,
+    'log10[solute concentration (Mol/Kg)]',
+    normalize ? 'log10(CREE / CI chondrite)' : 'log10 CREE (ppm)',
+    false,
+    panelLabels
+  );
+
+  // These are already log10-transformed coordinates, so keep linear axes.
+  Object.keys(layout).forEach(key => {
+    if (/^xaxis\d*$/.test(key)) {
+      layout[key].tickformat = '.4~f';
+      layout[key].hoverformat = '.6~f';
+      layout[key].exponentformat = 'none';
+      layout[key].showexponent = 'none';
+    }
+  });
+
+  return {traces, layout, warnings, creeResults:results};
+}
+
 function renderPlot() {
   if(!state.file) return;
   try {
@@ -993,6 +1343,10 @@ function renderPlot() {
       const molkg = num($('compareMolKg').value);
       const elementCount = orderedCompareElements().length;
       statusText = `Compare: ${codes.size} Codes at ${formatMolKg(molkg)} Mol/Kg; ${elementCount} selected element${elementCount === 1 ? '' : 's'}.`;
+    } else if (plotMode === 'cree') {
+      result = buildCreePlot(codes);
+      const fitCount = result.creeResults?.length || 0;
+      statusText = `CREE log–log: ${fitCount} fitted element/Compound series from ${codes.size} selected Code${codes.size===1?'':'s'}; x = log10(Mol/Kg).`;
     } else {
       const xField = radioValue('xunit');
       const selectedRows = state.avgRows.filter(r=>codes.has(String(r.Code)));
@@ -1030,7 +1384,9 @@ function renderPlot() {
     let aspect = Number($('aspectRatio').value) || .7;
 
     if(auto){
-      const faceted = plotMode === 'simple' && ($('facetElements').checked || $('facetCompounds').checked);
+      const faceted =
+        (plotMode === 'simple' && ($('facetElements').checked || $('facetCompounds').checked)) ||
+        (plotMode === 'cree' && $('creeFacetElements').checked);
       const count = faceted ? Math.max(1,(result.layout.annotations||[]).length) : 1;
       if (faceted) {
         const cols=Math.ceil(Math.sqrt(count));
@@ -1071,11 +1427,14 @@ function renderPlot() {
     $('plotStatus').textContent = `${statusText}${normalizationText}${yBoundText}`;
     $('plotWarnings').textContent = warnings.join(' ');
     $('plotWarnings').classList.toggle('hidden',warnings.length===0);
+
+    renderCreeResults(plotMode === 'cree' ? (result.creeResults || []) : []);
   } catch(err) {
     Plotly.purge('plot');
     $('plotStatus').textContent=`Cannot plot: ${err.message}`;
     $('plotWarnings').textContent='';
     $('plotWarnings').classList.add('hidden');
+    renderCreeResults([]);
   }
 }
 
@@ -1130,7 +1489,7 @@ $('clearPlotFile').addEventListener('click',clearWorkbook);
 $('selectAllCodes').addEventListener('click',()=>{
   [...$('codes').options].forEach(o=>o.selected=true);
   updateCompareMolChoices();
-  updateElementChoices({autoSelectIfEmpty: radioValue('plotMode') === 'compare'});
+  updateElementChoices({autoSelectIfEmpty: ['compare','cree'].includes(radioValue('plotMode'))});
   renderPlot();
 });
 $('clearCodes').addEventListener('click',()=>{
@@ -1191,7 +1550,9 @@ function applyManualYBounds() {
     ? $('ratioLogY').checked
     : currentPlotMode === 'compare'
       ? $('compareLogY').checked
-      : $('logY').checked;
+      : currentPlotMode === 'cree'
+        ? false
+        : $('logY').checked;
   if (logY && (min <= 0 || max <= 0)) {
     $('plotWarnings').textContent = 'For a log10 y-axis, both manual Y bounds must be greater than zero.';
     $('plotWarnings').classList.remove('hidden');
@@ -1244,6 +1605,7 @@ $('downloadPng').addEventListener('click',()=>exportImage('png'));
 $('downloadSvg').addEventListener('click',()=>exportImage('svg'));
 $('downloadPdf').addEventListener('click',exportPdf);
 $('downloadHtml').addEventListener('click',exportHtml);
+$('downloadCreeCsv').addEventListener('click',downloadCreeResultsCsv);
 
 document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>el.addEventListener('change',()=>{
   const plotMode = radioValue('plotMode');
@@ -1254,14 +1616,15 @@ document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>e
 
   if (el.id === 'codes') {
     updateCompareMolChoices();
-    updateElementChoices({autoSelectIfEmpty: plotMode === 'compare'});
+    updateElementChoices({autoSelectIfEmpty: plotMode === 'compare' || plotMode === 'cree'});
   } else if (el.name === 'plotMode') {
     updateCompareMolChoices();
-    updateElementChoices({autoSelectIfEmpty: plotMode === 'compare'});
+    updateElementChoices({autoSelectIfEmpty: plotMode === 'compare' || plotMode === 'cree'});
+    updateYBoundsHint();
   } else if (el.id === 'showIsotopeLabels') {
     syncCompareElementOrder();
   } else if (el.id === 'normalizeChondrite') {
-    updateElementChoices({autoSelectIfEmpty: plotMode === 'compare'});
+    updateElementChoices({autoSelectIfEmpty: plotMode === 'compare' || plotMode === 'cree'});
   } else if (el.id === 'compareMolKg') {
     updateElementChoices({autoSelectIfEmpty:true});
   }
@@ -1269,17 +1632,21 @@ document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>e
   const simple = plotMode === 'simple';
   const ratio = plotMode === 'ratio';
   const compare = plotMode === 'compare';
+  const cree = plotMode === 'cree';
 
   $('simpleControls').classList.toggle('hidden', !simple);
   $('ratioControls').classList.toggle('hidden', !ratio);
   $('compareControls').classList.toggle('hidden', !compare);
+  $('creeControls').classList.toggle('hidden', !cree);
   $('elementSelectionControls').classList.toggle('hidden', ratio);
-  $('xAxisControls').classList.toggle('hidden', compare);
-  $('offsetControls').classList.toggle('hidden', compare);
+  $('xAxisControls').classList.toggle('hidden', compare || cree);
+  $('offsetControls').classList.toggle('hidden', compare || cree);
 
+  if (!cree) renderCreeResults([]);
   renderPlot();
 }));
 $('plotName').addEventListener('change',renderPlot);
 window.addEventListener('resize',()=>{if(state.file)renderPlot();});
 
 clearWorkbook();
+updateYBoundsHint();
