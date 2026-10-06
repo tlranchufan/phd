@@ -423,6 +423,27 @@ function linearRegression(xs, ys) {
   };
 }
 
+const CREE_ELEMENT_COLORS = [
+  '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+  '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+  '#393b79', '#637939', '#8c6d31', '#843c39', '#7b4173',
+  '#3182bd', '#31a354', '#756bb1', '#636363', '#e6550d'
+];
+
+const CREE_COMPOUND_SYMBOLS = [
+  'circle', 'square', 'diamond', 'cross', 'triangle-up',
+  'triangle-down', 'star', 'hexagon', 'pentagon', 'x'
+];
+
+const CREE_COMPOUND_DASHES = [
+  'solid', 'dash', 'dot', 'dashdot', 'longdash', 'longdashdot'
+];
+
+function creeElementColor(element) {
+  const index = Math.max(0, state.elements.indexOf(element));
+  return CREE_ELEMENT_COLORS[index % CREE_ELEMENT_COLORS.length];
+}
+
 function creeRegressionLabel(element, compound, fit) {
   const base = `${elementDisplayName(element)} · ${compound}`;
   if (!$('creeShowEquation')?.checked || !fit) return base;
@@ -1178,10 +1199,13 @@ function buildCreePlot(codes) {
   const normalize = chondriteNormalizationEnabled();
   const facetElements = $('creeFacetElements').checked;
   const showFit = $('creeShowFit').checked;
+  const showLineLabels = $('creeShowLineLabels').checked;
   const showErr = $('creeShowErr').checked;
   const warnings = [];
   const results = [];
   const traces = [];
+  const fitLabels = [];
+  const panelXRanges = new Map();
 
   const panelNames = facetElements ? selectedElements : ['Plot'];
   const panelLabels = facetElements ? selectedElements.map(elementDisplayName) : ['Plot'];
@@ -1217,6 +1241,17 @@ function buildCreePlot(codes) {
       const axis = panelIndex + 1;
       const suffix = axis === 1 ? '' : axis;
       const seriesName = creeRegressionLabel(element, compound, fit);
+      const elementColor = creeElementColor(element);
+      const compoundIndex = compounds.indexOf(compound);
+      const markerSymbol = CREE_COMPOUND_SYMBOLS[compoundIndex % CREE_COMPOUND_SYMBOLS.length];
+      const lineDash = CREE_COMPOUND_DASHES[compoundIndex % CREE_COMPOUND_DASHES.length];
+
+      const panelRange = panelXRanges.get(panelIndex) || {min:Infinity, max:-Infinity};
+      points.forEach(point => {
+        panelRange.min = Math.min(panelRange.min, point.x);
+        panelRange.max = Math.max(panelRange.max, point.x);
+      });
+      panelXRanges.set(panelIndex, panelRange);
 
       const errPlus = [];
       const errMinus = [];
@@ -1244,7 +1279,7 @@ function buildCreePlot(codes) {
         y:points.map(point=>point.y),
         xaxis:`x${suffix}`,
         yaxis:`y${suffix}`,
-        marker:{size:10},
+        marker:{size:10,color:elementColor,symbol:markerSymbol},
         error_y:showErr ? {
           type:'data',
           array:errPlus,
@@ -1252,7 +1287,8 @@ function buildCreePlot(codes) {
           symmetric:false,
           visible:true,
           thickness:1.2,
-          width:4
+          width:4,
+          color:elementColor
         } : undefined,
         customdata:points.map(point=>[
           point.row.Code,
@@ -1270,6 +1306,9 @@ function buildCreePlot(codes) {
       if (showFit) {
         const x0 = fit.minX;
         const x1 = fit.maxX;
+        const y0 = fit.intercept + fit.slope*x0;
+        const y1 = fit.intercept + fit.slope*x1;
+
         traces.push({
           type:'scatter',
           mode:'lines',
@@ -1277,12 +1316,25 @@ function buildCreePlot(codes) {
           showlegend:false,
           legendgroup:`${element}||${compound}`,
           x:[x0,x1],
-          y:[fit.intercept + fit.slope*x0, fit.intercept + fit.slope*x1],
+          y:[y0,y1],
           xaxis:`x${suffix}`,
           yaxis:`y${suffix}`,
-          line:{width:2},
+          line:{width:2.5,color:elementColor,dash:lineDash},
           hovertemplate:`${elementDisplayName(element)} · ${compound}<br>n=${fit.slope.toFixed(4)}<br>log10 A=${fit.intercept.toFixed(4)}<br>R²=${fit.r2.toFixed(4)}<extra></extra>`
         });
+
+        if (showLineLabels) {
+          fitLabels.push({
+            element,
+            compound,
+            panelIndex,
+            suffix,
+            x:x1,
+            y:y1,
+            slope:fit.slope,
+            color:elementColor
+          });
+        }
       }
 
       results.push({
@@ -1314,6 +1366,68 @@ function buildCreePlot(codes) {
     false,
     panelLabels
   );
+
+  if (showFit && showLineLabels && fitLabels.length) {
+    const textSize = Math.max(8, Math.min(28, Number($('plotTextSize')?.value) || 14));
+    const fitsPerElement = new Map();
+
+    fitLabels.forEach(label => {
+      fitsPerElement.set(label.element, (fitsPerElement.get(label.element) || 0) + 1);
+    });
+
+    // Add a little extra room to the right of each CREE panel so the
+    // floating labels sit beside the line rather than on top of the last point.
+    panelXRanges.forEach((range, panelIndex) => {
+      if (!Number.isFinite(range.min) || !Number.isFinite(range.max)) return;
+      const span = Math.max(0.12, range.max - range.min);
+      const axis = panelIndex + 1;
+      const suffix = axis === 1 ? '' : axis;
+      const xAxis = layout[`xaxis${suffix}`];
+      if (!xAxis) return;
+
+      xAxis.range = [
+        range.min - 0.05 * span,
+        range.max + 0.28 * span
+      ];
+      xAxis.autorange = false;
+    });
+
+    const labelsByElement = new Map();
+    fitLabels.forEach(label => {
+      const list = labelsByElement.get(label.element) || [];
+      list.push(label);
+      labelsByElement.set(label.element, list);
+    });
+
+    fitLabels.forEach(label => {
+      const panelRange = panelXRanges.get(label.panelIndex);
+      const span = panelRange && Number.isFinite(panelRange.max - panelRange.min)
+        ? Math.max(0.12, panelRange.max - panelRange.min)
+        : 0.12;
+
+      const siblings = labelsByElement.get(label.element) || [label];
+      const siblingIndex = siblings.findIndex(item => item === label);
+      const yShift = (siblingIndex - (siblings.length - 1) / 2) * 18;
+      const hasMultipleCompounds = (fitsPerElement.get(label.element) || 0) > 1;
+      const compoundText = hasMultipleCompounds ? ` · ${label.compound}` : '';
+      const text = `<b>${elementDisplayName(label.element)}</b>${compoundText}  n=${label.slope.toFixed(2)}`;
+
+      layout.annotations = (layout.annotations || []).concat({
+        text,
+        x: label.x + 0.035 * span,
+        y: label.y,
+        xref: `x${label.suffix}`,
+        yref: `y${label.suffix}`,
+        showarrow: false,
+        xanchor: 'left',
+        yanchor: 'middle',
+        yshift: yShift,
+        font: {size:textSize,color:label.color},
+        bgcolor: 'rgba(255,255,255,0.78)',
+        borderpad: 2
+      });
+    });
+  }
 
   // These are already log10-transformed coordinates, so keep linear axes.
   Object.keys(layout).forEach(key => {

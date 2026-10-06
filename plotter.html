@@ -179,6 +179,7 @@
             <p class="hint">Only positive Mol/Kg and positive element concentrations can be used. At least two valid concentrations are required for a fit; three or more are preferable for interpreting curvature or goodness of fit.</p>
             <label class="toggle"><input id="creeFacetElements" type="checkbox" checked> Facet by element</label>
             <label class="toggle"><input id="creeShowFit" type="checkbox" checked> Show fitted power-law line</label>
+            <label class="toggle"><input id="creeShowLineLabels" type="checkbox" checked> Show element + n beside fitted line</label>
             <label class="toggle"><input id="creeShowErr" type="checkbox" checked> Show transformed avg ± standard deviation</label>
             <label class="toggle"><input id="creeShowEquation" type="checkbox" checked> Include n and R² in legend labels</label>
           </fieldset>
@@ -283,6 +284,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261006-cree-loglog"></script>
+  <script defer src="./plotter.js?v=20261006-cree-colored-fit-labels"></script>
 </body>
 </html>
