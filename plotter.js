@@ -1189,6 +1189,23 @@ function buildComparePlot(codes) {
 }
 
 
+function creeElementAxisLabel(element) {
+  const symbol = elementDisplayName(element);
+  return chondriteNormalizationEnabled()
+    ? `log10[${symbol}/CI]`
+    : `log10[${symbol}]`;
+}
+
+function creeSoluteAxisLabel(compounds) {
+  const unique = [...new Set((compounds || []).filter(Boolean))];
+  if (unique.length === 1) return `log10[${unique[0]}]`;
+  return 'log10[solute]';
+}
+
+function creeCaption(element, compounds) {
+  return `${creeElementAxisLabel(element)} vs ${creeSoluteAxisLabel(compounds)}`;
+}
+
 function buildCreePlot(codes) {
   const selectedElements = selectedValues($('elements'));
   if (!selectedElements.length) {
@@ -1206,6 +1223,7 @@ function buildCreePlot(codes) {
   const traces = [];
   const fitLabels = [];
   const panelXRanges = new Map();
+  const fittedCompoundsByElement = new Map();
 
   const panelNames = facetElements ? selectedElements : ['Plot'];
   const panelLabels = facetElements ? selectedElements.map(elementDisplayName) : ['Plot'];
@@ -1299,8 +1317,8 @@ function buildCreePlot(codes) {
           normalize ? chondriteSourceText(element) : ''
         ]),
         hovertemplate:normalize
-          ? 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>Element: %{customdata[3]}<br>C/CI: %{customdata[4]:.10~f}<br>log10 Mol/Kg: %{x:.5f}<br>log10(C/CI): %{y:.5f}<br>CI reference: %{customdata[5]}<extra></extra>'
-          : 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>Element: %{customdata[3]}<br>C: %{customdata[4]:.10~f} ppm<br>log10 Mol/Kg: %{x:.5f}<br>log10 C: %{y:.5f}<extra></extra>'
+          ? 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>Element: %{customdata[3]}<br>C/CI: %{customdata[4]:.10~f}<br>log10[%{customdata[1]}]: %{x:.5f}<br>log10[%{customdata[3]}/CI]: %{y:.5f}<br>CI reference: %{customdata[5]}<extra></extra>'
+          : 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>Element: %{customdata[3]}<br>C: %{customdata[4]:.10~f} ppm<br>log10[%{customdata[1]}]: %{x:.5f}<br>log10[%{customdata[3]}]: %{y:.5f}<extra></extra>'
       });
 
       if (showFit) {
@@ -1337,6 +1355,10 @@ function buildCreePlot(codes) {
         }
       }
 
+      const fittedCompounds = fittedCompoundsByElement.get(element) || [];
+      if (!fittedCompounds.includes(compound)) fittedCompounds.push(compound);
+      fittedCompoundsByElement.set(element, fittedCompounds);
+
       results.push({
         element,
         compound,
@@ -1359,13 +1381,63 @@ function buildCreePlot(codes) {
     throw new Error('No selected element/Compound group has at least two valid positive concentrations at distinct positive Mol/Kg values.');
   }
 
+  const fallbackCompounds = [...new Set(results.map(result => result.compound))];
+  const fallbackXLabel = creeSoluteAxisLabel(fallbackCompounds);
+  const fallbackYLabel = selectedElements.length === 1
+    ? creeElementAxisLabel(selectedElements[0])
+    : (normalize ? 'log10[element/CI]' : 'log10[element]');
+
   const layout = makeLayout(
     panelNames,
-    'log10[solute concentration (Mol/Kg)]',
-    normalize ? 'log10(CREE / CI chondrite)' : 'log10 CREE (ppm)',
+    fallbackXLabel,
+    fallbackYLabel,
     false,
     panelLabels
   );
+
+  // Use chemistry-specific labels, e.g. log10[Y] vs log10[NaF].
+  if (facetElements) {
+    selectedElements.forEach((element, panelIndex) => {
+      const axis = panelIndex + 1;
+      const suffix = axis === 1 ? '' : axis;
+      const compoundsForElement = fittedCompoundsByElement.get(element) || [];
+      const xLabel = creeSoluteAxisLabel(compoundsForElement);
+      const yLabel = creeElementAxisLabel(element);
+
+      if (layout[`xaxis${suffix}`]) {
+        layout[`xaxis${suffix}`].title = {
+          ...(layout[`xaxis${suffix}`].title || {}),
+          text:xLabel
+        };
+      }
+      if (layout[`yaxis${suffix}`]) {
+        layout[`yaxis${suffix}`].title = {
+          ...(layout[`yaxis${suffix}`].title || {}),
+          text:yLabel
+        };
+      }
+      if (layout.annotations?.[panelIndex]) {
+        layout.annotations[panelIndex].text = creeCaption(element, compoundsForElement);
+      }
+    });
+  } else {
+    const allCompounds = [...new Set(results.map(result => result.compound))];
+
+    if (layout.xaxis) {
+      layout.xaxis.title = {
+        ...(layout.xaxis.title || {}),
+        text:creeSoluteAxisLabel(allCompounds)
+      };
+    }
+    if (layout.yaxis) {
+      layout.yaxis.title = {
+        ...(layout.yaxis.title || {}),
+        text:selectedElements.length === 1
+          ? creeElementAxisLabel(selectedElements[0])
+          : (normalize ? 'log10[element/CI]' : 'log10[element]')
+      };
+    }
+  }
 
   if (showFit && showLineLabels && fitLabels.length) {
     const textSize = Math.max(8, Math.min(28, Number($('plotTextSize')?.value) || 14));
