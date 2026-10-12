@@ -84,6 +84,16 @@
         <legend>Columns for SD-band colouring</legend>
         <div id="colorColumns" class="check-grid"></div>
       </fieldset>
+
+      <fieldset>
+        <legend>Below-detection values</legend>
+        <label class="toggle">
+          <input id="ltAsZero" type="checkbox">
+          Treat entries beginning with &lt; as 0 when calculating averages, SD and RSD
+        </label>
+        <p class="hint">The original &lt; value is still displayed and stays grey. This changes only the statistics; when enabled, those entries are included in n as zero.</p>
+      </fieldset>
+
       <p class="hint">Green: ≤1 SD; blue: ≤2 SD; orange: ≤3 SD; red: &gt;3 SD; grey: below detection (&lt;...).</p>
       <button id="applyConfig" class="primary">Apply configuration</button>
     </section>
@@ -129,6 +139,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script defer src="./app.js?v=20260930-column-sort-sticky"></script>
+  <script defer src="./app.js?v=20261012-lt-as-zero"></script>
 </body>
 </html>

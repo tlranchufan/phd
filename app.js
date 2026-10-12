@@ -1,7 +1,7 @@
 /* REE Excel Processor — GitHub Pages edition */
 'use strict';
 
-const state = { files: [], pendingFiles: [], elements: [], denom: null, numerators: [], colors: [] };
+const state = { files: [], pendingFiles: [], elements: [], denom: null, numerators: [], colors: [], ltAsZero: false };
 const $ = id => document.getElementById(id);
 const elementRx = /^[A-Za-z]{1,2}\d+$/;
 const sym = s => (String(s).match(/^[A-Za-z]{1,2}/) || [''])[0];
@@ -11,13 +11,17 @@ const numeric = v => {
   const n = Number(String(v).replaceAll(',', '').trim());
   return Number.isFinite(n) ? n : null;
 };
+const numericForStats = v => {
+  if (isLt(v)) return state.ltAsZero ? 0 : null;
+  return numeric(v);
+};
 const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
 const sd = a => {
   if (a.length < 2) return null;
   const m = mean(a); return Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/(a.length-1));
 };
 const stats = values => {
-  const nums = values.map(numeric).filter(v=>v!==null);
+  const nums = values.map(numericForStats).filter(v=>v!==null);
   const m=mean(nums), s=sd(nums); return { mean:m, sd:s, rsd:(m===null||m===0||s===null)?null:s/m, n:nums.length };
 };
 const fmt = v => typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : (v ?? '');
@@ -218,7 +222,10 @@ function checkbox(label,value,checked,group){
 }
 function renderConfig(){
   $('denom').innerHTML=state.elements.map(e=>`<option ${e==='Cs133'?'selected':''}>${e}</option>`).join('');
-  renderNumerators(); renderColors(); $('configCard').classList.remove('hidden');
+  renderNumerators();
+  renderColors();
+  $('ltAsZero').checked=state.ltAsZero;
+  $('configCard').classList.remove('hidden');
 }
 function renderNumerators(){
   const d=$('denom').value; const defaults=['Na23','K39','Rb85']; const box=$('numerators'); box.innerHTML='';
@@ -310,7 +317,7 @@ function buildPreview(f){
       if(isLt(nv))o[rn]=String(nv); else if(isLt(dv))o[rn]=String(dv); else {const a=numeric(nv),b=numeric(dv);o[rn]=(a===null||b===null||b===0)?'':a/b;}
     }); return o;});
   const candidates=Object.keys(rows[0]||{}).filter(c=>c!=='File');
-  const valid=candidates.filter(c=>rows.map(r=>numeric(r[c])).filter(x=>x!==null).length>=2||state.colors.includes(c));
+  const valid=candidates.filter(c=>rows.map(r=>numericForStats(r[c])).filter(x=>x!==null).length>=2||state.colors.includes(c));
   f.preview=rows.map(r=>Object.fromEntries(['File',...valid].map(c=>[c,r[c]])));
   f.viewOrder=originalOrderFor(f);
   f.sortState={column:null,direction:null};
@@ -348,6 +355,7 @@ function renderTable(){
 
   $('reviewSummary').innerHTML=
     `<span class="stat-pill">Kept ${f.keep.filter(Boolean).length} / ${f.keep.length}</span>`+
+    `<span class="stat-pill">&lt; values: ${state.ltAsZero ? 'counted as 0' : 'excluded from stats'}</span>`+
     `<span class="stat-pill">Row order: ${f.sortState?.column ? `${f.sortState.column} ${f.sortState.direction==='desc'?'↓':'↑'}` : 'original'}</span>`+
     Object.entries(st).map(([c,s])=>`<span class="stat-pill"><b>${c}</b>: ${s.mean===null?'—':fmt(s.mean)} ± ${s.sd===null?'—':fmt(s.sd)} (n=${s.n})</span>`).join('');
 
@@ -462,7 +470,15 @@ $('clearSelection').addEventListener('click',clearCurrentSelection);
 $('clearFiles').addEventListener('click',clearAllFiles);
 $('denom').addEventListener('change',()=>{renderNumerators();renderColors();});
 $('numerators').addEventListener('change',renderColors);
-$('applyConfig').addEventListener('click',()=>{state.denom=$('denom').value;state.numerators=selected('num').filter(x=>x!==state.denom);state.colors=selected('color');if(!state.numerators.length){alert('Select at least one numerator.');return;}state.files.forEach(buildPreview);renderReview();});
+$('applyConfig').addEventListener('click',()=>{
+  state.denom=$('denom').value;
+  state.numerators=selected('num').filter(x=>x!==state.denom);
+  state.colors=selected('color');
+  state.ltAsZero=$('ltAsZero').checked;
+  if(!state.numerators.length){alert('Select at least one numerator.');return;}
+  state.files.forEach(buildPreview);
+  renderReview();
+});
 $('reviewFile').addEventListener('change',renderTable);
 $('duplicateReviewFile').addEventListener('click',()=>{
   const index=Number($('reviewFile').value);
