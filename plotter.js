@@ -1014,11 +1014,24 @@ function buildSimplePlot(rows, xField) {
   };
 }
 
+function propagatedRatioSd(a, b, sdA, sdB, factor=1) {
+  if (![a,b,sdA,sdB,factor].every(Number.isFinite) || b === 0) return null;
+
+  // R = factor * a / b
+  // First-order propagation, assuming independent numerator/denominator:
+  // σR² = (∂R/∂a · σa)² + (∂R/∂b · σb)²
+  const termA = factor * sdA / b;
+  const termB = factor * a * sdB / (b * b);
+  const variance = termA * termA + termB * termB;
+
+  return Number.isFinite(variance) && variance >= 0 ? Math.sqrt(variance) : null;
+}
+
 function buildRatioPlot(rows,xField) {
   const numerator=$('numerator').value, denominator=$('denominator').value;
   if(!numerator||!denominator) throw new Error('Choose numerator and denominator elements.');
   if(numerator===denominator) throw new Error('Choose two different elements.');
-  const basis=radioValue('ratioBasis'), logY=$('ratioLogY').checked;
+  const basis=radioValue('ratioBasis'), logY=$('ratioLogY').checked, showErr=$('ratioShowErr').checked;
   const normalize=chondriteNormalizationEnabled();
   const numAw=atomicWeights[elemSymbol(numerator)], denAw=atomicWeights[elemSymbol(denominator)];
   const ciNum=normalize ? chondritePpmForElement(numerator) : null;
@@ -1028,22 +1041,36 @@ function buildRatioPlot(rows,xField) {
     throw new Error('A CI chondrite reference value is missing for the selected ratio.');
   }
   if(!normalize && basis==='mm' && (!numAw || !denAw)) throw new Error('An atomic weight is missing for the selected ratio.');
-  const groups=new Map(); let skippedZero=0;
+  const groups=new Map();
+  let skippedZero=0, missingRatioSd=0;
+
   rows.forEach(r=>{
     const a=num(r[numerator]), b=num(r[denominator]);
     if(a===null||b===null||b===0){ if(b===0) skippedZero++; return; }
-    let ratio;
+
+    let factor;
     if(normalize) {
-      // (sample numerator / CI numerator) / (sample denominator / CI denominator).
-      // Atomic weights cancel, so the normalized result is identical for
-      // weight/weight and mol/mol bases.
-      ratio=(a/ciNum)/(b/ciDen);
+      // (sample numerator / CI numerator) / (sample denominator / CI denominator)
+      // = (a / b) * (CI_den / CI_num)
+      factor=ciDen/ciNum;
     } else {
-      ratio=basis==='mm'?(a/numAw)/(b/denAw):a/b;
+      factor=basis==='mm' ? denAw/numAw : 1;
     }
+
+    const ratio=factor*a/b;
     if(logY && ratio<=0) return;
-    const comp=String(r.Compound||'Unknown'); if(!groups.has(comp))groups.set(comp,[]);
-    groups.get(comp).push({r,ratio});
+
+    const sdA=num(r.__sd?.[numerator]);
+    const sdB=num(r.__sd?.[denominator]);
+    const ratioSd=(sdA===null||sdB===null)
+      ? null
+      : propagatedRatioSd(a,b,sdA,sdB,factor);
+
+    if(showErr && ratioSd===null) missingRatioSd++;
+
+    const comp=String(r.Compound||'Unknown');
+    if(!groups.has(comp))groups.set(comp,[]);
+    groups.get(comp).push({r,ratio,ratioSd});
   });
   const traces=[];
   groups.forEach((pts,comp)=>{
@@ -1052,14 +1079,22 @@ function buildRatioPlot(rows,xField) {
       type:'scatter',mode:'lines+markers',name:comp,
       x:pts.map(p=>p.r.__displayX),y:pts.map(p=>p.ratio),
       marker:{size:10},line:{width:2},
+      error_y:showErr ? {
+        type:'data',
+        array:pts.map(p=>p.ratioSd??0),
+        visible:true,
+        thickness:1.2,
+        width:4
+      } : undefined,
       customdata:pts.map(p=>[
         p.r.Code,p.r.Compound,p.r[xField],p.r.__offset,
         normalize ? chondriteSourceText(numerator) : '',
-        normalize ? chondriteSourceText(denominator) : ''
+        normalize ? chondriteSourceText(denominator) : '',
+        p.ratioSd
       ]),
       hovertemplate:normalize
-        ? 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>CI numerator: %{customdata[4]}<br>CI denominator: %{customdata[5]}<br>Normalized ratio: %{y:.10~f}<extra></extra>'
-        : 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Ratio: %{y:.10~f}<extra></extra>'
+        ? 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>CI numerator: %{customdata[4]}<br>CI denominator: %{customdata[5]}<br>Normalized ratio: %{y:.10~f}<br>Propagated SD: %{customdata[6]:.6~g}<extra></extra>'
+        : 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Ratio: %{y:.10~f}<br>Propagated SD: %{customdata[6]:.6~g}<extra></extra>'
     });
   });
   return {
@@ -1072,7 +1107,10 @@ function buildRatioPlot(rows,xField) {
         : `${elementDisplayName(numerator)}/${elementDisplayName(denominator)} (${basis==='mm'?'mol/mol':'w/w'})`,
       logY
     ),
-    warnings:skippedZero?[`${skippedZero} row(s) were skipped because the denominator was zero.`]:[]
+    warnings:[
+      ...(skippedZero ? [`${skippedZero} row(s) were skipped because the denominator was zero.`] : []),
+      ...(showErr && missingRatioSd ? [`${missingRatioSd} ratio point(s) have no error bar because numerator or denominator SD is missing.`] : [])
+    ]
   };
 }
 

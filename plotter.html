@@ -197,6 +197,8 @@
             <label class="inline-option"><input type="radio" name="ratioBasis" value="ww" checked> weight/weight</label>
             <label class="inline-option"><input type="radio" name="ratioBasis" value="mm"> mol/mol</label>
           </fieldset>
+          <label class="toggle"><input id="ratioShowErr" type="checkbox" checked> Show propagated error bars (± standard deviation)</label>
+          <p class="hint">Ratio uncertainty is propagated from the numerator and denominator SD values, assuming they are independent. Covariance between elements is not available in the QuickSheet summary.</p>
           <label class="toggle"><input id="ratioLogY" type="checkbox"> Log10 y-axis</label>
         </div>
       </section>
@@ -284,6 +286,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261009-compare-error-toggle"></script>
+  <script defer src="./plotter.js?v=20261016-ratio-error-bars"></script>
 </body>
 </html>
