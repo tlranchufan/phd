@@ -61,8 +61,23 @@ $('clear').onclick=()=>{if(spectra.length&&!confirm('Clear all imported spectra 
 function download(name,blob){let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200);}
 const csvVal=s=>'"'+String(s??'').replace(/"/g,'""')+'"';$('compile').onclick=()=>{let data={format:'raman-studio-v1',saved:new Date().toISOString(),spectra:spectra.filter(s=>s.keep).map(({id,...s})=>s)};download('raman_compiled.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};$('metadataCsv').onclick=()=>{let rows=[['filename',...fields,'points','cosmic_corrected_points'],...spectra.filter(s=>s.keep).map(s=>[s.name,...fields.map(k=>s.meta[k]),s.x.length,s.modified.length])];download('raman_metadata.csv',new Blob([rows.map(r=>r.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 $('opencompiled').onchange=async e=>{try{let data=JSON.parse(await e.target.files[0].text());if(data.format!=='raman-studio-v1'||!Array.isArray(data.spectra))throw Error('Unsupported compiled format');let added=0;for(let a of data.spectra){if(!a.meta||!Array.isArray(a.x)||!Array.isArray(a.raw)||!Array.isArray(a.corrected)||a.x.length!==a.corrected.length||a.x.length!==a.raw.length)throw Error('Compiled file contains invalid arrays');spectra.push({...a,meta:{...a.meta,hostMineral:a.meta.hostMineral||metadata(a.name||'').hostMineral},id:++uid,keep:a.keep!==false});added++;}$('importStatus').textContent='Loaded '+added+' spectra from compiled dataset';renderMeta();}catch(err){alert('Could not load dataset: '+err.message);}e.target.value='';};
-function opts(id,key){let old=$(id).value,values=[...new Set(spectra.filter(s=>s.keep).map(s=>s.meta[key]).filter(v=>v!==''))].sort((a,b)=>key==='mol'||key==='temp'?Number(a)-Number(b):String(a).localeCompare(String(b)));$(id).innerHTML='<option value="">All</option>'+values.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');$(id).value=values.includes(old)?old:'';}
-function renderFilters(){[['fCompound','compound'],['fPhase','phase'],['fMol','mol'],['fTemp','temp'],['fCondition','condition']].forEach(a=>opts(...a));renderMatches();renderSelected();}
+const RAMAN_FILTERS=[['fCompound','compound'],['fPhase','phase'],['fMol','mol'],['fTemp','temp'],['fCondition','condition']];
+function updateRamanFilters(){
+  // Each dropdown offers only values possible under the other active filters.
+  // Iterate until selections are valid, so changing Compound also updates Temperature.
+  for(let pass=0;pass<2;pass++){
+    for(const [id,key] of RAMAN_FILTERS){
+      const old=$(id).value;
+      const matches=spectra.filter(s=>s.keep&&RAMAN_FILTERS.every(([otherId,otherKey])=>otherId===id||!$(otherId).value||String(s.meta[otherKey]??'')===$(otherId).value));
+      const values=[...new Set(matches.map(s=>String(s.meta[key]??'')).filter(Boolean))]
+        .sort((a,b)=>key==='mol'||key==='temp'?Number(a)-Number(b):a.localeCompare(b));
+      $(id).replaceChildren(new Option('All',''),...values.map(v=>new Option(v,v)));
+      $(id).value=values.includes(old)?old:'';
+    }
+  }
+  renderMatches();
+}
+function renderFilters(){updateRamanFilters();renderSelected();}
 function label(s){return [s.meta.compound,s.meta.mol&&s.meta.mol+' mol/kg',s.meta.phase+(s.meta.phaseId||''),s.meta.temp&&s.meta.temp+'°C',s.meta.condition!=='No comment'&&s.meta.condition].filter(Boolean).join(' · ');}
 function renderMatches(){let filters=[['fCompound','compound'],['fPhase','phase'],['fMol','mol'],['fTemp','temp'],['fCondition','condition']];let a=spectra.filter(s=>s.keep&&filters.every(([id,key])=>!$(id).value||s.meta[key]===$(id).value));$('matches').innerHTML=a.length?a.map(s=>'<div class="item"><button data-add="'+s.id+'" '+(selected.includes(s.id)?'disabled':'')+'>＋</button><span class="name" title="'+esc(s.name)+'">'+esc(label(s))+'<br><small>'+esc(s.name)+'</small></span></div>').join(''):'<p class="hint">No spectra match these filters.</p>';}
 $('matches').onclick=e=>{let id=e.target.dataset.add;if(id){selected.push(Number(id));renderSelected();renderMatches();renderPlot();}};
@@ -105,7 +120,7 @@ for(let k=minorStart;k<=minorEnd;k++){
  let y0=cy-(lines.length-1)*lineHeight/2;
  out.push('<text x="'+labelX+'" y="'+y0+'" font-family="sans-serif" font-size="'+lf+'" fill="'+color+'" dominant-baseline="middle">'+lines.map((str,j)=>'<tspan x="'+labelX+'" dy="'+(j?lineHeight:0)+'">'+esc(str)+'</tspan>').join('')+'</text>');
  }});out.push('</svg>');lastSvg=out.join('');$('plot').innerHTML=lastSvg;}
-for(let id of ['intensity','offset','xmin','xmax','axisfont','tickfont','labelfont','titlefont','plotTitle','baseline','labels','truncate','cutMin','cutMax'])$(id).addEventListener('input',renderPlot);$('autoY').addEventListener('click',()=>{$('ymin').value='';$('ymax').value='';renderPlot();});for(let id of ['fCompound','fPhase','fMol','fTemp','fCondition'])$(id).addEventListener('change',renderMatches);
+for(let id of ['intensity','offset','xmin','xmax','axisfont','tickfont','labelfont','titlefont','plotTitle','baseline','labels','truncate','cutMin','cutMax'])$(id).addEventListener('input',renderPlot);$('autoY').addEventListener('click',()=>{$('ymin').value='';$('ymax').value='';renderPlot();});for(let id of ['fCompound','fPhase','fMol','fTemp','fCondition'])$(id).addEventListener('change',updateRamanFilters);
 $('saveSvg').onclick=()=>{if(lastSvg)download('raman_plot.svg',new Blob([lastSvg],{type:'image/svg+xml'}));};$('savePng').onclick=()=>{if(!lastSvg)return;let blob=new Blob([lastSvg],{type:'image/svg+xml;charset=utf-8'}),url=URL.createObjectURL(blob),im=new Image;im.onload=()=>{let c=document.createElement('canvas');c.width=2000;c.height=Math.round(2000*im.height/im.width);let ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(im,0,0,c.width,c.height);c.toBlob(b=>download('raman_plot.png',b),'image/png');URL.revokeObjectURL(url);};im.src=url;};
 $('savePlotCsv').onclick=()=>{let {series}=plotData(),rows=[['filename','raman_shift_cm-1','displayed_intensity','raw_intensity','corrected_intensity']];for(let s of series)for(let i of s.indices)rows.push([s.s.name,s.x[i],s.y[i],s.s.raw[i],s.s.corrected[i]]);download('raman_plot_data.csv',new Blob([rows.map(r=>r.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(t=>t.classList.toggle('active',t===b));document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active',s.id===b.dataset.tab));renderPlot();});renderMeta();
