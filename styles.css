@@ -160,3 +160,4 @@ code { overflow-wrap:anywhere; }
   .metadata-table input{min-width:120px}
   .builder-options{grid-template-columns:1fr}
 }
+\n/* Hide empty status slots until an action reports a result. */\n.status:empty { display:none; }\n
