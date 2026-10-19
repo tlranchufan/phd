@@ -2,7 +2,7 @@
 (() => {
 'use strict';
 const $ = id => document.getElementById(id);
-const state = {file:null, zip:null, files:[], scanning:false, exporting:false};
+const state = {file:null, zip:null, bytes:null, files:[], scanning:false, exporting:false, loadToken:0, loading:false};
 const progress = n => $('wdfProgress').style.width = Math.max(0,Math.min(100,n))+'%';
 const status = (s,error=false) => { $('wdfStatus').textContent=s; $('wdfStatus').classList.toggle('error-box',error); };
 const basename = p => p.replace(/\\/g,'/').split('/').pop();
@@ -36,22 +36,38 @@ function render(){
  $('wdfShowing').textContent='Showing '+visible.length+' of '+state.files.length+' files';
  refreshSummary();
 }
-function reset(file=null){
- state.file=file;state.zip=null;state.files=[];
- $('wdfScan').disabled=!file;$('wdfReset').disabled=!file;$('wdfDownload').disabled=true;
+async function reset(file=null){
+ const token=++state.loadToken;
+ state.file=file;state.zip=null;state.bytes=null;state.files=[];state.loading=!!file;
+ $('wdfScan').disabled=true;$('wdfReset').disabled=!file;$('wdfDownload').disabled=true;
  $('wdfSelection').classList.add('hidden');$('wdfSearch').value='';
  $('wdfPreview').replaceChildren();$('wdfSummary').textContent='';progress(0);
- status(file?'Ready to scan '+file.name+'.':'Choose a ZIP archive to begin.');
+ if(!file){status('Choose a ZIP archive to begin.');return;}
+ if(!/\.zip$/i.test(file.name)){state.loading=false;status('Please choose a .zip archive.',true);return;}
+ status('Reading '+file.name+' from your computer…');progress(4);
+ try {
+   // Keep our own in-memory copy instead of relying on a browser File reference later.
+   const data=await file.arrayBuffer();
+   if(token!==state.loadToken)return;
+   state.bytes=data;state.loading=false;progress(8);
+   status('ZIP loaded ('+bytes(data.byteLength)+'). Click Scan ZIP.');
+   $('wdfScan').disabled=false;
+ } catch(err) {
+   if(token!==state.loadToken)return;
+   state.loading=false;console.error(err);
+   status('Your browser could not read this ZIP from disk. Copy it to a local folder (for example Downloads), close any program using it, then select that local copy again. '+(err.message||''),true);
+   progress(0);
+ }
 }
 async function scan(){
- if(!state.file||state.scanning)return;
+ if(!state.bytes||state.scanning||state.loading)return;
  if(!state.file.name.toLowerCase().endsWith('.zip')){status('Please choose a ZIP file.',true);return;}
  state.scanning=true;$('wdfScan').disabled=true;$('wdfDownload').disabled=true;
  $('wdfSelection').classList.add('hidden');
  try{
    if(typeof JSZip==='undefined')throw Error('ZIP library unavailable. Reload the page.');
    progress(10);status('Searching ZIP folders…');
-   const archive=await JSZip.loadAsync(state.file);
+   const archive=await JSZip.loadAsync(state.bytes);
    state.zip=archive;
    state.files=Object.values(archive.files)
      .filter(e=>!e.dir&&/\.wdf$/i.test(e.name)&&!blockSystem(e.name.replace(/\\/g,'/')))
@@ -62,7 +78,7 @@ async function scan(){
    $('wdfSelection').classList.remove('hidden');
    render();status('Found '+state.files.length+' WDF files. Untick any you want to exclude.');
  }catch(e){console.error(e);status(e.message||'Could not read ZIP.',true);progress(0);}
- finally{state.scanning=false;$('wdfScan').disabled=!state.file;refreshSummary();}
+ finally{state.scanning=false;$('wdfScan').disabled=!state.bytes;refreshSummary();}
 }
 function outputName(entry,flat,used){
  const cleaned=entry.name.split('/').filter(s=>s&&s!=='.'&&s!=='..').join('/');
@@ -101,9 +117,9 @@ async function download(){
 }
 document.addEventListener('DOMContentLoaded',()=>{
  const input=$('wdfZipFile');
- input.addEventListener('change',()=>reset(input.files[0]||null));
+ input.addEventListener('change',()=>{void reset(input.files[0]||null);});
  $('wdfScan').addEventListener('click',scan);
- $('wdfReset').addEventListener('click',()=>{input.value='';reset();});
+ $('wdfReset').addEventListener('click',()=>{input.value='';void reset();});
  $('wdfDownload').addEventListener('click',download);
  $('wdfSearch').addEventListener('input',render);
  $('wdfSelectAll').addEventListener('click',()=>{state.files.forEach(e=>e.keep=true);render();});
@@ -111,7 +127,7 @@ document.addEventListener('DOMContentLoaded',()=>{
  const zone=$('wdfDrop');
  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('dragover');});
  zone.addEventListener('dragleave',()=>zone.classList.remove('dragover'));
- zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('dragover');const f=e.dataTransfer.files[0];if(f){input.value='';reset(f);}});
+ zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('dragover');const f=e.dataTransfer.files[0];if(f){input.value='';void reset(f);}});
  reset();
 });
 })();
