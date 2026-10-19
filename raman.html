@@ -60,7 +60,40 @@ $('upload').onchange=async e=>{let good=0,errors=[];for(let f of [...e.target.fi
 $('clear').onclick=()=>{if(spectra.length&&!confirm('Clear all imported spectra and plot selections?'))return;spectra=[];selected=[];$('importStatus').textContent='Session cleared.';renderMeta();};
 function download(name,blob){let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200);}
 const csvVal=s=>'"'+String(s??'').replace(/"/g,'""')+'"';$('compile').onclick=()=>{let data={format:'raman-studio-v1',saved:new Date().toISOString(),spectra:spectra.filter(s=>s.keep).map(({id,...s})=>s)};download('raman_compiled.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};$('metadataCsv').onclick=()=>{let rows=[['filename',...fields,'points','cosmic_corrected_points'],...spectra.filter(s=>s.keep).map(s=>[s.name,...fields.map(k=>s.meta[k]),s.x.length,s.modified.length])];download('raman_metadata.csv',new Blob([rows.map(r=>r.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
-$('opencompiled').onchange=async e=>{try{let data=JSON.parse(await e.target.files[0].text());if(data.format!=='raman-studio-v1'||!Array.isArray(data.spectra))throw Error('Unsupported compiled format');let added=0;for(let a of data.spectra){if(!a.meta||!Array.isArray(a.x)||!Array.isArray(a.raw)||!Array.isArray(a.corrected)||a.x.length!==a.corrected.length||a.x.length!==a.raw.length)throw Error('Compiled file contains invalid arrays');spectra.push({...a,meta:{...a.meta,hostMineral:a.meta.hostMineral||metadata(a.name||'').hostMineral},id:++uid,keep:a.keep!==false});added++;}$('importStatus').textContent='Loaded '+added+' spectra from compiled dataset';renderMeta();}catch(err){alert('Could not load dataset: '+err.message);}e.target.value='';};
+$('opencompiled').onchange=async e=>{
+ const file=e.target.files?.[0];
+ if(!file)return;
+ const status=$('importStatus');
+ const show=message=>{status.textContent=message;};
+ const paint=()=>new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
+ try{
+  show('Reading '+file.name+' ('+(file.size/1048576).toFixed(1)+' MB)…');
+  await paint();
+  const contents=await file.text();
+  show('Parsing database… this can take a while for large files.');
+  await paint();
+  const data=JSON.parse(contents);
+  if(data.format!=='raman-studio-v1'||!Array.isArray(data.spectra))throw Error('Unsupported compiled format');
+  show('Validating '+data.spectra.length+' spectra…');
+  await paint();
+  const imported=[];
+  for(let i=0;i<data.spectra.length;i++){
+   const a=data.spectra[i];
+   if(!a.meta||!Array.isArray(a.x)||!Array.isArray(a.raw)||!Array.isArray(a.corrected)||a.x.length!==a.corrected.length||a.x.length!==a.raw.length)
+    throw Error('Invalid spectral arrays at spectrum '+(i+1)+' ('+(a.name||'unnamed')+')');
+   imported.push({...a,meta:{...a.meta,hostMineral:a.meta.hostMineral||metadata(a.name||'').hostMineral},id:uid+i+1,keep:a.keep!==false,modified:Array.isArray(a.modified)?a.modified:[]});
+  }
+  show('Displaying '+imported.length+' spectra…');
+  await paint();
+  uid+=imported.length;
+  spectra.push(...imported);
+  renderMeta();
+  show('Loaded '+imported.length+' spectra from '+file.name+' ('+spectra.length+' total).');
+ }catch(err){
+  show('Import failed: '+err.message);
+  console.error('Raman dataset import failed',err);
+ }finally{e.target.value='';}
+};
 const RAMAN_FILTERS=[['fCompound','compound'],['fPhase','phase'],['fMol','mol'],['fTemp','temp'],['fCondition','condition']];
 function updateRamanFilters(){
   // Each dropdown offers only values possible under the other active filters.
