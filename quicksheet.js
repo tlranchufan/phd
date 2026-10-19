@@ -389,7 +389,7 @@ function renderProcessedQueue() {
         ? `${queued} file(s) queued; ${loaded} workbook(s) already loaded. Click Continue to read the queue.`
         : loaded
           ? `${loaded} workbook(s) loaded. Add another batch at any time, or build the QuickSheet.`
-          : 'Add one or more processed workbooks. You may select files again to append another batch.',
+          : '',
     );
   });
 }
@@ -457,7 +457,7 @@ function renderMetadataRows() {
           ? `${queued} file(s) queued; ${loaded} workbook(s) loaded.`
           : loaded
             ? `${loaded} workbook(s) loaded. Add another batch at any time, or build the QuickSheet.`
-            : 'Add one or more processed workbooks. You may select files again to append another batch.',
+            : '',
       );
     });
     actionCell.appendChild(remove);
@@ -471,7 +471,7 @@ function renderMetadataRows() {
 function updateMetadataVisibility() {
   const hasSamples = builderState.samples.length > 0;
   $('metadataCard').classList.toggle('hidden', !hasSamples);
-  if (!hasSamples && !builderState.selectedFiles.length) setStatus('processedStatus', 'Add one or more processed workbooks. You may select files again to append another batch.');
+  if (!hasSamples && !builderState.selectedFiles.length) setStatus('processedStatus', '');
 }
 
 async function loadProcessedFiles() {
@@ -886,7 +886,7 @@ function renderCollatedQueue() {
         ? `${queued} file(s) queued; ${loaded} subentry or subentries already loaded. Click Continue to read the queue.`
         : loaded
           ? `${loaded} subentry or subentries loaded. Add another batch at any time, or build the QuickSheet.`
-          : `Add one or more collated workbooks. Each workbook's first worksheet will be read.`,
+          : ``,
     );
   });
 }
@@ -1018,7 +1018,7 @@ function renderCollatedMetadataRows() {
           ? `${queued} file(s) queued; ${loaded} subentry or subentries loaded.`
           : loaded
             ? `${loaded} subentry or subentries loaded. Add another batch at any time, or build the QuickSheet.`
-            : `Add one or more collated workbooks. Each workbook's first worksheet will be read.`,
+            : ``,
       );
     });
     actionCell.appendChild(remove);
@@ -1033,7 +1033,7 @@ function updateCollatedVisibility() {
   const hasEntries = collatedState.entries.length > 0;
   $('collatedMetadataCard').classList.toggle('hidden', !hasEntries);
   if (!hasEntries && !collatedState.selectedFiles.length) {
-    setStatus('collatedStatus', `Add one or more collated workbooks. Each workbook's first worksheet will be read.`);
+    setStatus('collatedStatus', ``);
   }
 }
 
@@ -1187,7 +1187,7 @@ function resetCollated() {
   $('collatedPreviewCard').classList.add('hidden');
   $('downloadCollatedQuickSheet').disabled = true;
   renderSummary('collatedSummary', []);
-  setStatus('collatedStatus', `Add one or more collated workbooks. Each workbook's first worksheet will be read.`);
+  setStatus('collatedStatus', ``);
   setStatus('collatedBuilderStatus', '');
   updateCollatedControls();
 }
@@ -1739,7 +1739,7 @@ function renderMergeFiles() {
       'mergeStatus',
       count
         ? `${count} QuickSheet file(s) selected. Add another batch or click Merge QuickSheets.`
-        : 'Add QuickSheets in one or more upload rounds, then click Merge QuickSheets.',
+        : '',
     );
   });
 }
@@ -1801,7 +1801,7 @@ function resetProcessed() {
   $('builderPreviewCard').classList.add('hidden');
   $('downloadQuickSheet').disabled = true;
   renderSummary('builderSummary', []);
-  setStatus('processedStatus', 'Add one or more processed workbooks. You may select files again to append another batch.');
+  setStatus('processedStatus', '');
   setStatus('builderStatus', '');
   updateProcessedControls();
 }
@@ -1823,7 +1823,7 @@ function resetMerge() {
   clearNode($('mergePreview'));
   $('mergePreviewWrap').classList.add('hidden');
   renderSummary('mergeSummary', []);
-  setStatus('mergeStatus', 'Add QuickSheets in one or more upload rounds, then click Merge QuickSheets.');
+  setStatus('mergeStatus', '');
   updateMergeControls();
 }
 
