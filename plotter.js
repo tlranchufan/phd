@@ -293,13 +293,45 @@ function uniqueNumericValues(values) {
   return out.sort((a, b) => a - b);
 }
 
+
+function filteredAvgRows() {
+  const compound = $('filterCompound').value;
+  const mol = $('filterMolKg').value;
+  return state.avgRows.filter(row =>
+    (!compound || String(row.Compound ?? '').trim() === compound) &&
+    (!mol || (num(row['Mol/Kg']) !== null && sameNumericValue(num(row['Mol/Kg']), Number(mol))))
+  );
+}
+function updateQuickFilters({reset=false} = {}) {
+  const compoundSelect=$('filterCompound'), molSelect=$('filterMolKg');
+  const prevCompound=reset?'':compoundSelect.value;
+  const prevMol=reset?'':molSelect.value;
+  const compounds=[...new Set(state.avgRows.map(r=>String(r.Compound ?? '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const concentrations=uniqueNumericValues(state.avgRows.map(r=>num(r['Mol/Kg'])));
+  compoundSelect.replaceChildren(new Option('All compounds',''),...compounds.map(c=>new Option(c,c)));
+  molSelect.replaceChildren(new Option('All concentrations',''),...concentrations.map(m=>new Option(formatMolKg(m),String(m))));
+  compoundSelect.value=compounds.includes(prevCompound)?prevCompound:'';
+  molSelect.value=concentrations.some(m=>String(m)===prevMol)?prevMol:'';
+}
+function updateFilteredCodeChoices() {
+  const previous=new Set(selectedValues($('codes')));
+  const available=new Set(filteredAvgRows().map(r=>String(r.Code ?? '').trim()).filter(Boolean));
+  const codes=state.codes.filter(c=>available.has(c));
+  const chosen=codes.filter(c=>previous.has(c));
+  // Retain selected Codes where possible; when switching filters select matching Codes.
+  setOptions($('codes'),codes,chosen.length?chosen:codes);
+  updateCompareMolChoices();
+  updateElementChoices({autoSelectIfEmpty:true});
+  renderPlot();
+}
+
 function commonMolKgValues(codes) {
   const selectedCodes = [...codes];
   if (selectedCodes.length < 2) return [];
 
   const valuesByCode = selectedCodes.map(code =>
     uniqueNumericValues(
-      state.avgRows
+      filteredAvgRows()
         .filter(row => String(row.Code) === code)
         .map(row => num(row['Mol/Kg']))
         .filter(Number.isFinite)
@@ -351,7 +383,7 @@ function updateCompareMolChoices() {
 }
 
 function compareRowsForCode(code, molkg) {
-  return state.avgRows.filter(row =>
+  return filteredAvgRows().filter(row =>
     String(row.Code) === code &&
     sameNumericValue(num(row['Mol/Kg']), molkg)
   );
@@ -555,7 +587,7 @@ function eligibleElementsForCodes(codes) {
   const plotMode = radioValue('plotMode');
 
   if (plotMode === 'cree') {
-    const rows = state.avgRows.filter(row => codes.has(String(row.Code)));
+    const rows = filteredAvgRows().filter(row => codes.has(String(row.Code)));
     return state.elements.filter(element => {
       if (chondriteNormalizationEnabled() && chondritePpmForElement(element) === null) return false;
       const compounds = [...new Set(rows.map(row => String(row.Compound || 'Unknown')))];
@@ -578,7 +610,7 @@ function eligibleElementsForCodes(codes) {
     );
   }
 
-  const rows = state.avgRows.filter(row => codes.has(String(row.Code)));
+  const rows = filteredAvgRows().filter(row => codes.has(String(row.Code)));
   return state.elements.filter(element =>
     (!chondriteNormalizationEnabled() || chondritePpmForElement(element) !== null) &&
     rows.some(row => num(row[element]) !== null)
@@ -724,6 +756,7 @@ function clearWorkbook() {
   state.yMin = null;
   state.yMax = null;
 
+  updateQuickFilters({reset:true});
   $('plotFile').value='';
   $('compareElementOrder').innerHTML='';
   $('moveCompareElementLeft').disabled=true;
@@ -744,6 +777,7 @@ function clearWorkbook() {
 }
 
 function renderLoaded() {
+  updateQuickFilters({reset:true});
   setOptions($('codes'), state.codes, state.codes);
   updateCompareMolChoices();
   updateElementChoices({initial:true});
@@ -1250,7 +1284,7 @@ function buildCreePlot(codes) {
     throw new Error('Select at least one element with enough positive data for a log–log fit.');
   }
 
-  const selectedRows = state.avgRows.filter(row => codes.has(String(row.Code)));
+  const selectedRows = filteredAvgRows().filter(row => codes.has(String(row.Code)));
   const normalize = chondriteNormalizationEnabled();
   const facetElements = $('creeFacetElements').checked;
   const showFit = $('creeShowFit').checked;
@@ -1573,7 +1607,7 @@ function renderPlot() {
       statusText = `CREE log–log: ${fitCount} fitted element/Compound series from ${codes.size} selected Code${codes.size===1?'':'s'}; x = log10(Mol/Kg).`;
     } else {
       const xField = radioValue('xunit');
-      const selectedRows = state.avgRows.filter(r=>codes.has(String(r.Code)));
+      const selectedRows = filteredAvgRows().filter(r=>codes.has(String(r.Code)));
       const missingXRows = selectedRows.filter(r=>num(r[xField])===null);
       const rawRows = selectedRows.filter(r=>num(r[xField])!==null);
 
@@ -1710,6 +1744,8 @@ $('loadPlotFile').addEventListener('click',async()=>{
   }catch(err){console.error(err);$('plotLoadStatus').textContent=`Error: ${err.message}`;$('loadPlotFile').disabled=false;}
 });
 $('clearPlotFile').addEventListener('click',clearWorkbook);
+$('filterCompound').addEventListener('change',updateFilteredCodeChoices);
+$('filterMolKg').addEventListener('change',updateFilteredCodeChoices);
 $('selectAllCodes').addEventListener('click',()=>{
   [...$('codes').options].forEach(o=>o.selected=true);
   updateCompareMolChoices();
