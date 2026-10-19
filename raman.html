@@ -114,8 +114,24 @@ function renderFilters(){updateRamanFilters();renderSelected();}
 function label(s){return [s.meta.compound,s.meta.mol&&s.meta.mol+' mol/kg',s.meta.phase+(s.meta.phaseId||''),s.meta.temp&&s.meta.temp+'°C',s.meta.condition!=='No comment'&&s.meta.condition].filter(Boolean).join(' · ');}
 // Render formula digits as SVG subscripts without changing stored metadata.
 // Only transform the compound portion; concentrations and temperatures stay normal.
+// Restore conventional element casing only for wholly uppercase formulas.
+// Ambiguous pairs such as CO are read as C + O in carbonate formulas.
+function displayChemicalFormula(value){
+ const raw=String(value??'');
+ if(!/[A-Z]/.test(raw)||/[a-z]/.test(raw))return raw;
+ const pairs=new Set(['NA','CL','CA','MG','AL','SI','LI','RB','CS','SR','BA','LA','ND','GD','YB','CE','PR','SM','EU','TB','DY','HO','ER','TM','LU','SC','TI','ZR','HF','FE','MN','CU','ZN','NI','CR','PB','SN','AG','AU','BR','BE','NE','AR','HE']);
+ return raw.replace(/[A-Z]+/g,run=>{
+  let formatted='';
+  for(let i=0;i<run.length;){
+   const pair=run.slice(i,i+2);
+   if(pairs.has(pair)){formatted+=pair[0]+pair[1].toLowerCase();i+=2;}
+   else {formatted+=run[i];i++;}
+  }
+  return formatted;
+ });
+}
 function chemicalFormulaSvg(value){
- const tokens=String(value??'').match(/(?:[A-Z][a-z]?|\(|\)|\[|\]|\d+|[^A-Za-z\d()[\]]+|[a-z]+)/g)||[];
+ const tokens=displayChemicalFormula(value).match(/(?:[A-Z][a-z]?|\(|\)|\[|\]|\d+|[^A-Za-z\d()[\]]+|[a-z]+)/g)||[];
  return tokens.map((part,i)=>{
   const digit=/^\d+$/.test(part);
   const previous=tokens[i-1]||'';
