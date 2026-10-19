@@ -57,6 +57,15 @@
       <section id="plotConfig" class="card hidden">
         <h2>2. Configure plot</h2>
 
+        <div class="grid two" style="margin-bottom:12px">
+          <label>Compound filter
+            <select id="filterCompound"><option value="">All compounds</option></select>
+          </label>
+          <label>Mol/Kg filter
+            <select id="filterMolKg"><option value="">All concentrations</option></select>
+          </label>
+        </div>
+
         <label>Codes to display
           <select id="codes" multiple size="8"></select>
         </label>
@@ -287,6 +296,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261016-ratio-error-bars"></script>
+  <script defer src="./plotter.js?v=20261019-compound-mol-filters"></script>
 </body>
 </html>
