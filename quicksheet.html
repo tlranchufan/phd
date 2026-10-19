@@ -32,14 +32,14 @@
     <div>
       <p class="eyebrow">Data Processing Tools</p>
       <h1>QuickSheet Builder</h1>
-      <p class="lede">Convert processed LA-ICP-MS workbooks into QuickSheets | Lift sample groups from the first worksheet of collated workbooks | Merge QuickSheets</p>
+      
     </div>
   </header>
 
   <main class="container">
     <section class="card">
       <h2>Processed workbooks → QuickSheet</h2>
-      <p>Upload one or more <code>_processed.xlsx</code> files. You can add files in several separate upload rounds; each new selection is appended to the queue. The builder reads the <strong>Average</strong>, <strong>Std Dev</strong> and <strong>RSD</strong> rows, ignores the limits-of-detection section, and turns values beginning with <code>&lt;</code> into blank cells.</p>
+      
 
       <label>Add processed workbooks
         <input id="processedFiles" type="file" accept=".xls,.xlsx" multiple>
@@ -55,7 +55,7 @@
         <div class="section-head">
           <div>
             <h3>Sample metadata</h3>
-            <p class="hint">Enter the values used by the QuickSheet Plotter. Code defaults from the filename and remains editable.</p>
+            
           </div>
           <span id="metadataCount" class="file-badge"></span>
         </div>
@@ -82,7 +82,7 @@
           <fieldset>
             <legend>Output columns</legend>
             <label class="toggle"><input id="includeExtraColumns" type="checkbox" checked> Include additional element and ratio columns found in processed workbooks</label>
-            <p class="hint">The standard QuickSheet element columns are always included. Additional columns such as <code>Au197</code> or <code>Ca/Cs</code> are retained when selected.</p>
+            
           </fieldset>
           <label>Output filename
             <input id="builderFileName" type="text" value="laicpms_quicksheet">
@@ -114,7 +114,7 @@
 
     <section class="card">
       <h2>Collated summary → QuickSheet</h2>
-      <p>Upload one or more collated workbooks. The builder reads only the <strong>first worksheet</strong>, recognises each <strong>avg / std dev / rsd</strong> block as a separate subentry, and lets you enter plotting metadata for every subentry. You can add files in several upload rounds.</p>
+      
 
       <label>Add collated workbooks
         <input id="collatedFiles" type="file" accept=".xls,.xlsx" multiple>
@@ -130,7 +130,7 @@
         <div class="section-head">
           <div>
             <h3>Collated subentry metadata</h3>
-            <p class="hint">The original Code is retained as the default output Code. Compound, Mol/Kg and wt% are entered separately for each subentry.</p>
+            
           </div>
           <span id="collatedMetadataCount" class="file-badge"></span>
         </div>
@@ -158,7 +158,7 @@
           <fieldset>
             <legend>Output columns</legend>
             <label class="toggle"><input id="collatedIncludeExtraColumns" type="checkbox" checked> Include additional element and ratio columns found on the collated summary sheet</label>
-            <p class="hint">Standard QuickSheet columns are always included. Missing columns are left blank.</p>
+            
           </fieldset>
           <label>Output filename
             <input id="collatedFileName" type="text" value="laicpms_quicksheet_from_collated">
@@ -189,7 +189,7 @@
 
     <section class="card">
       <h2>Merge existing QuickSheets</h2>
-      <p>Upload multiple QuickSheets to append them into one workbook. You can add them in several separate upload rounds. The merger normalises common header variants, forms the union of all columns, and leaves cells blank where a source workbook does not contain a column. It also recognises older QuickSheets where the avg / std dev / rsd column has no header. If required plotting metadata is missing, the page will pause and ask you to enter it manually before merging.</p>
+      
 
       <label>Add QuickSheet workbooks
         <input id="mergeFiles" type="file" accept=".xls,.xlsx" multiple>
@@ -213,7 +213,7 @@
         <div class="section-head">
           <div>
             <h3>Missing QuickSheet metadata</h3>
-            <p class="hint">If an uploaded QuickSheet is missing Code, Compound, Mol/Kg, wt%, or usable Metric values, enter them here before merging. Existing values are pre-filled. If Metric is absent entirely, rows default to avg / std dev / rsd for you to confirm.</p>
+            
           </div>
           <span id="mergeRepairCount" class="file-badge"></span>
         </div>
@@ -250,9 +250,9 @@
 
     <section class="card compact">
       <h2>How ratios and blanks are handled</h2>
-      <p>If a processed workbook already contains a ratio summary, that summary is used. When K/Cs, Na/Cs or Rb/Cs is missing, the processed-workbook builder calculates the ratio for each valid inclusion and then calculates its average, sample standard deviation and RSD. Inclusion values that are blank, below detection, non-numeric, or have a zero Cs value are excluded.</p>
-      <p>The collated importer reads summary statistics from the first worksheet. It preserves available ratio columns, but leaves a missing ratio blank rather than estimating its standard deviation or RSD from summary averages.</p>
-      <p>All workbook processing happens locally in the browser. Uploaded data is not sent to the website.</p>
+      
+      
+      
     </section>
   </main>
 
