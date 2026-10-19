@@ -25,7 +25,7 @@
     <div>
       <p class="eyebrow">Data Processing Tools</p>
       <h1>File Extractors</h1>
-      <p class="lede">Extract CSV files or process Raman TXT/CSV exports from ZIP archives</p>
+      <p class="lede">Extract CSV and WDF files or process Raman TXT/CSV exports from ZIP archives</p>
     </div>
   </header>
 
@@ -110,6 +110,46 @@
         <div class="progress-shell" aria-hidden="true"><div id="ramanProgress" class="progress-bar"></div></div>
         <div id="ramanSummary" class="summary-pills"></div>
       </section>
+
+      <section class="card">
+        <h2>WDF Extractor</h2>
+        <p>Find WDF files in a ZIP, untick any you don't want, and download the selected original files.</p>
+        <div id="wdfDrop" class="drop-zone">
+          <strong>Drop a ZIP archive here</strong>
+          <span class="hint">or choose one below</span>
+          <input id="wdfZipFile" type="file" accept=".zip,application/zip">
+        </div>
+        <fieldset>
+          <legend>Output layout</legend>
+          <div class="radio-stack">
+            <label><input type="radio" name="wdfLayout" value="flatten" checked> All selected WDF files in one folder</label>
+            <label><input type="radio" name="wdfLayout" value="retain"> Retain original folder structure</label>
+          </div>
+        </fieldset>
+        <div class="actions">
+          <button type="button" class="primary" id="wdfScan" disabled>Scan ZIP</button>
+          <button type="button" id="wdfReset" disabled>Clear</button>
+          <button type="button" id="wdfDownload" disabled>Download selected WDF ZIP</button>
+        </div>
+        <div id="wdfStatus" class="status" role="status">Choose a ZIP archive to begin.</div>
+        <div class="progress-shell" aria-hidden="true"><div class="progress-bar" id="wdfProgress"></div></div>
+        <div id="wdfSummary" class="summary-pills"></div>
+        <div id="wdfSelection" class="hidden">
+          <div class="actions" style="margin-top:14px">
+            <button type="button" id="wdfSelectAll">Select all</button>
+            <button type="button" id="wdfDeselectAll">Deselect all</button>
+          </div>
+          <label for="wdfSearch">Search filenames or folders</label>
+          <input id="wdfSearch" type="search" placeholder="Filter WDF files" style="width:100%;margin:7px 0">
+          <p id="wdfShowing" class="hint"></p>
+          <div class="table-wrap" style="max-height:450px;overflow:auto">
+            <table class="preview-table">
+              <thead><tr><th>Keep</th><th>WDF file</th><th>Original folder</th><th>Size</th></tr></thead>
+              <tbody id="wdfPreview"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </div>
 
     <section id="ramanResults" class="card hidden">
@@ -147,5 +187,6 @@
 
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script defer src="./extractor.js?v=20260726-complete"></script>
+  <script defer src="./wdf-extractor.js?v=1"></script>
 </body>
 </html>
