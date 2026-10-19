@@ -36,7 +36,7 @@
     <div>
       <p class="eyebrow">Data Processing Tools</p>
       <h1>LA-ICPMS QuickSheet Plotter</h1>
-      <p class="lede">Load a QuickSheet workbook (see example if needed) -> Choose samples and elements -> Export an interactive or publication-ready plot</p>
+      
     </div>
   </header>
 
@@ -44,7 +44,7 @@
     <aside class="plot-controls">
       <section class="card">
         <h2>1. Load workbook</h2>
-        <p class="hint">Required columns: <code>Code</code>, <code>Compound</code>, <code>Mol/Kg</code>, <code>wt%</code>, and <code>Metric</code>.</p>
+        
         <input id="plotFile" type="file" accept=".xls,.xlsx">
         <div class="actions upload-actions">
           <button id="loadPlotFile" class="primary" type="button" disabled>Continue — load workbook</button>
@@ -78,7 +78,7 @@
           <legend>X axis</legend>
           <label class="inline-option"><input type="radio" name="xunit" value="Mol/Kg" checked> Mol/Kg</label>
           <label class="inline-option"><input type="radio" name="xunit" value="wt%"> wt%</label>
-          <p class="hint">If an entry is blank for the selected x-axis unit, that entry is omitted from the plot and reported in the warning box. Blank values are never inherited from the previous sample.</p>
+          
         </fieldset>
 
         <fieldset id="offsetControls">
@@ -95,7 +95,7 @@
             <input id="offsetSpread" type="range" min="0.02" max="0.30" step="0.01" value="0.12">
             <span id="offsetSpreadValue">12%</span> of nearest x-spacing
           </label>
-          <p class="hint">Offsets change display positions only -> hover labels and calculations retain the original x-value</p>
+          
         </fieldset>
 
         <fieldset>
@@ -116,13 +116,13 @@
           </label>
           <label class="toggle"><input id="thickGridLines" type="checkbox"> Thick grid lines</label>
           <label class="toggle"><input id="thickAxes" type="checkbox"> Thick axes</label>
-          <p class="hint">These settings apply to the on-screen plot and exported PNG, SVG, PDF, and interactive HTML.</p>
+          
         </fieldset>
 
         <fieldset>
           <legend>Normalization</legend>
-          <label class="toggle"><input id="normalizeChondrite" type="checkbox"> Normalize to CI chondrite — McDonough &amp; Sun (1995)</label>
-          <p class="hint">Uses the uploaded Table 2 reference. QuickSheet element values are treated as ppm. CI values stored as wt%, ppm, or ppb are converted internally to ppm before division (wt% × 10,000; ppb ÷ 1,000). Normalized values are dimensionless sample/CI. Isotope columns use their element symbol, e.g. Y89 → Y.</p>
+          <label class="toggle"><input id="normalizeChondrite" type="checkbox"> Normalize to CI chondrite — McDonough &amp; Sun (1995)</label><details class="subtle-notes"><summary>Notes</summary><p>Normalisation uses CI chondrite abundances from McDonough and Sun (1995)</p></details>
+          
         </fieldset>
 
         <div id="elementSelectionControls">
@@ -153,7 +153,7 @@
         <div id="compareControls" class="hidden">
           <fieldset>
             <legend>Compare settings</legend>
-            <p class="hint">Compare two or more Codes at one shared Mol/Kg. Only Mol/Kg values present in every selected Code are available.</p>
+            
 
             <label>Common Mol/Kg
               <select id="compareMolKg"></select>
@@ -163,7 +163,7 @@
             <label>Element order (left → right)
               <select id="compareElementOrder" size="8"></select>
             </label>
-            <p class="hint">Select an element here, then move it left or right. Only elements selected in “Elements to show” appear in this list.</p>
+            
             <div class="actions mini-actions">
               <button id="moveCompareElementLeft" type="button">← Move left</button>
               <button id="moveCompareElementRight" type="button">Move right →</button>
@@ -184,9 +184,9 @@
 
         <div id="creeControls" class="hidden">
           <fieldset>
-            <legend>CREE–solute power-law fit</legend>
-            <p class="hint">Fits <code>C = A[solute]<sup>n</sup></code> by ordinary least squares on log–log coordinates. Plot labels use the actual chemistry, for example <code>log10[Y]</code> vs <code>log10[NaF]</code>. Fits are calculated separately for each selected element and Compound.</p>
-            <p class="hint">Only positive Mol/Kg and positive element concentrations can be used. At least two valid concentrations are required for a fit; three or more are preferable for interpreting curvature or goodness of fit.</p>
+            <legend>CREE–solute power-law fit</legend><details class="subtle-notes"><summary>Notes</summary><p>Fits the relationship C = A[solute]^n using ordinary least squares on log10-transformed concentrations</p></details>
+            
+            
             <label class="toggle"><input id="creeFacetElements" type="checkbox" checked> Facet by element</label>
             <label class="toggle"><input id="creeShowFit" type="checkbox" checked> Show fitted power-law line</label>
             <label class="toggle"><input id="creeShowLineLabels" type="checkbox" checked> Show element + n beside fitted line</label>
@@ -207,8 +207,8 @@
             <label class="inline-option"><input type="radio" name="ratioBasis" value="ww" checked> weight/weight</label>
             <label class="inline-option"><input type="radio" name="ratioBasis" value="mm"> mol/mol</label>
           </fieldset>
-          <label class="toggle"><input id="ratioShowErr" type="checkbox" checked> Show propagated error bars (± standard deviation)</label>
-          <p class="hint">Ratio uncertainty is propagated from the numerator and denominator SD values, assuming they are independent. Covariance between elements is not available in the QuickSheet summary.</p>
+          <label class="toggle"><input id="ratioShowErr" type="checkbox" checked> Show propagated error bars (± standard deviation)</label><details class="subtle-notes"><summary>Notes</summary><p>Ratio uncertainties are propagated from the standard deviations of the numerator and denominator</p></details>
+          
           <label class="toggle"><input id="ratioLogY" type="checkbox"> Log10 y-axis</label>
         </div>
       </section>
@@ -265,7 +265,7 @@
           <div class="section-head">
             <div>
               <h3>CREE power-law regression results</h3>
-              <p class="hint"><code>log10(C) = log10(A) + n·log10[solute]</code>. The exponent <code>n</code> is the fitted log–log slope. CI normalization changes the intercept, but not <code>n</code>.</p>
+              
             </div>
             <button id="downloadCreeCsv" type="button" disabled>Download regression CSV</button>
           </div>
