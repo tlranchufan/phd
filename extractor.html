@@ -25,7 +25,7 @@
     <div>
       <p class="eyebrow">Data Processing Tools</p>
       <h1>File Extractors</h1>
-      <p class="lede">Extract CSV and WDF files or process Raman TXT/CSV exports from ZIP archives</p>
+      
     </div>
   </header>
 
@@ -33,7 +33,7 @@
     <div class="tool-grid">
       <section class="card">
         <h2>CSV Extractor</h2>
-        <p>Find every <code>.csv</code> inside a ZIP, including files in nested folders, then download a CSV-only ZIP.</p>
+        
 
         <div id="csvDrop" class="drop-zone">
           <strong>Drop a ZIP archive here</strong>
@@ -47,7 +47,7 @@
             <label><input type="radio" name="csvLayout" value="retain" checked> Retain the original folder directory</label>
             <label><input type="radio" name="csvLayout" value="flatten"> Place all CSV files in one folder</label>
           </div>
-          <p class="hint">Duplicate names are renamed automatically when using one folder.</p>
+          
         </fieldset>
 
         <div class="actions">
@@ -69,7 +69,7 @@
 
       <section class="card">
         <h2>Raman Processor</h2>
-        <p>Reproduce and extend the Raman file-management workflow: strip TXT headers, rename OMNIC files, sort TXT/CSV pairs, and separate quartz files.</p>
+        
 
         <div id="ramanDrop" class="drop-zone">
           <strong>Drop a Raman ZIP archive here</strong>
@@ -99,7 +99,7 @@
           </div>
         </div>
 
-        <p class="hint">The browser edition keeps TXT basenames unchanged when stripping headers so TXT/CSV pairing remains reliable. Empty or one-line TXT files become empty processed files and are reported in the log.</p>
+        
 
         <div class="actions">
           <button id="ramanProcess" type="button" class="primary" disabled>Process ZIP</button>
@@ -113,7 +113,7 @@
 
       <section class="card">
         <h2>WDF Extractor</h2>
-        <p>Find WDF files in a ZIP, untick any you don't want, and download the selected original files.</p>
+        
         <div id="wdfDrop" class="drop-zone">
           <strong>Drop a ZIP archive here</strong>
           <span class="hint">or choose one below</span>
@@ -175,11 +175,6 @@
           </div>
         </div>
       </div>
-    </section>
-
-    <section class="card compact">
-      <h2>Privacy and limitations</h2>
-      <p>ZIP archives are read and rebuilt locally using JavaScript. Nothing is sent to a server. Very large archives may require substantial browser memory. The Raman processor supports UTF-8, UTF-16, and common Windows text encodings.</p>
     </section>
   </main>
 
