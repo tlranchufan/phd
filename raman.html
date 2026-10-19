@@ -29,7 +29,7 @@
 <div class="field"><label>Plot title font (px)</label><input id="titlefont" type="number" value="20" min="8" max="44"></div>
 <div class="field"><label>Plot title</label><input id="plotTitle" placeholder="Comparative Raman spectra"></div>
 <div class="field"><label class="checkrow"><input id="labels" type="checkbox" checked> Show spectrum labels</label></div>
-</div></details></div></div></div></section>
+</div><div class="grid3" style="margin-top:10px"><div class="field"><strong>Label information</strong></div></div><div class="grid3"><label class="checkrow"><input id="label_compound" type="checkbox" checked> Compound</label><label class="checkrow"><input id="label_hostMineral" type="checkbox" > Host mineral</label><label class="checkrow"><input id="label_mol" type="checkbox" checked> Mol/Kg</label><label class="checkrow"><input id="label_sample" type="checkbox" > Sample</label><label class="checkrow"><input id="label_phase" type="checkbox" checked> Phase / ID</label><label class="checkrow"><input id="label_temp" type="checkbox" checked> Temperature</label><label class="checkrow"><input id="label_condition" type="checkbox" checked> Condition (Th / After Th)</label></div></details></div></div></div></section>
 </div><script>
 'use strict';const $=id=>document.getElementById(id);let spectra=[],selected=[],uid=0;const COLORS=['#315cc6','#d05a43','#209c93','#895bb8','#bd902c','#d34891','#4e728d','#55a33b'];const fields=['compound','hostMineral','mol','sample','phase','phaseId','temp','condition','objective','power','seconds','accum'];const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function metadata(name){
@@ -79,6 +79,15 @@ function updateRamanFilters(){
 }
 function renderFilters(){updateRamanFilters();renderSelected();}
 function label(s){return [s.meta.compound,s.meta.mol&&s.meta.mol+' mol/kg',s.meta.phase+(s.meta.phaseId||''),s.meta.temp&&s.meta.temp+'°C',s.meta.condition!=='No comment'&&s.meta.condition].filter(Boolean).join(' · ');}
+function plotLabel(s){const m=s.meta;return [
+ $('label_compound').checked&&m.compound,
+ $('label_hostMineral').checked&&(m.hostMineral||'Quartz'),
+ $('label_mol').checked&&m.mol&&m.mol+' mol/kg',
+ $('label_sample').checked&&m.sample,
+ $('label_phase').checked&&((m.phase||'')+(m.phaseId||'')),
+ $('label_temp').checked&&m.temp&&m.temp+'°C',
+ $('label_condition').checked&&m.condition&&m.condition!=='No comment'&&m.condition
+].filter(Boolean).join(' · ');}
 function renderMatches(){let filters=[['fCompound','compound'],['fPhase','phase'],['fMol','mol'],['fTemp','temp'],['fCondition','condition']];let a=spectra.filter(s=>s.keep&&filters.every(([id,key])=>!$(id).value||s.meta[key]===$(id).value));$('matches').innerHTML=a.length?a.map(s=>'<div class="item"><button data-add="'+s.id+'" '+(selected.includes(s.id)?'disabled':'')+'>＋</button><span class="name" title="'+esc(s.name)+'">'+esc(label(s))+'<br><small>'+esc(s.name)+'</small></span></div>').join(''):'<p class="hint">No spectra match these filters.</p>';}
 $('matches').onclick=e=>{let id=e.target.dataset.add;if(id){selected.push(Number(id));renderSelected();renderMatches();renderPlot();}};
 function renderSelected(){$('selectedList').innerHTML=selected.length?selected.map((id,i)=>{let s=spectra.find(v=>v.id===id);return s?'<div class="item"><span class="swatch" style="background:'+COLORS[i%COLORS.length]+'"></span><span class="name">'+esc(label(s))+'</span><button data-up="'+id+'" '+(!i?'disabled':'')+' title="Move up">↑</button><button data-down="'+id+'" '+(i===selected.length-1?'disabled':'')+' title="Move down">↓</button><button data-del="'+id+'" title="Remove">×</button></div>':'';}).join(''):'<p class="hint">Add spectra from the filtered list above.</p>';}
@@ -105,7 +114,7 @@ for(let k=minorStart;k<=minorEnd;k++){
  // split unusually long tokens as a fallback so labels never leave the image.
  let labelX=810,availableWidth=w-labelX-18;
  let maxChars=Math.max(8,Math.floor(availableWidth/(lf*.60)));
- let parts=label(s).split(' · '),lines=[],line='';
+ let parts=plotLabel(s).split(' · '),lines=[],line='';
  for(let part of parts){
   let chunks=[];
   while(part.length>maxChars){chunks.push(part.slice(0,maxChars-1)+'-');part=part.slice(maxChars-1);}
