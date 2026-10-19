@@ -129,7 +129,7 @@
           <label>Elements to show
             <select id="elements" multiple size="10"></select>
           </label>
-          <p id="elementAvailabilityHint" class="hint">Available elements update automatically from the selected Codes. An element is selectable only when at least one selected Code has a numeric avg value in that element column.</p>
+          <p id="elementAvailabilityHint" class="hint" style="display:none"></p>
           <div class="actions mini-actions">
             <button id="selectAllElements" type="button">Select all</button>
             <button id="clearElements" type="button">Clear</button>
@@ -158,7 +158,7 @@
             <label>Common Mol/Kg
               <select id="compareMolKg"></select>
             </label>
-            <p id="compareMolHint" class="hint">Select at least two Codes to find common Mol/Kg values.</p>
+            <p id="compareMolHint" class="hint" style="display:none"></p>
 
             <label>Element order (left → right)
               <select id="compareElementOrder" size="8"></select>
@@ -243,7 +243,7 @@
 
         <div id="yBoundsControls" class="subcard hidden">
           <h3>Manual Y-axis bounds</h3>
-          <p id="yBoundsHint" class="hint">Optional. Enter the actual minimum and maximum values you want displayed, then click Apply Y bounds. The same bounds are applied to every facet. For log10 plots, enter the real values (for example 10 and 10000), not the exponents.</p>
+          <p id="yBoundsHint" class="hint" style="display:none"></p>
           <div class="axis-bound-grid">
             <label>Y minimum
               <input id="yMin" type="number" step="any" placeholder="Auto">
