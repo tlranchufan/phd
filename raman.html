@@ -112,6 +112,22 @@ function updateRamanFilters(){
 }
 function renderFilters(){updateRamanFilters();renderSelected();}
 function label(s){return [s.meta.compound,s.meta.mol&&s.meta.mol+' mol/kg',s.meta.phase+(s.meta.phaseId||''),s.meta.temp&&s.meta.temp+'°C',s.meta.condition!=='No comment'&&s.meta.condition].filter(Boolean).join(' · ');}
+// Render formula digits as SVG subscripts without changing stored metadata.
+// Only transform the compound portion; concentrations and temperatures stay normal.
+function chemicalFormulaSvg(value){
+ const tokens=String(value??'').match(/(?:[A-Z][a-z]?|\(|\)|\[|\]|\d+|[^A-Za-z\d()[\]]+|[a-z]+)/g)||[];
+ return tokens.map((part,i)=>{
+  const digit=/^\d+$/.test(part);
+  const previous=tokens[i-1]||'';
+  const sub=digit&&/(?:[A-Z][a-z]?|\)|\])$/.test(previous);
+  return sub?'<tspan baseline-shift="sub" font-size="75%">'+esc(part)+'</tspan>':esc(part);
+ }).join('');
+}
+function plotLabelSvg(s,text){
+ const compound=$('label_compound').checked?String(s.meta.compound||''):'';
+ if(!compound||!text.startsWith(compound))return esc(text);
+ return chemicalFormulaSvg(compound)+esc(text.slice(compound.length));
+}
 function plotLabel(s){const m=s.meta;return [
  $('label_compound').checked&&m.compound,
  $('label_hostMineral').checked&&(m.hostMineral||'Quartz'),
@@ -159,7 +175,7 @@ for(let k=minorStart;k<=minorEnd;k++){
  chunks.push(labelText);
  let k=shown[Math.floor(shown.length*.85)]??indices[Math.floor(indices.length*.85)];
  let cy=k===undefined?top+18:Math.max(top+18,Math.min(bottom-18,YY(y[k])));
- out.push('<text x="'+labelX+'" y="'+cy+'" font-family="sans-serif" font-size="'+lf+'" fill="'+color+'">'+chunks.map((str,j)=>'<tspan x="'+labelX+'" dy="'+(j?lf*1.2:0)+'">'+esc(str)+'</tspan>').join('')+'</text>');
+ out.push('<text x="'+labelX+'" y="'+cy+'" font-family="sans-serif" font-size="'+lf+'" fill="'+color+'">'+chunks.map((str,j)=>'<tspan x="'+labelX+'" dy="'+(j?lf*1.2:0)+'">'+plotLabelSvg(s,str)+'</tspan>').join('')+'</text>');
  } else {
  let labelX=835,availableWidth=w-labelX-22;
  let labelText=plotLabel(s)||s.name;
@@ -168,7 +184,7 @@ for(let k=minorStart;k<=minorEnd;k++){
  chunks.push(labelText);
  let legendSpacing=Math.max(32,Math.min(54,(bottom-top-18)/Math.max(1,ss.length)));let ly=top+16+i*legendSpacing;
  out.push('<rect x="'+labelX+'" y="'+(ly-8)+'" width="12" height="12" rx="2" fill="'+color+'"/>');
- out.push('<text x="'+(labelX+22)+'" y="'+ly+'" font-family="sans-serif" font-size="'+lf+'" fill="#29374a">'+chunks.map((str,j)=>'<tspan x="'+(labelX+22)+'" dy="'+(j?Math.min(16,lf*1.1):0)+'">'+esc(str)+'</tspan>').join('')+'</text>');
+ out.push('<text x="'+(labelX+22)+'" y="'+ly+'" font-family="sans-serif" font-size="'+lf+'" fill="#29374a">'+chunks.map((str,j)=>'<tspan x="'+(labelX+22)+'" dy="'+(j?Math.min(16,lf*1.1):0)+'">'+plotLabelSvg(s,str)+'</tspan>').join('')+'</text>');
  }}});out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');out.push('</svg>');lastSvg=out.join('');$('plot').innerHTML=lastSvg;}
 // Bind pointer events to the persistent plot container, not the SVG (which is re-rendered).
 $('plot').addEventListener('pointerdown',e=>{
