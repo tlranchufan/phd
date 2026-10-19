@@ -51,14 +51,14 @@
     <div>
       <p class="eyebrow">Data Processing Tools</p>
       <h1>Excel Processor</h1>
-      <p class="lede">Upload Excel files from SILLs -> Choose element ratios and SD-band colouring -> Exclude rows -> Download processed or collated workbooks</p>
+      
     </div>
   </header>
 
   <main class="container">
     <section class="card">
       <h2>1. Upload source files</h2>
-      <p>Accepted: <code>.xls</code> and <code>.xlsx</code>. NOTE: The first worksheet must contain a <strong>SAMPLES: Composition Summary</strong> section. Loaded files can be duplicated into independent working versions when a sample contains more than one population.</p>
+      
       <input id="files" type="file" accept=".xls,.xlsx" multiple>
       <div class="actions upload-actions">
         <button id="continueUpload" type="button" class="primary" disabled>Continue — process selected files</button>
@@ -92,10 +92,12 @@
           <input id="ltAsZero" type="checkbox">
           Treat entries beginning with &lt; as 0 when calculating averages, SD and RSD
         </label>
-        <p class="hint">The original &lt; value is still displayed and stays grey. This changes only the statistics; when enabled, those entries are included in n as zero.</p>
+        <details class="subtle-notes"><summary>Notes</summary><p>Values beginning with &lt; remain displayed in grey. When the zero option is enabled, these values are treated as zero and included in the calculation of mean, standard deviation and RSD.</p></details>
+        
       </fieldset>
 
-      <p class="hint">Green: ≤1 SD; blue: ≤2 SD; orange: ≤3 SD; red: &gt;3 SD; grey: below detection (&lt;...).</p>
+      
+      <details class="subtle-notes"><summary>Colour legend</summary><p>Green: ≤1 SD; blue: ≤2 SD; orange: ≤3 SD; red: &gt;3 SD. Grey indicates values below detection.</p></details>
       <button id="applyConfig" class="primary">Apply configuration</button>
     </section>
 
@@ -103,7 +105,7 @@
       <div class="section-head">
         <div>
           <h2>3. Review and exclude rows</h2>
-          <p>Select a file, then toggle rows between KEEP and EXCLUDE. Statistics and colours use kept rows only. Duplicate versions have independent KEEP / EXCLUDE decisions. Click any data-column header to sort high → low; click it again for low → high. Reset row order affects only the current working version.</p>
+          
         </div>
         <div>
           <label>File
@@ -125,13 +127,13 @@
         <button id="downloadZip" class="primary">Download processed ZIP</button>
         <button id="downloadCollated">Download collated workbook</button>
       </div>
-      <p class="hint">The ZIP contains one <code>_processed.xlsx</code> and one <code>_keep_exclude.csv</code> per source file.</p>
+      
       <div id="buildStatus" class="status"></div>
     </section>
 
     <section class="card compact">
       <h2>Privacy and limitations</h2>
-      <p>Processing happens locally in the browser. Uploaded data is not sent to this website. Very large workbooks may take a long time. This browser version reads the first worksheet and writes new <code>.xlsx</code> files.</p>
+      
     </section>
   </main>
 
