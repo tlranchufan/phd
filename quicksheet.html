@@ -48,7 +48,7 @@
         <button id="loadProcessed" type="button" class="primary" disabled>Continue — read queued files</button>
         <button id="clearProcessed" type="button" disabled>Clear</button>
       </div>
-      <div id="processedStatus" class="status" role="status">Add one or more processed workbooks. You may select files again to append another batch.</div>
+      <div id="processedStatus" class="status" role="status"></div>
       <div id="processedFileList" class="file-list"></div>
 
       <div id="metadataCard" class="subcard hidden">
@@ -123,7 +123,7 @@
         <button id="loadCollated" type="button" class="primary" disabled>Continue — read queued files</button>
         <button id="clearCollated" type="button" disabled>Clear</button>
       </div>
-      <div id="collatedStatus" class="status" role="status">Add one or more collated workbooks. Each workbook's first worksheet will be read.</div>
+      <div id="collatedStatus" class="status" role="status"></div>
       <div id="collatedFileList" class="file-list"></div>
 
       <div id="collatedMetadataCard" class="subcard hidden">
@@ -206,7 +206,7 @@
           <input id="mergeFileName" type="text" value="laicpms_quicksheet_merged">
         </label>
       </div>
-      <div id="mergeStatus" class="status" role="status">Add QuickSheets in one or more upload rounds, then click Merge QuickSheets.</div>
+      <div id="mergeStatus" class="status" role="status"></div>
       <div id="mergeFileList" class="file-list"></div>
 
       <div id="mergeRepairCard" class="subcard hidden">
@@ -246,13 +246,6 @@
       <div id="mergePreviewWrap" class="table-wrap quicksheet-preview-wrap hidden">
         <table id="mergePreview" class="preview-table"></table>
       </div>
-    </section>
-
-    <section class="card compact">
-      <h2>How ratios and blanks are handled</h2>
-      
-      
-      
     </section>
   </main>
 
