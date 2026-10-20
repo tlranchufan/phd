@@ -21,7 +21,7 @@
 <div class="field"><label>Y minimum</label><input id="ymin" type="number" step="any" placeholder="Auto"></div>
 <div class="field"><label>Y maximum</label><input id="ymax" type="number" step="any" placeholder="Auto"></div>
 <div class="field"><label for="yPosition">Vertical position: <output id="yPositionValue">Centre</output></label><input id="yPosition" type="range" min="-100" max="100" step="1" value="0"></div><div class="field"><label>Y padding (%)</label><input id="ypad" type="number" value="8" min="0" max="40" step="1"></div>
-</div><div class="toolbar" style="margin-top:10px"><button id="autoY" type="button">Auto-fit stack</button><span class="muted" id="yStatus"></span></div></details>
+</div><div class="toolbar" style="margin-top:10px"><button id="autoY" type="button">Auto-fit stack</button><button id="autoRescale" type="button">Auto rescale · fit all spectra</button><span class="muted" id="yStatus"></span></div></details>
 <details><summary>Typography &amp; labels</summary><div class="grid3">
 <div class="field"><label>Axis title font (px)</label><input id="axisfont" type="number" value="17" min="8" max="40"></div>
 <div class="field"><label>Tick font (px)</label><input id="tickfont" type="number" value="12" min="7" max="30"></div>
@@ -280,7 +280,25 @@ function stopDrag(e){if(!dragState||e.pointerId!==dragState.pointer)return;dragS
 $('plot').addEventListener('pointerup',stopDrag);
 $('plot').addEventListener('pointercancel',stopDrag);
 $('resetDragOffsets').addEventListener('click',()=>{manualOffsets.clear();renderPlot();});
-for(let id of ['intensity','offset','xmin','xmax','axisfont','tickfont','labelfont','titlefont','plotTitle','baseline','labelPlacement','truncate','cutMin','cutMax','yscale','yPosition','ymin','ymax','ypad','label_compound','label_hostMineral','label_mol','label_sample','label_phase','label_temp','label_condition'])$(id).addEventListener('input',renderPlot);$('autoY').addEventListener('click',()=>{$('ymin').value='';$('ymax').value='';$('yPosition').value='0';renderPlot();});for(let id of ['fCompound','fPhase','fMol','fTemp','fCondition'])$(id).addEventListener('change',updateRamanFilters);
+for(let id of ['intensity','offset','xmin','xmax','axisfont','tickfont','labelfont','titlefont','plotTitle','baseline','labelPlacement','truncate','cutMin','cutMax','yscale','yPosition','ymin','ymax','ypad','label_compound','label_hostMineral','label_mol','label_sample','label_phase','label_temp','label_condition'])$(id).addEventListener('input',renderPlot);$('autoY').addEventListener('click',()=>{$('ymin').value='';$('ymax').value='';$('yPosition').value='0';renderPlot();});$('autoRescale').addEventListener('click',()=>{
+ const {series}=plotData();
+ const cutEnabled=$('truncate').checked,cutA=Number($('cutMin').value),cutB=Number($('cutMax').value);
+ let min=Infinity,max=-Infinity;
+ for(const q of series)for(const k of q.indices){
+  if(cutEnabled&&cutB>cutA&&q.x[k]>cutA&&q.x[k]<cutB)continue;
+  const v=q.y[k];
+  if(Number.isFinite(v)){min=Math.min(min,v);max=Math.max(max,v);}
+ }
+ if(!Number.isFinite(min)||!Number.isFinite(max))return;
+ let span=max-min;
+ if(span<=0)span=Math.max(1,Math.abs(min)*.1);
+ const padding=Math.max(0,Math.min(40,Number($('ypad').value)||8))/100;
+ $('ymin').value=String(min-span*padding);
+ $('ymax').value=String(max+span*padding);
+ $('yscale').value='1';
+ $('yPosition').value='0';
+ renderPlot();
+});for(let id of ['fCompound','fPhase','fMol','fTemp','fCondition'])$(id).addEventListener('change',updateRamanFilters);
 $('saveSvg').onclick=()=>{if(lastSvg)download('raman_plot.svg',new Blob([lastSvg],{type:'image/svg+xml'}));};$('savePng').onclick=()=>{if(!lastSvg)return;let blob=new Blob([lastSvg],{type:'image/svg+xml;charset=utf-8'}),url=URL.createObjectURL(blob),im=new Image;im.onload=()=>{let c=document.createElement('canvas');c.width=2000;c.height=Math.round(2000*im.height/im.width);let ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(im,0,0,c.width,c.height);c.toBlob(b=>download('raman_plot.png',b),'image/png');URL.revokeObjectURL(url);};im.src=url;};
 $('savePlotCsv').onclick=()=>{let {series}=plotData(),rows=[['filename','raman_shift_cm-1','displayed_intensity','raw_intensity','corrected_intensity']];for(let s of series)for(let i of s.indices)rows.push([s.s.name,s.x[i],s.y[i],s.s.raw[i],s.s.corrected[i]]);download('raman_plot_data.csv',new Blob([rows.map(r=>r.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(t=>t.classList.toggle('active',t===b));document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active',s.id===b.dataset.tab));renderPlot();});renderMeta();
