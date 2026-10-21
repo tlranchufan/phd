@@ -238,7 +238,7 @@ for(let k=minorStart;k<=minorEnd;k++){
  if(major){out.push('<line x1="'+outx+'" y1="'+top+'" x2="'+outx+'" y2="'+bottom+'" stroke="#e9edf3"/>');}
  out.push('<line x1="'+outx+'" y1="'+bottom+'" x2="'+outx+'" y2="'+(bottom+(major?9:5))+'" stroke="#718399" stroke-width="1"/>');
  if(major){out.push('<text x="'+outx+'" y="'+(bottom+26)+'" fill="#53667d" font-size="'+t+'" text-anchor="middle" font-family="sans-serif">'+x+'</text>');}
-}if(doBreak){let bx=XX(cutA),dx=XX(cutB);out.push('<rect x="'+bx+'" y="'+top+'" width="'+(dx-bx)+'" height="'+(bottom-top+12)+'" fill="white"/>');for(let cy of [bottom,bottom+2])out.push('<path d="M'+(bx+3)+' '+(cy+5)+' l7 -11 m5 11 l7 -11" stroke="#53667d" stroke-width="1.5" fill="none"/>');}out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');out.push('<text x="'+((left+right)/2)+'" y="'+(plotHeight-22)+'" font-family="sans-serif" font-size="'+af+'" text-anchor="middle">Raman shift (cm⁻¹)</text><text transform="translate(24 '+((top+bottom)/2)+') rotate(-90)" font-family="sans-serif" font-size="'+af+'" text-anchor="middle">Intensity (a.u.) + offset</text>');series.forEach(({s,x,y,indices,color},i)=>{let shown=indices.filter(k=>!cutEnabled||(x[k]<=cutA||x[k]>=cutB));let dec=Math.max(1,Math.ceil(shown.length/3500)),paths=[],previousSide=null;for(let j=0;j<shown.length;j+=dec){let k=shown[j],side=doBreak?(x[k]<=cutA?0:1):0;paths.push((previousSide===null||side!==previousSide?'M':'L')+XX(x[k]).toFixed(2)+' '+YY(y[k]).toFixed(2));previousSide=side;}if(shown.length){let k=shown.at(-1);paths.push('L'+XX(x[k]).toFixed(2)+' '+YY(y[k]).toFixed(2));}out.push('<path d="'+paths.join(' ')+'" stroke="'+color+'" stroke-width="1.4" fill="none" clip-path="url(#ramanPlotClip)"/>');out.push('<path data-drag-id="'+s.id+'" d="'+paths.join(' ')+'" stroke="transparent" stroke-width="18" fill="none" pointer-events="stroke" style="cursor:'+( $('dragSpectra').checked?'ns-resize':'crosshair')+'" clip-path="url(#ramanPlotClip)"/>');if($('labelPlacement').value!=='off'){
+}if(doBreak){let bx=XX(cutA),dx=XX(cutB);out.push('<rect x="'+bx+'" y="'+top+'" width="'+(dx-bx)+'" height="'+(bottom-top+12)+'" fill="white"/>');for(let cy of [bottom,bottom+2])out.push('<path d="M'+(bx+3)+' '+(cy+5)+' l7 -11 m5 11 l7 -11" stroke="#53667d" stroke-width="1.5" fill="none"/>');}out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');out.push('<text x="'+((left+right)/2)+'" y="'+(plotHeight-22)+'" font-family="sans-serif" font-size="'+af+'" text-anchor="middle">Raman shift (cm⁻¹)</text><text transform="translate(24 '+((top+bottom)/2)+') rotate(-90)" font-family="sans-serif" font-size="'+af+'" text-anchor="middle">Intensity (a.u.) + offset</text>');series.forEach(({s,x,y,indices,color},i)=>{let shown=indices.filter(k=>!cutEnabled||(x[k]<=cutA||x[k]>=cutB));let dec=1,paths=[],previousSide=null;for(let j=0;j<shown.length;j+=dec){let k=shown[j],side=doBreak?(x[k]<=cutA?0:1):0;paths.push((previousSide===null||side!==previousSide?'M':'L')+XX(x[k]).toFixed(2)+' '+YY(y[k]).toFixed(2));previousSide=side;}if(shown.length){let k=shown.at(-1);paths.push('L'+XX(x[k]).toFixed(2)+' '+YY(y[k]).toFixed(2));}out.push('<path d="'+paths.join(' ')+'" stroke="'+color+'" stroke-width="1.4" fill="none" clip-path="url(#ramanPlotClip)"/>');out.push('<path data-drag-id="'+s.id+'" d="'+paths.join(' ')+'" stroke="transparent" stroke-width="18" fill="none" pointer-events="stroke" style="cursor:'+( $('dragSpectra').checked?'ns-resize':'crosshair')+'" clip-path="url(#ramanPlotClip)"/>');if($('labelPlacement').value!=='off'){
  if($('labelPlacement').value==='floating'){
  let labelX=right+15,availableWidth=w-labelX-20;
  let labelText=plotLabel(s)||s.name;
@@ -259,35 +259,49 @@ for(let k=minorStart;k<=minorEnd;k++){
  out.push('<text x="'+(labelX+22)+'" y="'+ly+'" font-family="sans-serif" font-size="'+lf+'" fill="#29374a">'+chunks.map((str,j)=>'<tspan x="'+(labelX+22)+'" dy="'+(j?Math.min(16,lf*1.1):0)+'">'+plotLabelSvg(s,str)+'</tspan>').join('')+'</text>');
  }}});out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');out.push('</svg>');lastSvg=out.join('');$('plot').innerHTML=lastSvg;}
 // Manual, reversible correction at the closest sampled Raman-shift point.
+// Right-click a visible trace to remove a narrow positive cosmic-ray artefact.
+// Search a small neighbourhood to account for the cursor landing beside the spike.
 $('plot').addEventListener('contextmenu',e=>{
  const trace=e.target.closest?.('[data-drag-id]');
  if(!trace||!plotHitGeometry)return;
  e.preventDefault();
  const spectrum=spectra.find(v=>v.id===Number(trace.dataset.dragId));
- if(!spectrum)return;
+ if(!spectrum||spectrum.corrected.length<7)return;
  const svg=$('plot').querySelector('svg'),rect=svg.getBoundingClientRect();
  const clickedX=(e.clientX-rect.left)*svg.viewBox.baseVal.width/rect.width;
- let closest=-1,distance=Infinity;
+ let closest=1,distance=Infinity;
  for(let k=1;k<spectrum.x.length-1;k++){
   const d=Math.abs(plotHitGeometry.XX(spectrum.x[k])-clickedX);
   if(d<distance){closest=k;distance=d;}
  }
- if(closest<1||closest>=spectrum.corrected.length-1)return;
- if(!confirm('Remove a suspected cosmic-ray spike near '+spectrum.x[closest].toFixed(1)+' cm⁻¹ from '+spectrum.name+'?\\n\\nThis replaces one corrected intensity with a linear interpolation. Raw intensities remain unchanged.'))return;
- const x=spectrum.x,k=closest,oldValue=spectrum.corrected[k],left=k-1,right=k+1;
- const dx=x[right]-x[left];
- if(!Number.isFinite(dx)||dx===0)return;
- const newValue=spectrum.corrected[left]+(spectrum.corrected[right]-spectrum.corrected[left])*(x[k]-x[left])/dx;
- spikeUndo.push({spectrum,k,oldValue,wasMarked:spectrum.modified.includes(k)});
- spectrum.corrected[k]=newValue;
- if(!spectrum.modified.includes(k))spectrum.modified.push(k);
+ const y=spectrum.corrected,x=spectrum.x;
+ // Prefer the strongest narrow positive residual near the clicked wavenumber.
+ let center=closest,best=-Infinity;
+ for(let k=Math.max(2,closest-4);k<=Math.min(y.length-3,closest+4);k++){
+  const baseline=(y[k-2]+y[k+2])/2;
+  const excess=y[k]-baseline;
+  if(excess>best){best=excess;center=k;}
+ }
+ // Interpolate up to three points, preserving the surrounding spectral profile.
+ const lo=Math.max(1,center-1),hi=Math.min(y.length-2,center+1);
+ const outerLeft=lo-1,outerRight=hi+1;
+ const dx=x[outerRight]-x[outerLeft];
+ if(!Number.isFinite(dx)||dx<=0)return;
+ const old=y.slice(lo,hi+1);
+ const interpolated=old.map((_,i)=>y[outerLeft]+(y[outerRight]-y[outerLeft])*(x[lo+i]-x[outerLeft])/dx);
+ if(!confirm('Correct suspected cosmic-ray artefact near '+x[center].toFixed(1)+' cm⁻¹?\\n'+spectrum.name+'\\n\\nThree points will be interpolated; the raw spectrum remains unchanged.'))return;
+ const wasMarked=old.map((_,i)=>spectrum.modified.includes(lo+i));
+ spikeUndo.push({spectrum,lo,old,wasMarked});
+ interpolated.forEach((v,i)=>{y[lo+i]=v;if(!spectrum.modified.includes(lo+i))spectrum.modified.push(lo+i);});
  $('undoManualSpike').disabled=false;
  renderPlot();
 });
 $('undoManualSpike').addEventListener('click',()=>{
  const edit=spikeUndo.pop();if(!edit)return;
- edit.spectrum.corrected[edit.k]=edit.oldValue;
- if(!edit.wasMarked)edit.spectrum.modified=edit.spectrum.modified.filter(k=>k!==edit.k);
+ edit.old.forEach((v,i)=>{
+  const k=edit.lo+i;edit.spectrum.corrected[k]=v;
+  if(!edit.wasMarked[i])edit.spectrum.modified=edit.spectrum.modified.filter(n=>n!==k);
+ });
  $('undoManualSpike').disabled=!spikeUndo.length;
  renderPlot();
 });
