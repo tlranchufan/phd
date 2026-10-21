@@ -33,11 +33,12 @@
 </div><script>
 'use strict';const $=id=>document.getElementById(id);let spectra=[],selected=[],uid=0;const COLORS=['#315cc6','#d05a43','#209c93','#895bb8','#bd902c','#d34891','#4e728d','#55a33b'];const fields=['compound','hostMineral','mol','sample','phase','phaseId','temp','condition','objective','power','seconds','accum'];const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function metadata(name){
- // Older Raman TXT filenames: NaS1 = 1 mol/kg Na2SO4.
- const legacy=String(name).replace(/\.txt(?:\.txt)?$/i,'').match(/^NaS(\d+(?:\.\d+)?)-([^-]+)-(liq|liquid|vap|vapour|vapor|qtz|quartz)\(\s*(-?\d+(?:\.\d+)?)\s*°?C\s*\)-(\d+(?:\.\d+)?)x-(\d+(?:\.\d+)?)mW-(\d+(?:\.\d+)?)S-(\d+)x$/i);
+ // Older Raman TXT filenames: NaS1 / Na21 = Na2SO4, NaP1 = Na3PO4, NaC1 = Na2CO3.
+ const legacy=String(name).replace(/\.txt(?:\.txt)?$/i,'').match(/^(NaS|Na2|NaP|NaC)(\d+(?:\.\d+)?)-([^-]+)-(liq|liquid|vap|vapour|vapor|qtz|quartz)\(\s*(-?\d+(?:\.\d+)?)\s*°?C\s*\)-(\d+(?:\.\d+)?)x-(\d+(?:\.\d+)?)mW-(\d+(?:\.\d+)?)S-(\d+)x$/i);
  if(legacy){
-  const [,mol,sample,ph,temp,objective,power,seconds,accum]=legacy;
-  return {compound:'Na2SO4',hostMineral:'Quartz',mol,sample,objective:objective+'X',phase:/^liq/i.test(ph)?'Liquid':/^vap/i.test(ph)?'Vapour':'Quartz',phaseId:'',temp,condition:'No comment',power,seconds,accum};
+  const [,abbreviation,mol,sample,ph,temp,objective,power,seconds,accum]=legacy;
+  const formula={nas:'Na2SO4',na2:'Na2SO4',nap:'Na3PO4',nac:'Na2CO3'}[abbreviation.toLowerCase()];
+  return {compound:formula,hostMineral:'Quartz',mol,sample,objective:objective+'X',phase:/^liq/i.test(ph)?'Liquid':/^vap/i.test(ph)?'Vapour':'Quartz',phaseId:'',temp,condition:'No comment',power,seconds,accum};
  }
  let n=name.replace(/\.(?:wdf|txt|csv)$/i,'').replace(/\.txt$/i,'').replace(/^output_/i,'');
  let hostMineral='Quartz';
