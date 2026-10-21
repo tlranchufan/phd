@@ -150,6 +150,46 @@
           </div>
         </div>
       </section>
+
+      <section class="card">
+        <h2>TXT Extractor</h2>
+        
+        <div id="txtDrop" class="drop-zone">
+          <strong>Drop a ZIP archive here</strong>
+          <span class="hint">or choose one below</span>
+          <input id="txtZipFile" type="file" accept=".zip,application/zip">
+        </div>
+        <fieldset>
+          <legend>Output layout</legend>
+          <div class="radio-stack">
+            <label><input type="radio" name="txtLayout" value="flatten" checked> All selected TXT files in one folder</label>
+            <label><input type="radio" name="txtLayout" value="retain"> Retain original folder structure</label>
+          </div>
+        </fieldset>
+        <div class="actions">
+          <button type="button" class="primary" id="txtScan" disabled>Scan ZIP</button>
+          <button type="button" id="txtReset" disabled>Clear</button>
+          <button type="button" id="txtDownload" disabled>Download selected TXT ZIP</button>
+        </div>
+        <div id="txtStatus" class="status" role="status">Choose a ZIP archive to begin.</div>
+        <div class="progress-shell" aria-hidden="true"><div class="progress-bar" id="txtProgress"></div></div>
+        <div id="txtSummary" class="summary-pills"></div>
+        <div id="txtSelection" class="hidden">
+          <div class="actions" style="margin-top:14px">
+            <button type="button" id="txtSelectAll">Select all</button>
+            <button type="button" id="txtDeselectAll">Deselect all</button>
+          </div>
+          <label for="txtSearch">Search filenames or folders</label>
+          <input id="txtSearch" type="search" placeholder="Filter TXT files" style="width:100%;margin:7px 0">
+          <p id="txtShowing" class="hint"></p>
+          <div class="table-wrap" style="max-height:450px;overflow:auto">
+            <table class="preview-table">
+              <thead><tr><th>Keep</th><th>TXT file</th><th>Original folder</th><th>Size</th></tr></thead>
+              <tbody id="txtPreview"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </div>
 
     <section id="ramanResults" class="card hidden">
@@ -183,5 +223,6 @@
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script defer src="./extractor.js?v=20260726-complete"></script>
   <script defer src="./wdf-extractor.js?v=2"></script>
+  <script defer src="./txt-extractor.js?v=1"></script>
 </body>
 </html>
