@@ -63,7 +63,21 @@ for(const [id] of selectors)$(id).onchange=renderMatches;
 $('spectrumList').onchange=e=>{const k=e.target.dataset.spec;if(k){e.target.checked?selectedSpectra.add(k):selectedSpectra.delete(k);updateBandPanel()}};
 $('selectMatches').onclick=()=>{for(const [k] of matchedGroups())selectedSpectra.add(k);renderMatches()};$('unselect').onclick=()=>{selectedSpectra.clear();bandOverrides.clear();renderMatches()};
 function inRange(p,a,b){const n=number(p.centre_cm_1);return n!==null&&n>=a&&n<=b}
-function updateBandPanel(){const groups=approvedGroups(),valid=[...selectedSpectra].filter(k=>groups.has(k));$('selectionCount').textContent=valid.length+' selected spectra';$('bandPanel').classList.toggle('peak-hidden',!valid.length);renderBands()}
+let lastAutoCompound=null;
+function applyCompoundBands(compound){
+const ranges={Na2SO4:[960,1000],Na2CO3:[1040,1090],K2CO3:[1040,1090],Na3PO4:[850,1000],NaF:[-1,-1]};
+if(!Object.prototype.hasOwnProperty.call(ranges,compound))return;
+const [low,high]=ranges[compound];$('numMin').value=low;$('numMax').value=high;
+bandOverrides.clear();lastAutoCompound=compound;
+}
+function updateBandPanel(){const groups=approvedGroups(),valid=[...selectedSpectra].filter(k=>groups.has(k));
+const compounds=[...new Set(valid.map(k=>groups.get(k)[0].compound))];
+const selectedCompound=compounds.length===1?compounds[0]:null;
+const filterCompound=$('compoundFilter').value;
+const desired=selectedCompound||(!valid.length?filterCompound:null);
+if(desired && desired!==lastAutoCompound)applyCompoundBands(desired);
+if(!desired)lastAutoCompound=null;
+$('selectionCount').textContent=valid.length+' selected spectra';$('bandPanel').classList.toggle('peak-hidden',!valid.length);renderBands()}
 function bounds(){return {na:number($('numMin').value),nb:number($('numMax').value),da:number($('denMin').value),db:number($('denMax').value)}}
 function chosen(k,p,side,b){const override=bandOverrides.get(k+'|'+side+'|'+p.id);return override===undefined?inRange(p,side==='num'?b.na:b.da,side==='num'?b.nb:b.db):override}
 function renderBands(){const groups=approvedGroups(),b=bounds(),keys=[...selectedSpectra].filter(k=>groups.has(k));$('bands').innerHTML=keys.map(k=>{const g=groups.get(k);return '<details class="peak-band"><summary>'+esc(specLabel(g[0]))+' — '+g.length+' peaks</summary><div class="peak-band-grid">'+['num','den'].map(side=>'<div><h3>'+(side==='num'?'Numerator':'Denominator')+'</h3><div class="peak-band-list">'+g.map(p=>'<label><input type="checkbox" data-band="'+side+'" data-spec="'+esc(k)+'" data-peak="'+esc(p.id)+'" '+(chosen(k,p,side,b)?'checked':'')+'>'+esc(p.curve_name)+' · '+esc(p.centre_cm_1)+' cm⁻¹ · area '+esc(p.area)+'</label>').join('')+'</div></div>').join('')+'</div></details>'}).join('')}
@@ -76,7 +90,7 @@ function groupName(r){const mode=$('groupMode').value;return [r.compound,mode===
 function linear(rows){const n=rows.length,sx=rows.reduce((s,r)=>s+r.mol,0),sy=rows.reduce((s,r)=>s+r.ratio,0),sxx=rows.reduce((s,r)=>s+r.mol*r.mol,0),sxy=rows.reduce((s,r)=>s+r.mol*r.ratio,0),d=n*sxx-sx*sx;if(n<2||Math.abs(d)<1e-12)return null;const slope=(n*sxy-sx*sy)/d,intercept=(sy-slope*sx)/n,mean=sy/n,ss=rows.reduce((s,r)=>s+(r.ratio-mean)**2,0),rss=rows.reduce((s,r)=>s+(r.ratio-(intercept+slope*r.mol))**2,0);return {slope,intercept,r2:ss?1-rss/ss:null}}
 function plotResults(){if(!window.Plotly){$('plot').textContent='Plotting library unavailable (internet connection required).';return}const groups=new Map(),traces=[],notes=[];for(const r of resultRows.filter(r=>Number.isFinite(r.mol)&&Number.isFinite(r.ratio))){const key=groupName(r);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r)}
 for(const [name,rows] of groups){rows.sort((a,b)=>a.mol-b.mol);const mode=$('fitMode').value;traces.push({type:'scatter',mode:mode==='connect'?'lines+markers':'markers',name,x:rows.map(r=>r.mol),y:rows.map(r=>r.ratio),text:rows.map(r=>r.spectrum),hovertemplate:'%{text}<br>%{x} mol/kg<br>ratio %{y:.5g}<extra></extra>',marker:{size:10}});if(mode==='linear'){const fit=linear(rows);if(fit){const xs=[rows[0].mol,rows[rows.length-1].mol],ys=xs.map(x=>fit.intercept+fit.slope*x);traces.push({type:'scatter',mode:'lines',name:name+' fit',x:xs,y:ys,showlegend:false,line:{dash:'dash'},hoverinfo:'skip'});notes.push(name+': y = '+fit.slope.toPrecision(4)+'x + '+fit.intercept.toPrecision(4)+(fit.r2!==null?' · R² = '+fit.r2.toFixed(3):''))}else notes.push(name+': insufficient distinct concentrations for regression')}}
-Plotly.react('plot',traces,{xaxis:{title:'Concentration (mol/kg)',rangemode:'tozero'},yaxis:{title:'Peak area ratio',rangemode:'tozero'},legend:{orientation:'h',y:-0.25},margin:{t:25,r:25,b:105,l:78},hovermode:'closest'},{responsive:true,displaylogo:false});$('fitNotes').textContent=notes.join(' | ')+(resultRows.some(r=>r.ratio===null)?' · Missing-band or zero-denominator spectra omitted from plot; listed below.':'')}
+Plotly.react('plot',traces,{xaxis:{title:'Concentration (mol/kg)',rangemode:'tozero'},yaxis:{title:'Peak area ratio',rangemode:'tozero'},legend:{orientation:'h',y:-0.25},height:520,margin:{t:25,r:25,b:105,l:78},hovermode:'closest'},{responsive:true,displaylogo:false});$('fitNotes').textContent=notes.join(' | ')+(resultRows.some(r=>r.ratio===null)?' · Missing-band or zero-denominator spectra omitted from plot; listed below.':'')}
 $('makePlot').onclick=calculate;$('fitMode').onchange=()=>{if(resultRows.length)plotResults()};$('groupMode').onchange=()=>{if(resultRows.length)plotResults()};
 $('exportResults').onclick=()=>{const cols=['spectrum','compound','mol','phase','condition','temp','num','den','ratio','note','numerator_peaks','denominator_peaks'];const csv=[cols.join(','),...resultRows.map(r=>cols.map(c=>'"'+String(Array.isArray(r[c])?r[c].join(';'):r[c]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');download('raman_peak_ratios.csv',csv,'text/csv')};
 $('exportPlot').onclick=()=>{if(window.Plotly)Plotly.downloadImage('plot',{format:'png',filename:'raman_peak_ratios',width:1200,height:750})};
