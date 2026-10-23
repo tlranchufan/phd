@@ -38,13 +38,13 @@
 <h3>Area ratios</h3><div class="scroll"><table><thead><tr><th>Name</th><th>Numerator</th><th>Denominator</th><th></th></tr></thead><tbody id="aiRatios"></tbody></table></div>
 </div>
 <div class="panel"><h2>Find spectra</h2><p class="hint">Same linked filters and add/remove workflow as the Spectrum Plotter on page 2. Filtering changes the available matches, not the spectra already selected.</p>
-<div class="grid3"><div class="field"><label>Compound</label><select id="aiCompound"></select></div><div class="field"><label>Phase</label><select id="aiPhase"></select></div><div class="field"><label>mol/kg</label><select id="aiMol"></select></div><div class="field"><label>Temperature °C</label><select id="aiTemp"></select></div><div class="field"><label>Condition</label><select id="aiCondition"></select></div></div>
+<div class="grid3"><div class="field"><label>Compound</label><select id="aiCompound"></select></div><div class="field"><label>Phase</label><select id="aiPhase"></select></div><div class="field"><label>mol/kg</label><select id="aiMol"></select></div><div class="field"><label>Temperature °C</label><select id="aiTemp"></select><input id="aiTempSearch" type="text" placeholder="Search temperature, e.g. 20 or 250" style="margin-top:6px" aria-label="Search spectra by temperature"></div><div class="field"><label>Condition</label><select id="aiCondition"></select></div></div>
 <div class="toolbar" style="margin-top:10px"><button id="aiAddMatches">＋ Add all matching</button><button id="aiRemoveAll">Remove all selected</button></div>
 <div id="aiMatches" class="spectraList" style="max-height:300px"></div>
 <h3>Selected spectra & fitting groups</h3><p class="hint">Only selected spectra are integrated and plotted. Change the fitting-group name to control which points share a fitted line; use None for no regression.</p>
 <div class="toolbar"><label class="checkrow"><input type="checkbox" id="aiSelectedOnly" checked> Table/export: selected spectra only</label></div>
 <div class="scroll" style="max-height:320px;overflow:auto"><table><thead><tr><th>Remove</th><th>Fitting group</th><th>Filename</th><th>mol/kg</th><th>Phase</th><th>Temperature</th><th>Condition</th></tr></thead><tbody id="aiSelection"></tbody></table></div>
-<h3>Graph settings</h3><div class="grid3"><div class="field"><label>Plot Y</label><select id="aiY"></select></div><div class="field"><label>Plot X</label><select id="aiX"><option value="mol">mol/kg</option><option value="temp">Temperature (°C)</option><option value="index">Spectrum index</option></select></div><div class="field"><label>Colour by</label><select id="aiGroup"><option value="compound">Compound</option><option value="condition">Condition</option><option value="phase">Phase</option><option value="none">None</option></select></div></div>
+<h3>Graph settings</h3><div class="grid3"><div class="field"><label>Plot Y</label><select id="aiY"></select></div><div class="field"><label>Plot X</label><select id="aiX"><option value="mol">mol/kg</option><option value="temp">Temperature (°C)</option><option value="index">Spectrum index</option></select></div><div class="field"><label>Colour by</label><select id="aiGroup"><option value="compound">Compound</option><option value="condition">Condition</option><option value="phase">Phase</option><option value="temp">Temperature (°C)</option><option value="none">None</option></select></div></div>
 <div id="aiFits" class="hint" style="margin:8px 0"></div><div id="aiStatus" class="status" style="margin-top:12px">Load spectra in the Compiler to begin.</div>
 <div id="aiPlot" class="plotbox" style="margin-top:12px;min-height:380px"></div>
 </div>
@@ -378,18 +378,19 @@ $('savePlotCsv').onclick=()=>{let {series}=plotData(),rows=[['filename','raman_s
 const ai={selected:new Set(),choices:new Map(),regions:[{name:'OH low',lo:2800,hi:3300},{name:'OH high',lo:3300,hi:3800}],ratios:[{name:'OH low / high',num:0,den:1}],rows:[],cols:[]};
 function aiOptions(id,vals){const e=$(id),v=e.value;e.innerHTML='<option value="">All</option>'+vals.map(z=>'<option value="'+esc(z)+'">'+esc(z)+'</option>').join('');e.value=vals.includes(v)?v:'';}
 const AI_FILTERS=[['aiCompound','compound'],['aiPhase','phase'],['aiMol','mol'],['aiTemp','temp'],['aiCondition','condition']];
+function aiTempMatches(s){const q=$('aiTempSearch').value.trim().toLowerCase();if(!q)return true;const v=String(s.meta?.temp??'').toLowerCase();return v.includes(q);}
 function aiFilterSelect(){
  for(let pass=0;pass<2;pass++){
   for(const [id,key] of AI_FILTERS){
    const old=$(id).value;
-   const matches=spectra.filter(s=>s.keep!==false&&AI_FILTERS.every(([otherId,k])=>otherId===id||!$(otherId).value||String(s.meta?.[k]??'')===$(otherId).value));
+   const matches=spectra.filter(s=>s.keep!==false&&aiTempMatches(s)&&AI_FILTERS.every(([otherId,k])=>otherId===id||!$(otherId).value||String(s.meta?.[k]??'')===$(otherId).value));
    const values=[...new Set(matches.map(s=>String(s.meta?.[key]??'')).filter(Boolean))].sort((a,b)=>key==='mol'||key==='temp'?Number(a)-Number(b):a.localeCompare(b));
    $(id).replaceChildren(new Option('All',''),...values.map(v=>new Option(v,v)));$(id).value=values.includes(old)?old:'';
   }
  }
  aiRenderMatches();
 }
-function aiMatchingSpectra(){return spectra.filter(s=>s.keep!==false&&AI_FILTERS.every(([id,key])=>!$(id).value||String(s.meta?.[key]??'')===$(id).value));}
+function aiMatchingSpectra(){return spectra.filter(s=>s.keep!==false&&aiTempMatches(s)&&AI_FILTERS.every(([id,key])=>!$(id).value||String(s.meta?.[key]??'')===$(id).value));}
 function aiRenderMatches(){const a=aiMatchingSpectra();$('aiMatches').innerHTML=a.length?a.map(s=>'<div class="item"><button data-aiadd="'+s.id+'" '+(ai.selected.has(s.id)?'disabled':'')+'>＋</button><span class="name">'+esc(label(s))+'<br><small>'+esc(s.name)+'</small></span></div>').join(''):'<p class="hint">No spectra match these filters.</p>';}
 function aiRenderEditors(){
  $('aiRegions').innerHTML=ai.regions.map((r,i)=>'<tr><td><input data-ri="'+i+'" data-rk="name" value="'+esc(r.name)+'"></td><td><input type="number" step="any" data-ri="'+i+'" data-rk="lo" value="'+r.lo+'"></td><td><input type="number" step="any" data-ri="'+i+'" data-rk="hi" value="'+r.hi+'"></td><td><button data-rdel="'+i+'">Remove</button></td></tr>').join('');
@@ -427,7 +428,7 @@ function aiPlot(){
  const pts=ai.rows.filter(z=>aiChoice(z.s).selected).map(z=>({x:xk==='index'?z.index:Number(z.s.meta?.[xk]),y:z.vals[yi],g:gk==='none'?'All':String(z.s.meta?.[gk]??'Unknown'),fit:aiChoice(z.s).group.trim(),name:z.s.name})).filter(o=>Number.isFinite(o.x)&&Number.isFinite(o.y));
  if(!pts.length){div.innerHTML='<p class="hint" style="padding:20px">No plottable data for the selected axes.</p>';return;}
  const w=940,h=390,l=82,r=22,t=25,b=57;let minX=Math.min(...pts.map(z=>z.x)),maxX=Math.max(...pts.map(z=>z.x)),minY=Math.min(...pts.map(z=>z.y)),maxY=Math.max(...pts.map(z=>z.y));if(minX===maxX){minX-=1;maxX+=1;}if(minY===maxY){minY-=1;maxY+=1;}const pad=(maxY-minY)*.07;minY-=pad;maxY+=pad;
- const sx=x=>l+(x-minX)/(maxX-minX)*(w-l-r),sy=y=>h-b-(y-minY)/(maxY-minY)*(h-t-b);const groups=[...new Set(pts.map(z=>z.g))];
+ const sx=x=>l+(x-minX)/(maxX-minX)*(w-l-r),sy=y=>h-b-(y-minY)/(maxY-minY)*(h-t-b);const groups=[...new Set(pts.map(z=>z.g))].sort((a,b)=>gk==='temp'?Number(a)-Number(b):a.localeCompare(b));
  const fitNames=[...new Set(pts.map(z=>z.fit).filter(z=>z&&z.toLowerCase()!=='none'))],fits=[];
  for(const name of fitNames){const q=pts.filter(z=>z.fit===name);if(q.length<2)continue;let n=q.length,mx=q.reduce((a,z)=>a+z.x,0)/n,my=q.reduce((a,z)=>a+z.y,0)/n,xx=q.reduce((a,z)=>a+(z.x-mx)**2,0);if(xx===0)continue;let slope=q.reduce((a,z)=>a+(z.x-mx)*(z.y-my),0)/xx,intercept=my-slope*mx,yy=q.reduce((a,z)=>a+(z.y-my)**2,0),err=q.reduce((a,z)=>a+(z.y-slope*z.x-intercept)**2,0),r2=yy>0?1-err/yy:NaN;fits.push({name,slope,intercept,r2,n,x0:Math.min(...q.map(z=>z.x)),x1:Math.max(...q.map(z=>z.x))});}
  const integerTicks=(xk==='mol'||xk==='index')&&maxX-minX<=25?Array.from({length:Math.floor(maxX)-Math.ceil(minX)+1},(_,i)=>i+Math.ceil(minX)):[];const xTicks=integerTicks.map(x=>'<line x1="'+sx(x)+'" x2="'+sx(x)+'" y1="'+(h-b)+'" y2="'+(h-b+5)+'" stroke="#52647e"/><text x="'+sx(x)+'" y="'+(h-b+20)+'" text-anchor="middle" font-size="13">'+x+'</text>').join('');
@@ -455,6 +456,7 @@ $('aiSelection').addEventListener('click',e=>{const id=e.target.dataset.airemove
 $('aiSelection').addEventListener('input',e=>{const id=e.target.dataset.aigroup;if(id!==undefined){const c=ai.choices.get(Number(id));if(c)c.group=e.target.value;aiPlot();}});
 $('aiSelectedOnly').addEventListener('change',aiTable);
 for(const [id] of AI_FILTERS)$(id).addEventListener('change',aiFilterSelect);
+$('aiTempSearch').addEventListener('input',aiFilterSelect);
 
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(t=>t.classList.toggle('active',t===b));document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active',s.id===b.dataset.tab));renderPlot();if(b.dataset.tab==='integration')aiCalculate();});renderMeta();
 </script></body></html>
