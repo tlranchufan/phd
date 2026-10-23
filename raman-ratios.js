@@ -62,10 +62,10 @@ function renderMatches(){const rows=matchedGroups();$('spectrumList').innerHTML=
 for(const [id] of selectors)$(id).onchange=renderMatches;
 $('spectrumList').onchange=e=>{const k=e.target.dataset.spec;if(k){e.target.checked?selectedSpectra.add(k):selectedSpectra.delete(k);updateBandPanel()}};
 $('selectMatches').onclick=()=>{for(const [k] of matchedGroups())selectedSpectra.add(k);renderMatches()};$('unselect').onclick=()=>{selectedSpectra.clear();bandOverrides.clear();renderMatches()};
-function inRange(p,a,b){const n=number(p.centre_cm_1);return n!==null&&n>=a&&n<=b}
+function inRange(p,a,b){const n=number(p.centre_cm_1);return n!==null&&a!==null&&b!==null&&n>=a&&n<=b}
 let lastAutoCompound=null;
 function applyCompoundBands(compound){
-const ranges={Na2SO4:[960,1000],Na2CO3:[1040,1090],K2CO3:[1040,1090],Na3PO4:[850,1000],NaF:[-1,-1]};
+const ranges={Na2SO4:[960,1000],Na2CO3:[1040,1090],K2CO3:[1040,1090],Na3PO4:[850,1000],NaF:[null,null]};
 if(!Object.prototype.hasOwnProperty.call(ranges,compound))return;
 const [low,high]=ranges[compound];$('numMin').value=low;$('numMax').value=high;
 bandOverrides.clear();lastAutoCompound=compound;
@@ -74,7 +74,7 @@ function updateBandPanel(){const groups=approvedGroups(),valid=[...selectedSpect
 const compounds=[...new Set(valid.map(k=>groups.get(k)[0].compound))];
 const selectedCompound=compounds.length===1?compounds[0]:null;
 const filterCompound=$('compoundFilter').value;
-const desired=selectedCompound||(!valid.length?filterCompound:null);
+const desired=filterCompound||selectedCompound;
 if(desired && desired!==lastAutoCompound)applyCompoundBands(desired);
 if(!desired)lastAutoCompound=null;
 $('selectionCount').textContent=valid.length+' selected spectra';$('bandPanel').classList.toggle('peak-hidden',!valid.length);renderBands()}
@@ -83,7 +83,7 @@ function chosen(k,p,side,b){const override=bandOverrides.get(k+'|'+side+'|'+p.id
 function renderBands(){const groups=approvedGroups(),b=bounds(),keys=[...selectedSpectra].filter(k=>groups.has(k));$('bands').innerHTML=keys.map(k=>{const g=groups.get(k);return '<details class="peak-band"><summary>'+esc(specLabel(g[0]))+' — '+g.length+' peaks</summary><div class="peak-band-grid">'+['num','den'].map(side=>'<div><h3>'+(side==='num'?'Numerator':'Denominator')+'</h3><div class="peak-band-list">'+g.map(p=>'<label><input type="checkbox" data-band="'+side+'" data-spec="'+esc(k)+'" data-peak="'+esc(p.id)+'" '+(chosen(k,p,side,b)?'checked':'')+'>'+esc(p.curve_name)+' · '+esc(p.centre_cm_1)+' cm⁻¹ · area '+esc(p.area)+'</label>').join('')+'</div></div>').join('')+'</div></details>'}).join('')}
 for(const id of ['numMin','numMax','denMin','denMax'])$(id).onchange=()=>{bandOverrides.clear();renderBands()};
 $('bands').onchange=e=>{const el=e.target;if(el.dataset.band)bandOverrides.set(el.dataset.spec+'|'+el.dataset.band+'|'+el.dataset.peak,el.checked)};
-function calculate(){const groups=approvedGroups(),b=bounds();if([b.na,b.nb,b.da,b.db].some(x=>x===null)||b.na>b.nb||b.da>b.db){alert('Enter valid band boundaries.');return}resultRows=[];for(const k of selectedSpectra){const g=groups.get(k);if(!g)continue;const p=g[0],num=g.filter(x=>chosen(k,x,'num',b)),den=g.filter(x=>chosen(k,x,'den',b));const goodNum=num.length&&num.every(x=>number(x.area)!==null),goodDen=den.length&&den.every(x=>number(x.area)!==null);const a=goodNum?num.reduce((s,x)=>s+Number(x.area),0):null,d=goodDen?den.reduce((s,x)=>s+Number(x.area),0):null;let note='';if(!num.length)note+='No numerator peaks. ';if(!den.length)note+='No denominator peaks. ';if(num.length&&!goodNum)note+='Invalid numerator area. ';if(den.length&&!goodDen)note+='Invalid denominator area. ';if(d===0)note+='Denominator zero. ';resultRows.push({spectrum:specLabel(p),compound:p.compound,mol:p.concentration_mol_kg,phase:p.phase,condition:p.measurement_condition,temp:p.temperature_c,num:a,den:d,ratio:a!==null&&d!==null&&d!==0?a/d:null,numerator_peaks:num.map(x=>x.id),denominator_peaks:den.map(x=>x.id),note:note.trim()})}
+function calculate(){const groups=approvedGroups(),b=bounds();if((b.na===null)!==(b.nb===null)||b.da===null||b.db===null||(b.na!==null&&b.na>b.nb)||b.da>b.db){alert('Enter valid band boundaries. Leave both numerator bounds blank for manual peak selection.');return}resultRows=[];for(const k of selectedSpectra){const g=groups.get(k);if(!g)continue;const p=g[0],num=g.filter(x=>chosen(k,x,'num',b)),den=g.filter(x=>chosen(k,x,'den',b));const goodNum=num.length&&num.every(x=>number(x.area)!==null),goodDen=den.length&&den.every(x=>number(x.area)!==null);const a=goodNum?num.reduce((s,x)=>s+Number(x.area),0):null,d=goodDen?den.reduce((s,x)=>s+Number(x.area),0):null;let note='';if(!num.length)note+='No numerator peaks. ';if(!den.length)note+='No denominator peaks. ';if(num.length&&!goodNum)note+='Invalid numerator area. ';if(den.length&&!goodDen)note+='Invalid denominator area. ';if(d===0)note+='Denominator zero. ';resultRows.push({spectrum:specLabel(p),compound:p.compound,mol:p.concentration_mol_kg,phase:p.phase,condition:p.measurement_condition,temp:p.temperature_c,num:a,den:d,ratio:a!==null&&d!==null&&d!==0?a/d:null,numerator_peaks:num.map(x=>x.id),denominator_peaks:den.map(x=>x.id),note:note.trim()})}
 $('resultsPanel').classList.remove('peak-hidden');$('resultBody').innerHTML=resultRows.sort((a,b)=>(Number(a.mol)-Number(b.mol))).map(r=>'<tr>'+['spectrum','compound','mol','phase','condition','temp','num','den','ratio','note'].map(f=>'<td>'+esc(typeof r[f]==='number'?Number(r[f].toPrecision(7)):r[f])+'</td>').join('')+'</tr>').join('');
 plotResults()}
 function groupName(r){const mode=$('groupMode').value;return [r.compound,mode==='temperature'||mode==='both'?r.temp+'°C':null,mode==='condition'||mode==='both'?r.condition:null].filter(x=>x!==null).join(' · ')}
