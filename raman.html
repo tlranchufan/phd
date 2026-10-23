@@ -33,7 +33,7 @@
 <section class="section" id="integration">
 <div class="panel"><h2>Section-specific area integration</h2><p class="hint">Uses spectra loaded in the Compiler, including compiled Raman Studio JSON files. Areas are calculated from the actual spectral points using trapezoidal integration and exact interpolated boundaries, not fitted-peak centres.</p>
 <div class="toolbar"><button id="aiAddRegion">＋ Add region</button><button id="aiAddRatio">＋ Add area ratio</button><button id="aiCompute" class="primary">Calculate areas</button><button id="aiExport">Export results CSV</button></div>
-<div class="grid3" style="margin-top:12px"><div class="field"><label>Intensity data</label><select id="aiSource"><option value="corrected">Cosmic-ray corrected</option><option value="raw">Raw</option></select></div><div class="field"><label>Baseline correction</label><select id="aiBaseline"><option value="linear">Linear endpoint baseline per region</option><option value="none">No baseline subtraction</option></select></div><div class="field"><label>Negative baseline-subtracted values</label><select id="aiNegative"><option value="retain">Retain signed areas</option><option value="clip">Clip below zero</option></select></div></div>
+<div class="grid3" style="margin-top:12px"><div class="field"><label>Intensity data</label><select id="aiSource"><option value="corrected">Cosmic-ray corrected</option><option value="raw">Raw</option></select></div><div class="field"><label>Baseline correction</label><select id="aiBaseline"><option value="shared">Shared O–H baseline (2800–3800 cm⁻¹)</option><option value="none">No baseline subtraction</option><option value="linear">Linear endpoint baseline per region (legacy; may give negative areas)</option></select></div><div class="field"><label>Negative baseline-subtracted values</label><select id="aiNegative"><option value="retain">Retain signed areas (flag negative results)</option><option value="clip">Clip below zero (diagnostic only)</option></select></div></div>
 <h3>Integration regions (cm⁻¹)</h3><div class="scroll"><table><thead><tr><th>Name</th><th>Start</th><th>End</th><th></th></tr></thead><tbody id="aiRegions"></tbody></table></div>
 <h3>Area ratios</h3><div class="scroll"><table><thead><tr><th>Name</th><th>Numerator</th><th>Denominator</th><th></th></tr></thead><tbody id="aiRatios"></tbody></table></div>
 </div>
@@ -397,14 +397,20 @@ function aiRenderEditors(){
  const opts=ai.regions.map((r,i)=>'<option value="'+i+'">'+esc(r.name)+'</option>');
  $('aiRatios').innerHTML=ai.ratios.map((r,i)=>'<tr><td><input data-qi="'+i+'" data-qk="name" value="'+esc(r.name)+'"></td><td><select data-qi="'+i+'" data-qk="num">'+opts.map((o,j)=>o.replace('value="'+j+'"','value="'+j+'"'+(j===r.num?' selected':''))).join('')+'</select></td><td><select data-qi="'+i+'" data-qk="den">'+opts.map((o,j)=>o.replace('value="'+j+'"','value="'+j+'"'+(j===r.den?' selected':''))).join('')+'</select></td><td><button data-qdel="'+i+'">Remove</button></td></tr>').join('');
 }
+function aiInterpolate(x,y,t){let l=0,h=x.length-1;while(h-l>1){let m=(l+h)>>1;if(x[m]<=t)l=m;else h=m;}return y[l]+(y[h]-y[l])*(t-x[l])/(x[h]-x[l]);}
 function aiArea(x,y,a,b,baseline,negative){
  if(!Number.isFinite(a)||!Number.isFinite(b)||a>=b||x.length!==y.length||x.length<2||a<x[0]||b>x[x.length-1])return NaN;
  // Binary-search an interpolation segment; spectra are ascending on import.
- const at=t=>{let l=0,h=x.length-1;while(h-l>1){let m=(l+h)>>1;if(x[m]<=t)l=m;else h=m;}let f=(t-x[l])/(x[h]-x[l]);return y[l]+(y[h]-y[l])*f;};
+ const at=t=>aiInterpolate(x,y,t);
  let ya=at(a),yb=at(b),xs=[a],ys=[ya];
+ // The O–H halves must share one baseline; do not use the intensity at
+ // 3300 cm⁻¹ as a baseline anchor inside the broad water band.
+ let shared=baseline==='shared'&&a>=2800&&b<=3800&&x[0]<=2800&&x[x.length-1]>=3800;
+ let anchorA=shared?2800:a,anchorB=shared?3800:b;
+ let anchorYa=shared?at(anchorA):ya,anchorYb=shared?at(anchorB):yb;
  for(let i=0;i<x.length;i++)if(x[i]>a&&x[i]<b){xs.push(x[i]);ys.push(y[i]);}
  xs.push(b);ys.push(yb);let sum=0;
- for(let i=1;i<xs.length;i++){let u=ys[i-1],v=ys[i];if(baseline==='linear'){u-=ya+(yb-ya)*(xs[i-1]-a)/(b-a);v-=ya+(yb-ya)*(xs[i]-a)/(b-a);}
+ for(let i=1;i<xs.length;i++){let u=ys[i-1],v=ys[i];if(baseline==='linear'||shared){u-=anchorYa+(anchorYb-anchorYa)*(xs[i-1]-anchorA)/(anchorB-anchorA);v-=anchorYa+(anchorYb-anchorYa)*(xs[i]-anchorA)/(anchorB-anchorA);}
  if(negative==='clip'){u=Math.max(0,u);v=Math.max(0,v);}sum+=(xs[i]-xs[i-1])*(u+v)/2;}return sum;
 }
 function aiDefaultGroup(s){let m=s.meta||{};if(String(m.condition||'').toLowerCase()==='th')return 'Th';if(String(m.phase||'').toLowerCase()==='liquid'&&Number(m.temp)===20)return 'Liquid 20C';return 'None';}
@@ -420,7 +426,8 @@ function aiCalculate(){
  $('aiHead').innerHTML='<tr>'+keys.map(k=>'<th>'+esc(k)+'</th>').join('')+'</tr>';
  ai.rows.forEach(z=>aiChoice(z.s));aiSelectionRender();aiRenderMatches();aiTable();
  let old=$('aiY').value;$('aiY').innerHTML=ai.cols.map((v,i)=>'<option value="'+i+'">'+esc(v)+'</option>').join('');$('aiY').value=ai.cols[Number(old)]!==undefined?old:String(ai.cols.length-1);
- $('aiStatus').textContent=ai.rows.length+' spectra analysed. Out-of-range regions return blank cells. Areas in counts·cm⁻¹; ratios dimensionless.';
+ const nNeg=ai.rows.reduce((n,z)=>n+z.vals.slice(0,ai.regions.length).filter(v=>Number.isFinite(v)&&v<0).length,0);
+ $('aiStatus').textContent=ai.rows.length+' spectra analysed. '+(nNeg?nNeg+' negative integrated areas: check baseline and spectrum background. ':'')+'Out-of-range regions return blank cells. Areas in counts·cm⁻¹; ratios dimensionless. Shared O–H baseline uses the same 2800 and 3800 cm⁻¹ anchors for both halves.';
  aiPlot();
 }
 function aiPlot(){
