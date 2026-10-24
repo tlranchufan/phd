@@ -90,10 +90,48 @@ $('resultsPanel').classList.remove('peak-hidden');resultRows.sort((a,b)=>conditi
 plotResults()}
 function groupName(r){const mode=$('groupMode').value;return [r.compound,mode==='temperature'||mode==='both'?r.temp+'°C':null,mode==='condition'||mode==='both'?conditionLabel(r):null].filter(x=>x!==null).join(' · ')}
 function linear(rows){const n=rows.length,sx=rows.reduce((s,r)=>s+r.mol,0),sy=rows.reduce((s,r)=>s+r.ratio,0),sxx=rows.reduce((s,r)=>s+r.mol*r.mol,0),sxy=rows.reduce((s,r)=>s+r.mol*r.ratio,0),d=n*sxx-sx*sx;if(n<2||Math.abs(d)<1e-12)return null;const slope=(n*sxy-sx*sy)/d,intercept=(sy-slope*sx)/n,mean=sy/n,ss=rows.reduce((s,r)=>s+(r.ratio-mean)**2,0),rss=rows.reduce((s,r)=>s+(r.ratio-(intercept+slope*r.mol))**2,0);return {slope,intercept,r2:ss?1-rss/ss:null}}
-function plotResults(){if(!window.Plotly){$('plot').textContent='Plotting library unavailable (internet connection required).';return}const groups=new Map(),traces=[],notes=[];for(const r of resultRows.filter(r=>Number.isFinite(r.mol)&&Number.isFinite(r.ratio))){const key=groupName(r);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r)}
-for(const [name,rows] of groups){rows.sort((a,b)=>a.mol-b.mol);const mode=$('fitMode').value;const label=conditionLabel(rows[0]);const color=label==='Th'?'#2563eb':label==='20 °C'?'#dc2626':'#64748b';const fit=mode==='linear'?linear(rows):null;const equation=fit?' · y = '+fit.slope.toPrecision(3)+'x '+(fit.intercept<0?'− ':'+ ')+Math.abs(fit.intercept).toPrecision(3):'';traces.push({type:'scatter',mode:mode==='connect'?'lines+markers':'markers',name:name+equation,x:rows.map(r=>r.mol),y:rows.map(r=>r.ratio),text:rows.map(r=>r.spectrum),hovertemplate:'%{text}<br>%{x} mol/kg<br>ratio %{y:.5g}<extra></extra>',marker:{size:10,color},line:{color,width:2}});if(mode==='linear'){if(fit){const xs=[rows[0].mol,rows[rows.length-1].mol],ys=xs.map(x=>fit.intercept+fit.slope*x);traces.push({type:'scatter',mode:'lines',name:name+' fit',x:xs,y:ys,showlegend:false,line:{color,width:2.5},hoverinfo:'skip'});notes.push(name+': y = '+fit.slope.toPrecision(4)+'x + '+fit.intercept.toPrecision(4)+(fit.r2!==null?' · R² = '+fit.r2.toFixed(3):''))}else notes.push(name+': insufficient distinct concentrations for regression')}}
-Plotly.react('plot',traces,{xaxis:{title:{text:'<b>Concentration (mol/kg)</b>',font:{size:19}},tickfont:{size:13},rangemode:'tozero'},yaxis:{title:{text:'<b>Peak area ratio</b>',font:{size:19},standoff:14},tickfont:{size:13},rangemode:'tozero'},legend:{orientation:'h',y:-0.3,font:{size:12}},height:540,margin:{t:25,r:25,b:125,l:90},hovermode:'closest'},{responsive:true,displaylogo:false});$('fitNotes').textContent=notes.join(' | ')+(resultRows.some(r=>r.ratio===null)?' · Missing-band or zero-denominator spectra omitted from plot; listed below.':'')}
-$('makePlot').onclick=calculate;$('fitMode').onchange=()=>{if(resultRows.length)plotResults()};$('groupMode').onchange=()=>{if(resultRows.length)plotResults()};
+function quadratic(rows){
+const unique=new Set(rows.map(r=>r.mol));if(unique.size<3)return null;
+const xs=rows.map(r=>r.mol),xmin=Math.min(...xs),xmax=Math.max(...xs),span=xmax-xmin;if(!span)return null;
+const transformed=rows.map(r=>({x:2*(r.mol-xmin)/span-1,y:r.ratio}));
+const sum=(fn)=>transformed.reduce((acc,r)=>acc+fn(r),0),n=rows.length;
+const x1=sum(r=>r.x),x2=sum(r=>r.x**2),x3=sum(r=>r.x**3),x4=sum(r=>r.x**4);
+const y0=sum(r=>r.y),y1=sum(r=>r.x*r.y),y2=sum(r=>r.x*r.x*r.y);
+const mat=[[n,x1,x2,y0],[x1,x2,x3,y1],[x2,x3,x4,y2]];
+for(let k=0;k<3;k++){let pivot=k;for(let i=k+1;i<3;i++)if(Math.abs(mat[i][k])>Math.abs(mat[pivot][k]))pivot=i;
+if(Math.abs(mat[pivot][k])<1e-10)return null;
+[mat[k],mat[pivot]]=[mat[pivot],mat[k]];
+const d=mat[k][k];for(let j=k;j<4;j++)mat[k][j]/=d;
+for(let i=0;i<3;i++)if(i!==k){const q=mat[i][k];for(let j=k;j<4;j++)mat[i][j]-=q*mat[k][j]}}
+const [C,B,A]=mat.map(r=>r[3]),scale=2/span,shift=-1-scale*xmin;
+const a=A*scale**2,b=2*A*scale*shift+B*scale,c=A*shift**2+B*shift+C;
+const mean=y0/n,ss=rows.reduce((v,r)=>v+(r.ratio-mean)**2,0),rss=rows.reduce((v,r)=>v+(r.ratio-(a*r.mol*r.mol+b*r.mol+c))**2,0);
+return {a,b,c,r2:ss>0?1-rss/ss:null};
+}
+function plotResults(){
+if(!window.Plotly){$('plot').textContent='Plotting library unavailable (internet connection required).';return}
+const groups=new Map(),traces=[],notes=[];
+for(const r of resultRows.filter(r=>Number.isFinite(r.mol)&&Number.isFinite(r.ratio))){const key=groupName(r);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r)}
+const curve=$('fitCurve').checked,straight=$('fitLine').checked;
+for(const [name,rows] of groups){
+rows.sort((a,b)=>a.mol-b.mol);
+const label=conditionLabel(rows[0]),color=label==='Th'?'#2563eb':label==='20 °C'?'#dc2626':'#64748b';
+const fit=curve?quadratic(rows):straight?linear(rows):null;
+let equation='';
+if(fit){if(curve)equation=' · y = '+fit.a.toPrecision(3)+'x² '+(fit.b<0?'− ':'+ ')+Math.abs(fit.b).toPrecision(3)+'x '+(fit.c<0?'− ':'+ ')+Math.abs(fit.c).toPrecision(3);
+else equation=' · y = '+fit.slope.toPrecision(3)+'x '+(fit.intercept<0?'− ':'+ ')+Math.abs(fit.intercept).toPrecision(3)}
+traces.push({type:'scatter',mode:'markers',name:name+equation,x:rows.map(r=>r.mol),y:rows.map(r=>r.ratio),text:rows.map(r=>r.spectrum),hovertemplate:'%{text}<br>%{x} mol/kg<br>ratio %{y:.5g}<extra></extra>',marker:{size:10,color}});
+if(fit){const xmin=rows[0].mol,xmax=rows[rows.length-1].mol;
+const xs=curve?Array.from({length:100},(_,i)=>xmin+(xmax-xmin)*i/99):[xmin,xmax];
+const ys=xs.map(x=>curve?fit.a*x*x+fit.b*x+fit.c:fit.intercept+fit.slope*x);
+traces.push({type:'scatter',mode:'lines',name:name+' fit',x:xs,y:ys,showlegend:false,line:{color,width:2.5},hoverinfo:'skip'});
+notes.push(name+': '+equation.replace(' · ','')+(fit.r2!==null?' · R² = '+fit.r2.toFixed(3):''))}
+else if(curve||straight)notes.push(name+': '+(curve?'requires three distinct concentrations for a quadratic fit':'requires two distinct concentrations for a linear fit'));
+}
+Plotly.react('plot',traces,{xaxis:{title:{text:'<b>Concentration (mol/kg)</b>',font:{size:19}},tickfont:{size:13},rangemode:'tozero'},yaxis:{title:{text:'<b>Peak area ratio</b>',font:{size:19},standoff:14},tickfont:{size:13},rangemode:'tozero'},legend:{orientation:'h',y:-0.3,font:{size:12}},height:540,margin:{t:25,r:25,b:125,l:90},hovermode:'closest'},{responsive:true,displaylogo:false});
+$('fitNotes').textContent=notes.join(' | ')+(resultRows.some(r=>r.ratio===null)?' · Missing-band or zero-denominator spectra omitted from plot; listed below.':'')
+}
+$('makePlot').onclick=calculate;$('fitLine').onchange=()=>{if($('fitLine').checked)$('fitCurve').checked=false;if(resultRows.length)plotResults()};$('fitCurve').onchange=()=>{if($('fitCurve').checked)$('fitLine').checked=false;if(resultRows.length)plotResults()};$('groupMode').onchange=()=>{if(resultRows.length)plotResults()};
 $('exportResults').onclick=()=>{const cols=['spectrum','compound','mol','phase','condition','temp','num','den','ratio','note','numerator_peaks','denominator_peaks'];const csv=[cols.join(','),...resultRows.map(r=>cols.map(c=>'"'+String(Array.isArray(r[c])?r[c].join(';'):r[c]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');download('raman_peak_ratios.csv',csv,'text/csv')};
 $('exportPlot').onclick=()=>{if(window.Plotly)Plotly.downloadImage('plot',{format:'png',filename:'raman_peak_ratios',width:1200,height:750})};
 refresh();
