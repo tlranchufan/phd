@@ -17,9 +17,9 @@ select,input[type=file] { width:100%; margin-top:.45rem; padding:.7rem; border:1
 fieldset { border:1px solid var(--line); border-radius:10px; padding:.8rem; }
 .check-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(115px,1fr)); gap:.35rem .75rem; max-height:210px; overflow:auto; }
 .check-grid label { font-weight:450; display:flex; gap:.4rem; align-items:center; }
-button { border:1px solid var(--line); border-radius:9px; padding:.72rem 1rem; cursor:pointer; font-weight:700; background:white; }
-button.primary { color:white; border-color:var(--accent); background:var(--accent); }
-button:hover { filter:brightness(.97); }
+button { border:1px solid #cad4e1; background:#fff; color:#253a55; border-radius:8px; padding:9px 12px; font:inherit; font-size:13px; cursor:pointer; }
+button.primary { background:#2463d3; color:#fff; border-color:#2463d3; }
+button:hover:not(:disabled) { background:#eff4fa; }\nbutton.primary:hover:not(:disabled) { background:#174eaf; border-color:#174eaf; }
 .actions { display:flex; gap:.7rem; flex-wrap:wrap; }
 .status,.hint { color:var(--muted); margin-top:.8rem; }
 .section-head { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; }
@@ -161,3 +161,5 @@ code { overflow-wrap:anywhere; }
   .builder-options{grid-template-columns:1fr}
 }
 \n/* Hide empty status slots until an action reports a result. */\n.status:empty { display:none; }\n
+/* Consistent focus feedback across every tool page. */
+button:focus-visible, .site-nav a:focus-visible { outline:2px solid #2463d3; outline-offset:2px; }
