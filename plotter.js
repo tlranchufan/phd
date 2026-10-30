@@ -931,7 +931,7 @@ function clearWorkbook() {
   $('yMax').value='';
   $('yBoundsControls').classList.add('hidden');
   $('loadPlotFile').disabled=true; $('clearPlotFile').disabled=true;
-  $('plotConfig').classList.add('hidden'); $('exportCard').classList.add('hidden');
+  $('plotConfig').classList.add('hidden'); $('graphControls').classList.add('hidden'); $('exportCard').classList.add('hidden');
   $('plotFileSummary').innerHTML=''; $('plotLoadStatus').textContent='Choose a workbook, then click Continue.';
   $('plotStatus').textContent=''; $('plotStatus').classList.add('hidden'); $('plotWarnings').classList.add('hidden');
   $('creeResultsCard').classList.add('hidden');
@@ -949,6 +949,7 @@ function renderLoaded() {
 
   $('plotFileSummary').innerHTML = `<div class="file-item"><div class="file-meta"><div class="file-name">${state.file.name}</div><div class="file-detail">Sheet: ${state.file.sheetName} · ${state.avgRows.length} avg rows · ${state.elements.length} detected element columns</div></div></div>`;
   $('plotConfig').classList.remove('hidden');
+  $('graphControls').classList.remove('hidden');
   $('exportCard').classList.remove('hidden');
   $('yBoundsControls').classList.remove('hidden');
   $('clearPlotFile').disabled=false;
@@ -2333,7 +2334,7 @@ $('downloadPdf').addEventListener('click',exportPdf);
 $('downloadHtml').addEventListener('click',exportHtml);
 $('downloadCreeCsv').addEventListener('click',downloadCreeResultsCsv);
 
-document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>el.addEventListener('change',()=>{
+document.querySelectorAll('#plotConfig input, #plotConfig select, #graphControls input, #graphControls select').forEach(el=>el.addEventListener('change',()=>{
   const plotMode = radioValue('plotMode');
 
   if (el.id === 'elements') {
@@ -2382,6 +2383,11 @@ document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>e
   $('elementSelectionControls').classList.toggle('hidden', ratio || compareHost);
   $('xAxisControls').classList.toggle('hidden', compare || cree);
   $('offsetControls').classList.toggle('hidden', compare || cree);
+
+  $('simpleGraphControls').classList.toggle('hidden', !simple);
+  $('ratioGraphControls').classList.toggle('hidden', !ratio);
+  $('compareGraphControls').classList.toggle('hidden', !compare);
+  $('creeGraphControls').classList.toggle('hidden', !cree);
   $('yBoundsControls').classList.toggle('hidden', compareHost || !state.file);
 
   if (!cree) renderCreeResults([]);

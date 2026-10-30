@@ -83,6 +83,14 @@
       <section id="plotConfig" class="card hidden">
         <h2>2. Configure plot</h2>
 
+        <fieldset>
+          <legend>Plot type</legend>
+          <label class="inline-option"><input type="radio" name="plotMode" value="simple" checked> Simple</label>
+          <label class="inline-option"><input type="radio" name="plotMode" value="ratio"> Element/element ratio</label>
+          <label class="inline-option"><input type="radio" name="plotMode" value="compare"> Compare</label>
+          <label class="inline-option"><input type="radio" name="plotMode" value="cree"> CREE vs solute (log–log)</label>
+        </fieldset>
+
         <div class="quick-filter-grid">
           <label>Compound filter
             <select id="filterCompound"><option value="">All compounds</option></select>
@@ -108,11 +116,26 @@
           <button id="clearCodes" type="button">Clear</button>
         </div>
 
+        <div id="elementSelectionControls">
+          <label>Elements to show
+            <select id="elements" multiple size="10"></select>
+          </label>
+          <p id="elementAvailabilityHint" class="hint" style="display:none"></p>
+          <div class="actions mini-actions">
+            <button id="selectAllElements" type="button">Select all</button>
+            <button id="clearElements" type="button">Clear</button>
+          </div>
+        </div>
+
+        <fieldset>
+          <legend>Normalization</legend>
+          <label class="toggle"><input id="normalizeChondrite" type="checkbox"> Normalize to CI chondrite — McDonough &amp; Sun (1995)</label>
+        </fieldset>
+
         <fieldset id="xAxisControls">
           <legend>X axis</legend>
           <label class="inline-option"><input type="radio" name="xunit" value="Mol/Kg" checked> Mol/Kg</label>
           <label class="inline-option"><input type="radio" name="xunit" value="wt%"> wt%</label>
-          
         </fieldset>
 
         <fieldset id="offsetControls">
@@ -129,46 +152,7 @@
             <input id="offsetSpread" type="range" min="0.02" max="0.30" step="0.01" value="0.12">
             <span id="offsetSpreadValue">12%</span> of nearest x-spacing
           </label>
-          
         </fieldset>
-
-        <fieldset>
-          <legend>Plot type</legend>
-          <label class="inline-option"><input type="radio" name="plotMode" value="simple" checked> Simple</label>
-          <label class="inline-option"><input type="radio" name="plotMode" value="ratio"> Element/element ratio</label>
-          <label class="inline-option"><input type="radio" name="plotMode" value="compare"> Compare</label>
-          <label class="inline-option"><input type="radio" name="plotMode" value="cree"> CREE vs solute (log–log)</label>
-        </fieldset>
-
-        <label class="toggle"><input id="showIsotopeLabels" type="checkbox" checked> Show isotope numbers in graph labels (e.g. Y89 instead of Y)</label>
-
-        <fieldset>
-          <legend>Plot appearance</legend>
-          <label>Text size
-            <input id="plotTextSize" type="range" min="8" max="28" step="1" value="14">
-            <span id="plotTextSizeValue">14 px</span>
-          </label>
-          <label class="toggle"><input id="thickGridLines" type="checkbox"> Thick grid lines</label>
-          <label class="toggle"><input id="thickAxes" type="checkbox"> Thick axes</label>
-          
-        </fieldset>
-
-        <fieldset>
-          <legend>Normalization</legend>
-          <label class="toggle"><input id="normalizeChondrite" type="checkbox"> Normalize to CI chondrite — McDonough &amp; Sun (1995)</label>
-          
-        </fieldset>
-
-        <div id="elementSelectionControls">
-          <label>Elements to show
-            <select id="elements" multiple size="10"></select>
-          </label>
-          <p id="elementAvailabilityHint" class="hint" style="display:none"></p>
-          <div class="actions mini-actions">
-            <button id="selectAllElements" type="button">Select all</button>
-            <button id="clearElements" type="button">Clear</button>
-          </div>
-        </div>
 
         <div id="simpleControls">
           <fieldset>
@@ -176,13 +160,9 @@
             <label class="inline-option"><input type="radio" name="yMode" value="ppm" checked> ppm</label>
             <label class="inline-option"><input type="radio" name="yMode" value="mol"> Element (mol/kg)</label>
           </fieldset>
-
           <label class="toggle"><input id="facetElements" type="checkbox"> Facet by element</label>
-          <label class="toggle"><input id="logY" type="checkbox"> Log10 y-axis</label>
-          <label class="toggle"><input id="showErr" type="checkbox" checked> Show avg ± standard deviation</label>
           <label class="toggle"><input id="facetCompounds" type="checkbox"> Facet by compound</label>
         </div>
-
 
         <div id="compareControls" class="hidden">
           <fieldset>
@@ -253,24 +233,16 @@
                 <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="paired" checked> Paired / dumbbell</label>
                 <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="fold"> Fold change</label>
               </fieldset>
-              
             </div>
-
-            <label class="toggle"><input id="compareShowErr" type="checkbox" checked> Show error bars (± standard deviation)</label>
-            <label class="toggle"><input id="compareLogY" type="checkbox"> Log10 value axis</label>
           </fieldset>
         </div>
-
 
         <div id="creeControls" class="hidden">
           <fieldset>
             <legend>CREE–solute power-law fit</legend>
-            
-            
             <label class="toggle"><input id="creeFacetElements" type="checkbox" checked> Facet by element</label>
             <label class="toggle"><input id="creeShowFit" type="checkbox" checked> Show fitted power-law line</label>
             <label class="toggle"><input id="creeShowLineLabels" type="checkbox" checked> Show element + n beside fitted line</label>
-            <label class="toggle"><input id="creeShowErr" type="checkbox" checked> Show transformed avg ± standard deviation</label>
             <label class="toggle"><input id="creeShowEquation" type="checkbox" checked> Include n and R² in legend labels</label>
           </fieldset>
         </div>
@@ -287,14 +259,62 @@
             <label class="inline-option"><input type="radio" name="ratioBasis" value="ww" checked> weight/weight</label>
             <label class="inline-option"><input type="radio" name="ratioBasis" value="mm"> mol/mol</label>
           </fieldset>
-          <label class="toggle"><input id="ratioShowErr" type="checkbox" checked> Show propagated error bars (± standard deviation)</label>
-          
-          <label class="toggle"><input id="ratioLogY" type="checkbox"> Log10 y-axis</label>
         </div>
       </section>
 
+      <section id="graphControls" class="card hidden">
+        <h2>3. Graph controls</h2>
+
+        <label class="toggle"><input id="showIsotopeLabels" type="checkbox" checked> Show isotope numbers in graph labels (e.g. Y89 instead of Y)</label>
+
+        <fieldset>
+          <legend>Appearance</legend>
+          <label>Text size
+            <input id="plotTextSize" type="range" min="8" max="28" step="1" value="14">
+            <span id="plotTextSizeValue">14 px</span>
+          </label>
+          <label class="toggle"><input id="thickGridLines" type="checkbox"> Thick grid lines</label>
+          <label class="toggle"><input id="thickAxes" type="checkbox"> Thick axes</label>
+        </fieldset>
+
+        <div id="simpleGraphControls">
+          <label class="toggle"><input id="logY" type="checkbox"> Log10 y-axis</label>
+          <label class="toggle"><input id="showErr" type="checkbox" checked> Show avg ± standard deviation</label>
+        </div>
+
+        <div id="ratioGraphControls" class="hidden">
+          <label class="toggle"><input id="ratioLogY" type="checkbox"> Log10 y-axis</label>
+          <label class="toggle"><input id="ratioShowErr" type="checkbox" checked> Show propagated error bars (± standard deviation)</label>
+        </div>
+
+        <div id="compareGraphControls" class="hidden">
+          <label class="toggle"><input id="compareLogY" type="checkbox"> Log10 value axis</label>
+          <label class="toggle"><input id="compareShowErr" type="checkbox" checked> Show error bars (± standard deviation)</label>
+        </div>
+
+        <div id="creeGraphControls" class="hidden">
+          <label class="toggle"><input id="creeShowErr" type="checkbox" checked> Show transformed avg ± standard deviation</label>
+        </div>
+
+        <fieldset id="yBoundsControls">
+          <legend>Axis bounds</legend>
+          <div class="axis-bound-grid">
+            <label>Y minimum
+              <input id="yMin" type="number" step="any" placeholder="Auto">
+            </label>
+            <label>Y maximum
+              <input id="yMax" type="number" step="any" placeholder="Auto">
+            </label>
+          </div>
+          <div class="actions mini-actions">
+            <button id="applyYBounds" class="primary" type="button">Apply Y bounds</button>
+            <button id="autoYBounds" type="button">Auto Y</button>
+          </div>
+        </fieldset>
+      </section>
+
       <section id="exportCard" class="card hidden">
-        <h2>3. Export</h2>
+        <h2>4. Export</h2>
         <label>File name
           <input id="plotName" type="text" value="laicpms_plot">
         </label>
@@ -319,23 +339,6 @@
             <div id="plotStatus" class="status hidden" aria-live="polite"></div>
           </div>
           <button id="resetZoom" type="button" disabled>Reset zoom</button>
-        </div>
-
-        <div id="yBoundsControls" class="subcard hidden">
-          <h3>Manual Y-axis bounds</h3>
-          <p id="yBoundsHint" class="hint" style="display:none"></p>
-          <div class="axis-bound-grid">
-            <label>Y minimum
-              <input id="yMin" type="number" step="any" placeholder="Auto">
-            </label>
-            <label>Y maximum
-              <input id="yMax" type="number" step="any" placeholder="Auto">
-            </label>
-          </div>
-          <div class="actions mini-actions">
-            <button id="applyYBounds" class="primary" type="button">Apply Y bounds</button>
-            <button id="autoYBounds" type="button">Auto Y</button>
-          </div>
         </div>
 
         <div id="plot" class="plot-surface"></div>
@@ -376,6 +379,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261031-clean-plot-ui"></script>
+  <script defer src="./plotter.js?v=20261031-reordered-controls"></script>
 </body>
 </html>
