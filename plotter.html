@@ -13,8 +13,33 @@
       gap: .75rem;
       align-items: end;
     }
+    .quick-filter-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+      gap: .75rem;
+      margin-bottom: 12px;
+      width: 100%;
+      min-width: 0;
+    }
+    .plot-controls,
+    .plot-controls .card,
+    .plot-controls fieldset,
+    .plot-controls label,
+    .quick-filter-grid > label {
+      min-width: 0;
+    }
+    .plot-controls select,
+    .plot-controls input {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .quick-filter-grid select {
+      width: 100%;
+      min-width: 0;
+    }
     @media (max-width: 620px) {
       .axis-bound-grid { grid-template-columns: 1fr; }
+      .quick-filter-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -58,9 +83,17 @@
       <section id="plotConfig" class="card hidden">
         <h2>2. Configure plot</h2>
 
-        <div class="grid two" style="margin-bottom:12px">
+        <div class="quick-filter-grid">
           <label>Compound filter
             <select id="filterCompound"><option value="">All compounds</option></select>
+          </label>
+          <label>Host mineral filter
+            <select id="filterHost">
+              <option value="">All hosts</option>
+              <option value="Quartz">Quartz</option>
+              <option value="Corundum">Corundum</option>
+              <option value="Calcite">Calcite</option>
+            </select>
           </label>
           <label>Mol/Kg filter
             <select id="filterMolKg"><option value="">All concentrations</option></select>
@@ -154,28 +187,49 @@
         <div id="compareControls" class="hidden">
           <fieldset>
             <legend>Compare settings</legend>
-            
+
+            <fieldset>
+              <legend>Compare quantity</legend>
+              <label class="inline-option"><input type="radio" name="compareMode" value="elements" checked> Elements</label>
+              <label class="inline-option"><input type="radio" name="compareMode" value="ratio"> Element/element ratio</label>
+            </fieldset>
 
             <label>Common Mol/Kg
               <select id="compareMolKg"></select>
             </label>
             <p id="compareMolHint" class="hint" style="display:none"></p>
 
-            <label>Element order (left → right)
-              <select id="compareElementOrder" size="8"></select>
-            </label>
-            
-            <div class="actions mini-actions">
-              <button id="moveCompareElementLeft" type="button">← Move left</button>
-              <button id="moveCompareElementRight" type="button">Move right →</button>
-              <button id="resetCompareElementOrder" type="button">Reset order</button>
+            <div id="compareElementControls">
+              <label>Element order (left → right)
+                <select id="compareElementOrder" size="8"></select>
+              </label>
+
+              <div class="actions mini-actions">
+                <button id="moveCompareElementLeft" type="button">← Move left</button>
+                <button id="moveCompareElementRight" type="button">Move right →</button>
+                <button id="resetCompareElementOrder" type="button">Reset order</button>
+              </div>
+
+              <fieldset>
+                <legend>Y-axis quantity</legend>
+                <label class="inline-option"><input type="radio" name="compareYMode" value="ppm" checked> ppm</label>
+                <label class="inline-option"><input type="radio" name="compareYMode" value="mol"> Element (mol/kg)</label>
+              </fieldset>
             </div>
 
-            <fieldset>
-              <legend>Y-axis quantity</legend>
-              <label class="inline-option"><input type="radio" name="compareYMode" value="ppm" checked> ppm</label>
-              <label class="inline-option"><input type="radio" name="compareYMode" value="mol"> Element (mol/kg)</label>
-            </fieldset>
+            <div id="compareRatioControls" class="hidden">
+              <label>Numerator element
+                <select id="compareNumerator"></select>
+              </label>
+              <label>Denominator element
+                <select id="compareDenominator"></select>
+              </label>
+              <fieldset>
+                <legend>Ratio basis</legend>
+                <label class="inline-option"><input type="radio" name="compareRatioBasis" value="ww" checked> weight/weight</label>
+                <label class="inline-option"><input type="radio" name="compareRatioBasis" value="mm"> mol/mol</label>
+              </fieldset>
+            </div>
 
             <label class="toggle"><input id="compareShowErr" type="checkbox" checked> Show error bars (± standard deviation)</label>
             <label class="toggle"><input id="compareLogY" type="checkbox"> Log10 y-axis</label>
@@ -297,6 +351,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261019-compound-mol-filters"></script>
+  <script defer src="./plotter.js?v=20261031-compare-host-defaults"></script>
 </body>
 </html>

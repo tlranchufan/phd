@@ -293,24 +293,59 @@ function uniqueNumericValues(values) {
   return out.sort((a, b) => a - b);
 }
 
+function hostFromCode(code) {
+  const value = String(code ?? '').trim();
+  if (/^CC/i.test(value)) return 'Calcite';
+  if (/^C/i.test(value)) return 'Corundum';
+  return 'Quartz';
+}
+
+function elementWithSymbol(elements, symbol) {
+  return elements.find(element => elemSymbol(element).toLowerCase() === String(symbol).toLowerCase()) || null;
+}
+
+function preferredDefaultElements(eligible) {
+  const preferred = ['La','Nd','Yb','Y']
+    .map(symbol => elementWithSymbol(eligible, symbol))
+    .filter(Boolean);
+  return preferred.length ? [...new Set(preferred)] : eligible.slice(0, Math.min(4, eligible.length));
+}
+
+function defaultRatioPair(eligible) {
+  const numerator = elementWithSymbol(eligible, 'La') || eligible[0] || null;
+  const denominator =
+    elementWithSymbol(eligible, 'Yb') ||
+    eligible.find(element => element !== numerator) ||
+    null;
+  return {numerator, denominator};
+}
+
+function compareSubmode() {
+  return radioValue('compareMode') || 'elements';
+}
+
 
 function filteredAvgRows() {
   const compound = $('filterCompound').value;
+  const host = $('filterHost').value;
   const mol = $('filterMolKg').value;
   return state.avgRows.filter(row =>
     (!compound || String(row.Compound ?? '').trim() === compound) &&
+    (!host || hostFromCode(row.Code) === host) &&
     (!mol || (num(row['Mol/Kg']) !== null && sameNumericValue(num(row['Mol/Kg']), Number(mol))))
   );
 }
 function updateQuickFilters({reset=false} = {}) {
-  const compoundSelect=$('filterCompound'), molSelect=$('filterMolKg');
+  const compoundSelect=$('filterCompound'), hostSelect=$('filterHost'), molSelect=$('filterMolKg');
   const prevCompound=reset?'':compoundSelect.value;
+  const prevHost=reset?'':hostSelect.value;
   const prevMol=reset?'':molSelect.value;
   const compounds=[...new Set(state.avgRows.map(r=>String(r.Compound ?? '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const concentrations=uniqueNumericValues(state.avgRows.map(r=>num(r['Mol/Kg'])));
   compoundSelect.replaceChildren(new Option('All compounds',''),...compounds.map(c=>new Option(c,c)));
   molSelect.replaceChildren(new Option('All concentrations',''),...concentrations.map(m=>new Option(formatMolKg(m),String(m))));
   compoundSelect.value=compounds.includes(prevCompound)?prevCompound:'';
+  hostSelect.value=['Quartz','Corundum','Calcite'].includes(prevHost)?prevHost:'';
   molSelect.value=concentrations.some(m=>String(m)===prevMol)?prevMol:'';
 }
 function updateFilteredCodeChoices() {
@@ -683,38 +718,59 @@ function updateElementChoices({initial=false, autoSelectIfEmpty=false} = {}) {
 
   const codes = new Set(selectedValues($('codes')));
   const eligible = eligibleElementsForCodes(codes);
+  const plotMode = radioValue('plotMode');
+  const currentCompareMode = compareSubmode();
 
   const previousElements = selectedValues($('elements'));
   const retainedElements = previousElements.filter(element => eligible.includes(element));
 
   let selectedElements = retainedElements;
   if ((initial || autoSelectIfEmpty) && !selectedElements.length) {
-    selectedElements = eligible.slice(0, Math.min(6, eligible.length));
+    selectedElements =
+      plotMode === 'cree'
+        ? eligible.slice(0, Math.min(6, eligible.length))
+        : preferredDefaultElements(eligible);
   }
 
   setOptions($('elements'), eligible, selectedElements);
 
+  const ratioDefaults = defaultRatioPair(eligible);
+
   const previousNumerator = $('numerator').value;
+  const numerator = eligible.includes(previousNumerator)
+    ? previousNumerator
+    : ratioDefaults.numerator;
   const previousDenominator = $('denominator').value;
+  const denominator = eligible.includes(previousDenominator) && previousDenominator !== numerator
+    ? previousDenominator
+    : (ratioDefaults.denominator !== numerator
+        ? ratioDefaults.denominator
+        : eligible.find(element => element !== numerator) || null);
 
-  const numeratorSelection = eligible.includes(previousNumerator)
-    ? [previousNumerator]
-    : eligible.slice(0, 1);
+  setOptions($('numerator'), eligible, numerator ? [numerator] : []);
+  setOptions($('denominator'), eligible, denominator ? [denominator] : []);
 
-  let denominatorSelection = eligible.includes(previousDenominator)
-    ? [previousDenominator]
-    : [];
+  const previousCompareNumerator = $('compareNumerator').value;
+  const compareNumerator = eligible.includes(previousCompareNumerator)
+    ? previousCompareNumerator
+    : ratioDefaults.numerator;
+  const previousCompareDenominator = $('compareDenominator').value;
+  const compareDenominator = eligible.includes(previousCompareDenominator) && previousCompareDenominator !== compareNumerator
+    ? previousCompareDenominator
+    : (ratioDefaults.denominator !== compareNumerator
+        ? ratioDefaults.denominator
+        : eligible.find(element => element !== compareNumerator) || null);
 
-  if (!denominatorSelection.length) {
-    denominatorSelection = eligible.filter(element => element !== numeratorSelection[0]).slice(0, 1);
+  setOptions($('compareNumerator'), eligible, compareNumerator ? [compareNumerator] : []);
+  setOptions($('compareDenominator'), eligible, compareDenominator ? [compareDenominator] : []);
+
+  if (initial) {
+    const defaults = preferredDefaultElements(eligible).filter(element => selectedElements.includes(element));
+    state.compareElementOrder = [...defaults, ...selectedElements.filter(element => !defaults.includes(element))];
   }
-
-  setOptions($('numerator'), eligible, numeratorSelection);
-  setOptions($('denominator'), eligible, denominatorSelection);
 
   const hint = $('elementAvailabilityHint');
   if (hint) {
-    const plotMode = radioValue('plotMode');
     if (!codes.size) {
       hint.textContent = 'Select at least one Code to make element choices available.';
     } else if (plotMode === 'compare' && codes.size < 2) {
@@ -728,7 +784,9 @@ function updateElementChoices({initial=false, autoSelectIfEmpty=false} = {}) {
           ? 'No element has at least two positive concentration points at positive Mol/Kg for the selected Codes.'
           : 'No element columns contain numeric avg values for the selected Codes.';
     } else if (plotMode === 'compare') {
-      hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} available in every selected Code at ${formatMolKg(num($('compareMolKg').value))} Mol/Kg.`;
+      hint.textContent = currentCompareMode === 'ratio'
+        ? `${eligible.length} element${eligible.length === 1 ? '' : 's'} are available for ratio comparison in every selected Code at ${formatMolKg(num($('compareMolKg').value))} Mol/Kg.`
+        : `${eligible.length} element${eligible.length === 1 ? '' : 's'} available in every selected Code at ${formatMolKg(num($('compareMolKg').value))} Mol/Kg.`;
     } else if (plotMode === 'cree') {
       hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} have enough positive data for at least one log–log fit across the selected Codes.`;
     } else {
@@ -1154,15 +1212,121 @@ function buildComparePlot(codes) {
   const molkg = num($('compareMolKg').value);
   if (molkg === null) throw new Error('The selected Codes do not share a Mol/Kg value.');
 
-  const selectedElements = orderedCompareElements();
-  if (!selectedElements.length) throw new Error('Select at least one eligible element to compare.');
-
-  const yMode = radioValue('compareYMode');
+  const mode = compareSubmode();
   const normalize = chondriteNormalizationEnabled();
   const showErr = $('compareShowErr').checked;
   const logY = $('compareLogY').checked;
   const warnings = [];
   const traces = [];
+
+  if (mode === 'ratio') {
+    const numerator = $('compareNumerator').value;
+    const denominator = $('compareDenominator').value;
+    if (!numerator || !denominator) throw new Error('Choose numerator and denominator elements for Compare.');
+    if (numerator === denominator) throw new Error('Choose two different elements for the Compare ratio.');
+
+    const basis = radioValue('compareRatioBasis');
+    const numAw = atomicWeights[elemSymbol(numerator)];
+    const denAw = atomicWeights[elemSymbol(denominator)];
+    const ciNum = normalize ? chondritePpmForElement(numerator) : null;
+    const ciDen = normalize ? chondritePpmForElement(denominator) : null;
+
+    if (normalize && (ciNum === null || ciDen === null)) {
+      throw new Error('A CI chondrite reference value is missing for the selected Compare ratio.');
+    }
+    if (!normalize && basis === 'mm' && (!numAw || !denAw)) {
+      throw new Error('An atomic weight is missing for the selected Compare ratio.');
+    }
+
+    const ratioLabel = `${elementDisplayName(numerator)}/${elementDisplayName(denominator)}`;
+    let missingRatioSd = 0;
+    let skippedZero = 0;
+
+    [...codes].forEach(code => {
+      const matchingRows = compareRowsForCode(code, molkg);
+      if (!matchingRows.length) return;
+
+      if (matchingRows.length > 1) {
+        warnings.push(
+          `${code} has ${matchingRows.length} avg rows at ${formatMolKg(molkg)} Mol/Kg; the first row containing both ratio elements is used.`
+        );
+      }
+
+      const row = matchingRows.find(candidate =>
+        num(candidate[numerator]) !== null &&
+        num(candidate[denominator]) !== null
+      );
+      if (!row) return;
+
+      const a = num(row[numerator]);
+      const b = num(row[denominator]);
+      if (b === 0) {
+        skippedZero++;
+        return;
+      }
+
+      const factor = normalize
+        ? ciDen / ciNum
+        : (basis === 'mm' ? denAw / numAw : 1);
+      const ratio = factor * a / b;
+
+      if (logY && ratio <= 0) {
+        warnings.push(`${code} was omitted because its ${ratioLabel} ratio is not positive on a log10 axis.`);
+        return;
+      }
+
+      const sdA = num(row.__sd?.[numerator]);
+      const sdB = num(row.__sd?.[denominator]);
+      const ratioSd = (sdA === null || sdB === null)
+        ? null
+        : propagatedRatioSd(a, b, sdA, sdB, factor);
+      if (showErr && ratioSd === null) missingRatioSd++;
+
+      traces.push({
+        type:'bar',
+        name:code,
+        x:[ratioLabel],
+        y:[ratio],
+        error_y:showErr
+          ? {type:'data', array:[ratioSd ?? 0], visible:true, thickness:1.2, width:4}
+          : undefined,
+        customdata:[[
+          code,
+          row.Compound || '',
+          formatMolKg(molkg),
+          hostFromCode(code),
+          ratioSd,
+          normalize ? chondriteSourceText(numerator) : '',
+          normalize ? chondriteSourceText(denominator) : ''
+        ]],
+        hovertemplate:normalize
+          ? 'Code: %{customdata[0]}<br>Host: %{customdata[3]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>CI numerator: %{customdata[5]}<br>CI denominator: %{customdata[6]}<br>Normalized ratio: %{y:.10~f}<br>Propagated SD: %{customdata[4]:.6~g}<extra></extra>'
+          : 'Code: %{customdata[0]}<br>Host: %{customdata[3]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>Ratio: %{y:.10~f}<br>Propagated SD: %{customdata[4]:.6~g}<extra></extra>'
+      });
+    });
+
+    if (!traces.length) throw new Error('No comparable ratio values were found.');
+
+    const yLabel = normalize
+      ? `Chondrite-normalized ${ratioLabel}`
+      : `${ratioLabel} (${basis === 'mm' ? 'mol/mol' : 'w/w'})`;
+    const layout = makeLayout(['Plot'], 'Ratio', yLabel, logY);
+    layout.barmode = 'group';
+    layout.bargap = 0.18;
+    layout.bargroupgap = 0.06;
+
+    if (skippedZero) warnings.push(`${skippedZero} ratio point(s) were skipped because the denominator was zero.`);
+    if (showErr && missingRatioSd) {
+      warnings.push(`${missingRatioSd} ratio point(s) have no error bar because numerator or denominator SD is missing.`);
+    }
+
+    return {traces, layout, warnings, compareMode:'ratio', ratioLabel};
+  }
+
+  const selectedElements = orderedCompareElements();
+  if (!selectedElements.length) throw new Error('Select at least one eligible element to compare.');
+
+  const yMode = radioValue('compareYMode');
 
   [...codes].forEach(code => {
     const matchingRows = compareRowsForCode(code, molkg);
@@ -1215,33 +1379,25 @@ function buildComparePlot(codes) {
         formatMolKg(molkg),
         elementDisplayName(element),
         row.File || '',
-        normalize ? chondriteSourceText(element) : ''
+        normalize ? chondriteSourceText(element) : '',
+        hostFromCode(code)
       ]);
     });
 
     if (!x.length) return;
 
     traces.push({
-      type: 'bar',
-      name: code,
+      type:'bar',
+      name:code,
       x,
       y,
-      error_y: showErr
+      error_y:showErr
         ? {type:'data', array:errors, visible:true, thickness:1.2, width:4}
         : undefined,
       customdata,
       hovertemplate:normalize
-        ? 'Code: %{customdata[0]}<br>' +
-          'Compound: %{customdata[1]}<br>' +
-          'Mol/Kg: %{customdata[2]}<br>' +
-          'Element: %{customdata[3]}<br>' +
-          'CI reference: %{customdata[5]}<br>' +
-          'Sample / CI: %{y:.10~f}<extra></extra>'
-        : 'Code: %{customdata[0]}<br>' +
-          'Compound: %{customdata[1]}<br>' +
-          'Mol/Kg: %{customdata[2]}<br>' +
-          'Element: %{customdata[3]}<br>' +
-          'Y: %{y:.10~f}<extra></extra>'
+        ? 'Code: %{customdata[0]}<br>Host: %{customdata[6]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>Element: %{customdata[3]}<br>CI reference: %{customdata[5]}<br>Sample / CI: %{y:.10~f}<extra></extra>'
+        : 'Code: %{customdata[0]}<br>Host: %{customdata[6]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>Element: %{customdata[3]}<br>Y: %{y:.10~f}<extra></extra>'
     });
   });
 
@@ -1257,7 +1413,7 @@ function buildComparePlot(codes) {
   layout.bargap = 0.18;
   layout.bargroupgap = 0.06;
 
-  return {traces, layout, warnings};
+  return {traces, layout, warnings, compareMode:'elements'};
 }
 
 
@@ -1599,8 +1755,12 @@ function renderPlot() {
     if (plotMode === 'compare') {
       result = buildComparePlot(codes);
       const molkg = num($('compareMolKg').value);
-      const elementCount = orderedCompareElements().length;
-      statusText = `Compare: ${codes.size} Codes at ${formatMolKg(molkg)} Mol/Kg; ${elementCount} selected element${elementCount === 1 ? '' : 's'}.`;
+      if (result.compareMode === 'ratio') {
+        statusText = `Compare: ${codes.size} Codes at ${formatMolKg(molkg)} Mol/Kg; ratio = ${result.ratioLabel}.`;
+      } else {
+        const elementCount = orderedCompareElements().length;
+        statusText = `Compare: ${codes.size} Codes at ${formatMolKg(molkg)} Mol/Kg; ${elementCount} selected element${elementCount === 1 ? '' : 's'}.`;
+      }
     } else if (plotMode === 'cree') {
       result = buildCreePlot(codes);
       const fitCount = result.creeResults?.length || 0;
@@ -1745,6 +1905,7 @@ $('loadPlotFile').addEventListener('click',async()=>{
 });
 $('clearPlotFile').addEventListener('click',clearWorkbook);
 $('filterCompound').addEventListener('change',updateFilteredCodeChoices);
+$('filterHost').addEventListener('change',updateFilteredCodeChoices);
 $('filterMolKg').addEventListener('change',updateFilteredCodeChoices);
 $('selectAllCodes').addEventListener('click',()=>{
   [...$('codes').options].forEach(o=>o.selected=true);
@@ -1881,6 +2042,8 @@ document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>e
     updateCompareMolChoices();
     updateElementChoices({autoSelectIfEmpty: plotMode === 'compare' || plotMode === 'cree'});
     updateYBoundsHint();
+  } else if (el.name === 'compareMode') {
+    updateElementChoices({autoSelectIfEmpty:true});
   } else if (el.id === 'showIsotopeLabels') {
     syncCompareElementOrder();
   } else if (el.id === 'normalizeChondrite') {
@@ -1893,12 +2056,15 @@ document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>e
   const ratio = plotMode === 'ratio';
   const compare = plotMode === 'compare';
   const cree = plotMode === 'cree';
+  const compareRatio = compare && compareSubmode() === 'ratio';
 
   $('simpleControls').classList.toggle('hidden', !simple);
   $('ratioControls').classList.toggle('hidden', !ratio);
   $('compareControls').classList.toggle('hidden', !compare);
+  $('compareElementControls').classList.toggle('hidden', !compare || compareRatio);
+  $('compareRatioControls').classList.toggle('hidden', !compare || !compareRatio);
   $('creeControls').classList.toggle('hidden', !cree);
-  $('elementSelectionControls').classList.toggle('hidden', ratio);
+  $('elementSelectionControls').classList.toggle('hidden', ratio || compareRatio);
   $('xAxisControls').classList.toggle('hidden', compare || cree);
   $('offsetControls').classList.toggle('hidden', compare || cree);
 
