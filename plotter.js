@@ -2801,7 +2801,9 @@ document.querySelectorAll('#plotTypeCard input, #plotTypeCard select, #plotConfi
 
   $('simpleControls').classList.toggle('hidden', !simple);
   $('ratioControls').classList.toggle('hidden', !ratio);
-  $('compareControls').classList.toggle('hidden', !compare);
+  $('compareTypeControls').classList.toggle('hidden', !compare);
+  $('hostCompareDisplayControls').classList.toggle('hidden', !compareHost);
+  $('compareConfigControls').classList.toggle('hidden', !compare);
   $('compareElementControls').classList.toggle('hidden', !compare || compareHost);
   $('compareHostControls').classList.toggle('hidden', !compare || !compareHost);
   $('creeControls').classList.toggle('hidden', !cree);
