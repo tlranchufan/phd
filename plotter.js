@@ -933,7 +933,7 @@ function clearWorkbook() {
   $('loadPlotFile').disabled=true; $('clearPlotFile').disabled=true;
   $('plotConfig').classList.add('hidden'); $('exportCard').classList.add('hidden');
   $('plotFileSummary').innerHTML=''; $('plotLoadStatus').textContent='Choose a workbook, then click Continue.';
-  $('plotStatus').textContent='Load a workbook to begin.'; $('plotWarnings').classList.add('hidden');
+  $('plotStatus').textContent=''; $('plotStatus').classList.add('hidden'); $('plotWarnings').classList.add('hidden');
   $('creeResultsCard').classList.add('hidden');
   $('creeResultsBody').innerHTML='';
   $('downloadCreeCsv').disabled=true;
@@ -2145,7 +2145,8 @@ function renderPlot() {
       ? ` CI-normalized to ${CHONDRITE_REFERENCE_META.citation}.`
       : '';
 
-    $('plotStatus').textContent = `${statusText}${normalizationText}${yBoundText}`;
+    $('plotStatus').textContent = '';
+    $('plotStatus').classList.add('hidden');
     $('plotWarnings').textContent = warnings.join(' ');
     $('plotWarnings').classList.toggle('hidden',warnings.length===0);
 
@@ -2153,6 +2154,7 @@ function renderPlot() {
   } catch(err) {
     Plotly.purge('plot');
     $('plotStatus').textContent=`Cannot plot: ${err.message}`;
+    $('plotStatus').classList.remove('hidden');
     $('plotWarnings').textContent='';
     $('plotWarnings').classList.add('hidden');
     renderCreeResults([]);

@@ -155,7 +155,7 @@
 
         <fieldset>
           <legend>Normalization</legend>
-          <label class="toggle"><input id="normalizeChondrite" type="checkbox"> Normalize to CI chondrite — McDonough &amp; Sun (1995)</label><details class="subtle-notes"><summary>Notes</summary><p>Normalisation uses CI chondrite abundances from McDonough and Sun (1995)</p></details>
+          <label class="toggle"><input id="normalizeChondrite" type="checkbox"> Normalize to CI chondrite — McDonough &amp; Sun (1995)</label>
           
         </fieldset>
 
@@ -253,7 +253,7 @@
                 <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="paired" checked> Paired / dumbbell</label>
                 <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="fold"> Fold change</label>
               </fieldset>
-              <p class="hint">Paired view shows each experimental condition as a horizontal dumbbell, connecting Host A and Host B along the ratio axis. Fold change shows Host B / Host A for the same conditions, with a reference line at 1.</p>
+              
             </div>
 
             <label class="toggle"><input id="compareShowErr" type="checkbox" checked> Show error bars (± standard deviation)</label>
@@ -264,7 +264,7 @@
 
         <div id="creeControls" class="hidden">
           <fieldset>
-            <legend>CREE–solute power-law fit</legend><details class="subtle-notes"><summary>Notes</summary><p>Fits the relationship C = A[solute]^n using ordinary least squares on log10-transformed concentrations</p></details>
+            <legend>CREE–solute power-law fit</legend>
             
             
             <label class="toggle"><input id="creeFacetElements" type="checkbox" checked> Facet by element</label>
@@ -287,7 +287,7 @@
             <label class="inline-option"><input type="radio" name="ratioBasis" value="ww" checked> weight/weight</label>
             <label class="inline-option"><input type="radio" name="ratioBasis" value="mm"> mol/mol</label>
           </fieldset>
-          <label class="toggle"><input id="ratioShowErr" type="checkbox" checked> Show propagated error bars (± standard deviation)</label><details class="subtle-notes"><summary>Notes</summary><p>Ratio uncertainties are propagated from the standard deviations of the numerator and denominator</p></details>
+          <label class="toggle"><input id="ratioShowErr" type="checkbox" checked> Show propagated error bars (± standard deviation)</label>
           
           <label class="toggle"><input id="ratioLogY" type="checkbox"> Log10 y-axis</label>
         </div>
@@ -316,7 +316,7 @@
         <div class="section-head plot-head">
           <div>
             <h2>Plot</h2>
-            <div id="plotStatus" class="status">Load a workbook to begin.</div>
+            <div id="plotStatus" class="status hidden" aria-live="polite"></div>
           </div>
           <button id="resetZoom" type="button" disabled>Reset zoom</button>
         </div>
@@ -376,6 +376,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261031-host-category-axis-fix"></script>
+  <script defer src="./plotter.js?v=20261031-clean-plot-ui"></script>
 </body>
 </html>
