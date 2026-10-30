@@ -253,11 +253,11 @@
                 <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="paired" checked> Paired / dumbbell</label>
                 <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="fold"> Fold change</label>
               </fieldset>
-              <p class="hint">Paired view connects matching host-neutral Codes (for example NaC1 ↔ CNaC1). Fold change is Host B / Host A, with a reference line at 1.</p>
+              <p class="hint">Paired view shows each experimental condition as a horizontal dumbbell, connecting Host A and Host B along the ratio axis. Fold change shows Host B / Host A for the same conditions, with a reference line at 1.</p>
             </div>
 
             <label class="toggle"><input id="compareShowErr" type="checkbox" checked> Show error bars (± standard deviation)</label>
-            <label class="toggle"><input id="compareLogY" type="checkbox"> Log10 y-axis</label>
+            <label class="toggle"><input id="compareLogY" type="checkbox"> Log10 value axis</label>
           </fieldset>
         </div>
 
@@ -376,6 +376,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261031-host-paired-fold"></script>
+  <script defer src="./plotter.js?v=20261031-horizontal-host-compare"></script>
 </body>
 </html>

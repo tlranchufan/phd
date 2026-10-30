@@ -345,6 +345,13 @@ function hostCompareDisplay() {
   return radioValue('hostCompareDisplay') || 'paired';
 }
 
+function hostConditionLabel(row, pair, molkg) {
+  const compound = String(row?.Compound || '').trim();
+  const base = compound || pair.condition;
+  const concentration = Number.isFinite(molkg) ? ` · ${formatMolKg(molkg)} mol/kg` : '';
+  return `${base}${concentration}`;
+}
+
 function elementWithSymbol(elements, symbol) {
   return elements.find(element => elemSymbol(element).toLowerCase() === String(symbol).toLowerCase()) || null;
 }
@@ -1327,6 +1334,17 @@ function buildComparePlot(codes) {
     let validPairs = 0;
 
     if (display === 'paired') {
+      const lineTraces = [];
+      const hostAX = [];
+      const hostAY = [];
+      const hostAErrors = [];
+      const hostACustom = [];
+      const hostBX = [];
+      const hostBY = [];
+      const hostBErrors = [];
+      const hostBCustom = [];
+      const conditionOrder = [];
+
       pairs.forEach(pair => {
         const pointA = ratioPointForCode(pair.codeA, molkg, numerator, denominator, basis, normalize, {ignoreHost:true});
         const pointB = ratioPointForCode(pair.codeB, molkg, numerator, denominator, basis, normalize, {ignoreHost:true});
@@ -1335,51 +1353,121 @@ function buildComparePlot(codes) {
           return;
         }
         if (logY && (pointA.value <= 0 || pointB.value <= 0)) {
-          warnings.push(`${pair.condition} was skipped because one paired ratio is not positive on a log10 axis.`);
+          warnings.push(`${pair.condition} was skipped because one paired ratio is not positive on a log10 value axis.`);
           return;
         }
 
+        const conditionLabel = hostConditionLabel(pointA.row, pair, molkg);
         validPairs++;
+        conditionOrder.push(conditionLabel);
         if (showErr && (pointA.sd === null || pointB.sd === null)) missingErrors++;
 
-        traces.push({
+        lineTraces.push({
           type:'scatter',
-          mode:'lines+markers',
-          name:pair.condition,
-          x:[hostA, hostB],
-          y:[pointA.value, pointB.value],
-          marker:{size:12},
-          line:{width:2},
-          error_y:showErr ? {
-            type:'data',
-            array:[pointA.sd ?? 0, pointB.sd ?? 0],
-            visible:true,
-            thickness:1.2,
-            width:4
-          } : undefined,
-          customdata:[
-            [pair.codeA, pointA.row.Compound || '', formatMolKg(molkg), hostA, pointA.sd, pair.condition],
-            [pair.codeB, pointB.row.Compound || '', formatMolKg(molkg), hostB, pointB.sd, pair.condition]
-          ],
-          hovertemplate:
-            'Condition: %{customdata[5]}<br>' +
-            'Code: %{customdata[0]}<br>' +
-            'Host: %{customdata[3]}<br>' +
-            'Compound: %{customdata[1]}<br>' +
-            'Mol/Kg: %{customdata[2]}<br>' +
-            ratioLabel + ': %{y:.10~f}<br>' +
-            'Propagated SD: %{customdata[4]:.6~g}<extra></extra>'
+          mode:'lines',
+          showlegend:false,
+          hoverinfo:'skip',
+          x:[pointA.value, pointB.value],
+          y:[conditionLabel, conditionLabel],
+          line:{width:2,color:'#aeb7c2'}
         });
+
+        hostAX.push(pointA.value);
+        hostAY.push(conditionLabel);
+        hostAErrors.push(pointA.sd ?? 0);
+        hostACustom.push([
+          pair.codeA,
+          pointA.row.Compound || '',
+          formatMolKg(molkg),
+          hostA,
+          pointA.sd,
+          pair.condition
+        ]);
+
+        hostBX.push(pointB.value);
+        hostBY.push(conditionLabel);
+        hostBErrors.push(pointB.sd ?? 0);
+        hostBCustom.push([
+          pair.codeB,
+          pointB.row.Compound || '',
+          formatMolKg(molkg),
+          hostB,
+          pointB.sd,
+          pair.condition
+        ]);
       });
 
       if (!validPairs) throw new Error('No complete host pairs contained usable ratio values.');
 
-      const yLabel = normalize
+      traces.push(...lineTraces);
+      traces.push({
+        type:'scatter',
+        mode:'markers',
+        name:hostA,
+        x:hostAX,
+        y:hostAY,
+        marker:{size:12},
+        error_x:showErr ? {
+          type:'data',
+          array:hostAErrors,
+          visible:true,
+          thickness:1.2,
+          width:4
+        } : undefined,
+        customdata:hostACustom,
+        hovertemplate:
+          'Condition: %{customdata[5]}<br>' +
+          'Code: %{customdata[0]}<br>' +
+          'Host: %{customdata[3]}<br>' +
+          'Compound: %{customdata[1]}<br>' +
+          'Mol/Kg: %{customdata[2]}<br>' +
+          ratioLabel + ': %{x:.10~f}<br>' +
+          'Propagated SD: %{customdata[4]:.6~g}<extra></extra>'
+      });
+      traces.push({
+        type:'scatter',
+        mode:'markers',
+        name:hostB,
+        x:hostBX,
+        y:hostBY,
+        marker:{size:12},
+        error_x:showErr ? {
+          type:'data',
+          array:hostBErrors,
+          visible:true,
+          thickness:1.2,
+          width:4
+        } : undefined,
+        customdata:hostBCustom,
+        hovertemplate:
+          'Condition: %{customdata[5]}<br>' +
+          'Code: %{customdata[0]}<br>' +
+          'Host: %{customdata[3]}<br>' +
+          'Compound: %{customdata[1]}<br>' +
+          'Mol/Kg: %{customdata[2]}<br>' +
+          ratioLabel + ': %{x:.10~f}<br>' +
+          'Propagated SD: %{customdata[4]:.6~g}<extra></extra>'
+      });
+
+      const valueLabel = normalize
         ? `Chondrite-normalized ${ratioLabel}`
         : `${ratioLabel} (${basis === 'mm' ? 'mol/mol' : 'w/w'})`;
-      const layout = makeLayout(['Plot'], 'Host mineral', yLabel, logY);
-      layout.xaxis.categoryorder = 'array';
-      layout.xaxis.categoryarray = [hostA, hostB];
+      const layout = makeLayout(['Plot'], valueLabel, 'Condition', false);
+      layout.xaxis.type = logY ? 'log' : 'linear';
+      if (logY) {
+        layout.xaxis.dtick = 1;
+        layout.xaxis.exponentformat = 'power';
+        layout.xaxis.showexponent = 'all';
+      } else {
+        layout.xaxis.tickformat = '.10~f';
+        layout.xaxis.hoverformat = '.10~f';
+        layout.xaxis.exponentformat = 'none';
+        layout.xaxis.showexponent = 'none';
+      }
+      layout.yaxis.categoryorder = 'array';
+      layout.yaxis.categoryarray = [...conditionOrder].reverse();
+      layout.margin = {...layout.margin, l:Math.max(layout.margin?.l || 70, 150)};
+      layout.legend = {...layout.legend, orientation:'h'};
 
       if (showErr && missingErrors) {
         warnings.push(`${missingErrors} paired condition(s) have at least one missing propagated SD; the available values are still plotted.`);
@@ -1398,10 +1486,11 @@ function buildComparePlot(codes) {
       };
     }
 
-    const x = [];
-    const y = [];
-    const errors = [];
-    const customdata = [];
+    const foldX = [];
+    const foldY = [];
+    const foldErrors = [];
+    const foldCustom = [];
+    const conditionOrder = [];
 
     pairs.forEach(pair => {
       const pointA = ratioPointForCode(pair.codeA, molkg, numerator, denominator, basis, normalize, {ignoreHost:true});
@@ -1413,7 +1502,7 @@ function buildComparePlot(codes) {
 
       const fold = pointB.value / pointA.value;
       if (logY && fold <= 0) {
-        warnings.push(`${pair.condition} was skipped because its fold change is not positive on a log10 axis.`);
+        warnings.push(`${pair.condition} was skipped because its fold change is not positive on a log10 value axis.`);
         return;
       }
 
@@ -1423,10 +1512,12 @@ function buildComparePlot(codes) {
 
       if (showErr && foldSd === null) missingErrors++;
 
-      x.push(pair.condition);
-      y.push(fold);
-      errors.push(foldSd ?? 0);
-      customdata.push([
+      const conditionLabel = hostConditionLabel(pointA.row, pair, molkg);
+      foldX.push(fold);
+      foldY.push(conditionLabel);
+      conditionOrder.push(conditionLabel);
+      foldErrors.push(foldSd ?? 0);
+      foldCustom.push([
         pair.codeA,
         pair.codeB,
         hostA,
@@ -1438,58 +1529,69 @@ function buildComparePlot(codes) {
       ]);
     });
 
-    if (!x.length) throw new Error('No complete host pairs contained usable values for fold change.');
+    if (!foldX.length) throw new Error('No complete host pairs contained usable values for fold change.');
 
     traces.push({
       type:'scatter',
       mode:'markers',
       name:`${hostB} / ${hostA}`,
-      x,
-      y,
+      x:foldX,
+      y:foldY,
       marker:{size:12},
-      error_y:showErr ? {
+      error_x:showErr ? {
         type:'data',
-        array:errors,
+        array:foldErrors,
         visible:true,
         thickness:1.2,
         width:4
       } : undefined,
-      customdata,
+      customdata:foldCustom,
       hovertemplate:
         'Condition: %{customdata[7]}<br>' +
         hostA + ' Code: %{customdata[0]}<br>' +
         hostB + ' Code: %{customdata[1]}<br>' +
         hostA + ' ' + ratioLabel + ': %{customdata[4]:.10~f}<br>' +
         hostB + ' ' + ratioLabel + ': %{customdata[5]:.10~f}<br>' +
-        'Fold change (' + hostB + '/' + hostA + '): %{y:.10~f}<br>' +
+        'Fold change (' + hostB + '/' + hostA + '): %{x:.10~f}<br>' +
         'Propagated SD: %{customdata[6]:.6~g}<extra></extra>'
     });
 
-    const layout = makeLayout(
-      ['Plot'],
-      'Condition',
-      `${hostB} / ${hostA} fold change in ${ratioLabel}`,
-      logY
-    );
+    const valueLabel = `${hostB} / ${hostA} fold change in ${ratioLabel}`;
+    const layout = makeLayout(['Plot'], valueLabel, 'Condition', false);
+    layout.xaxis.type = logY ? 'log' : 'linear';
+    if (logY) {
+      layout.xaxis.dtick = 1;
+      layout.xaxis.exponentformat = 'power';
+      layout.xaxis.showexponent = 'all';
+    } else {
+      layout.xaxis.tickformat = '.10~f';
+      layout.xaxis.hoverformat = '.10~f';
+      layout.xaxis.exponentformat = 'none';
+      layout.xaxis.showexponent = 'none';
+    }
+    layout.yaxis.categoryorder = 'array';
+    layout.yaxis.categoryarray = [...conditionOrder].reverse();
+    layout.margin = {...layout.margin, l:Math.max(layout.margin?.l || 70, 150)};
     layout.shapes = (layout.shapes || []).concat({
       type:'line',
-      xref:'paper',
-      x0:0,
+      xref:'x',
+      x0:1,
       x1:1,
-      yref:'y',
-      y0:1,
+      yref:'paper',
+      y0:0,
       y1:1,
       line:{width:1.5,dash:'dash'}
     });
     layout.annotations = (layout.annotations || []).concat({
       text:'No change = 1',
-      xref:'paper',
+      xref:'x',
       x:1,
-      yref:'y',
+      yref:'paper',
       y:1,
       showarrow:false,
-      xanchor:'right',
-      yanchor:'bottom'
+      xanchor:'left',
+      yanchor:'top',
+      xshift:5
     });
 
     if (showErr && missingErrors) {
@@ -1505,7 +1607,7 @@ function buildComparePlot(codes) {
       ratioLabel,
       hostA,
       hostB,
-      pairCount:x.length
+      pairCount:foldX.length
     };
   }
 
@@ -1998,6 +2100,8 @@ function renderPlot() {
         const cols=Math.ceil(Math.sqrt(count));
         const facetRows=Math.ceil(count/cols);
         result.layout.height=Math.max(620, facetRows*430);
+      } else if (plotMode === 'compare' && result.compareMode === 'host') {
+        result.layout.height=Math.max(520, 220 + result.pairCount * 72);
       } else {
         result.layout.height=Math.max(520,Math.round(width*.7));
       }
@@ -2265,6 +2369,7 @@ document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>e
   $('elementSelectionControls').classList.toggle('hidden', ratio || compareHost);
   $('xAxisControls').classList.toggle('hidden', compare || cree);
   $('offsetControls').classList.toggle('hidden', compare || cree);
+  $('yBoundsControls').classList.toggle('hidden', compareHost || !state.file);
 
   if (!cree) renderCreeResults([]);
   renderPlot();
