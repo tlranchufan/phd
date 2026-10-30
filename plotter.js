@@ -10,10 +10,31 @@ const state = {
   elements: [],
   codes: [],
   compareElementOrder: [],
+  approvedHostPairKeys: new Set(),
   creeResults: [],
   yMin: null,
   yMax: null
 };
+
+const HOST_COMPARE_COLORS = {
+  Quartz: '#0072B2',
+  Corundum: '#D55E00',
+  Calcite: '#009E73'
+};
+
+const HOST_COMPARE_SYMBOLS = {
+  Quartz: 'circle',
+  Corundum: 'diamond',
+  Calcite: 'square'
+};
+
+function hostCompareColor(host) {
+  return HOST_COMPARE_COLORS[host] || '#666666';
+}
+
+function hostCompareSymbol(host) {
+  return HOST_COMPARE_SYMBOLS[host] || 'circle';
+}
 
 const atomicWeights = {
   Na:22.98976928, Al:26.9815385, Si:28.085, K:39.0983, Ca:40.078, Ti:47.867,
@@ -295,17 +316,33 @@ function uniqueNumericValues(values) {
 
 function hostFromCode(code) {
   const value = String(code ?? '').trim();
-  if (/^CC(?:-|[A-Z])/.test(value)) return 'Calcite';
-  if (/^C(?:-|[A-Z])/.test(value)) return 'Corundum';
+  if (/^CC(?:[-_]|[A-Z])/.test(value)) return 'Calcite';
+  if (/^C(?:[-_]|[A-Z])/.test(value)) return 'Corundum';
   return 'Quartz';
 }
 
 function hostNeutralCode(code) {
   const value = String(code ?? '').trim();
   const host = hostFromCode(value);
-  if (host === 'Calcite') return value.replace(/^CC-?/, '');
-  if (host === 'Corundum') return value.replace(/^C-?/, '');
+  if (host === 'Calcite') return value.replace(/^CC[-_]?/, '');
+  if (host === 'Corundum') return value.replace(/^C[-_]?/, '');
   return value;
+}
+
+function strictHostNeutralKey(code) {
+  return hostNeutralCode(code).trim().toUpperCase();
+}
+
+function fuzzyHostNeutralKey(code) {
+  return hostNeutralCode(code)
+    .trim()
+    .toUpperCase()
+    .replace(/[-_](?:COPY|REP|R)?\d+$/i, '')
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function hostPairApprovalKey(hostA, codeA, hostB, codeB) {
+  return `${hostA}::${codeA}||${hostB}::${codeB}`;
 }
 
 function selectedHostPair() {
@@ -315,30 +352,127 @@ function selectedHostPair() {
   };
 }
 
-function hostPairedCodes(codes) {
-  const {hostA, hostB} = selectedHostPair();
-  if (!hostA || !hostB || hostA === hostB) return [];
+function hostPairMetadata(code, molkg) {
+  const rows = filteredAvgRows({ignoreHost:true}).filter(row =>
+    String(row.Code) === String(code) &&
+    (molkg === null || sameNumericValue(num(row['Mol/Kg']), molkg))
+  );
+  const compounds = [...new Set(rows.map(row => String(row.Compound || '').trim()).filter(Boolean))];
+  return {
+    compound: compounds.length === 1 ? compounds[0] : '',
+    compounds
+  };
+}
 
-  const grouped = new Map();
-  [...codes].forEach(code => {
-    const host = hostFromCode(code);
-    if (host !== hostA && host !== hostB) return;
-    const neutral = hostNeutralCode(code);
-    if (!neutral) return;
-    if (!grouped.has(neutral)) grouped.set(neutral, {});
-    const entry = grouped.get(neutral);
-    if (!entry[host]) entry[host] = code;
+function hostPairCandidates(codes, molkg=null) {
+  const {hostA, hostB} = selectedHostPair();
+  if (!hostA || !hostB || hostA === hostB) return {exact:[], suggestions:[]};
+
+  const codesA=[...codes].filter(code=>hostFromCode(code)===hostA);
+  const codesB=[...codes].filter(code=>hostFromCode(code)===hostB);
+
+  const exact=[];
+  const usedA=new Set();
+  const usedB=new Set();
+
+  codesA.forEach(codeA=>{
+    const keyA=strictHostNeutralKey(codeA);
+    const matches=codesB.filter(codeB=>!usedB.has(codeB) && strictHostNeutralKey(codeB)===keyA);
+    if(matches.length===1){
+      const codeB=matches[0];
+      exact.push({
+        condition:hostNeutralCode(codeA),
+        codeA,codeB,hostA,hostB,
+        matchType:'exact'
+      });
+      usedA.add(codeA);
+      usedB.add(codeB);
+    }
   });
 
-  return [...grouped.entries()]
-    .filter(([,entry]) => entry[hostA] && entry[hostB])
-    .map(([condition,entry]) => ({
-      condition,
-      codeA:entry[hostA],
-      codeB:entry[hostB],
-      hostA,
-      hostB
-    }));
+  const suggestions=[];
+  codesA.filter(code=>!usedA.has(code)).forEach(codeA=>{
+    const fuzzyA=fuzzyHostNeutralKey(codeA);
+    const metaA=hostPairMetadata(codeA,molkg);
+
+    codesB.filter(code=>!usedB.has(code)).forEach(codeB=>{
+      const fuzzyB=fuzzyHostNeutralKey(codeB);
+      const metaB=hostPairMetadata(codeB,molkg);
+      const fuzzyCodeMatch=Boolean(fuzzyA && fuzzyB && fuzzyA===fuzzyB);
+      const compoundMatch=Boolean(
+        metaA.compound &&
+        metaB.compound &&
+        metaA.compound.toLowerCase()===metaB.compound.toLowerCase()
+      );
+
+      if(!fuzzyCodeMatch && !compoundMatch) return;
+
+      suggestions.push({
+        condition:metaA.compound || metaB.compound || hostNeutralCode(codeA),
+        codeA,codeB,hostA,hostB,
+        matchType:'suggested',
+        fuzzyCodeMatch,
+        compoundMatch,
+        score:(fuzzyCodeMatch?2:0)+(compoundMatch?1:0),
+        approvalKey:hostPairApprovalKey(hostA,codeA,hostB,codeB)
+      });
+    });
+  });
+
+  suggestions.sort((a,b)=>
+    b.score-a.score ||
+    a.codeA.localeCompare(b.codeA) ||
+    a.codeB.localeCompare(b.codeB)
+  );
+
+  return {exact,suggestions};
+}
+
+function hostPairedCodes(codes, molkg=null) {
+  const {exact,suggestions}=hostPairCandidates(codes,molkg);
+  const pairs=[...exact];
+  const usedA=new Set(exact.map(pair=>pair.codeA));
+  const usedB=new Set(exact.map(pair=>pair.codeB));
+
+  suggestions.forEach(pair=>{
+    if(!state.approvedHostPairKeys.has(pair.approvalKey)) return;
+    if(usedA.has(pair.codeA)||usedB.has(pair.codeB)) return;
+    pairs.push(pair);
+    usedA.add(pair.codeA);
+    usedB.add(pair.codeB);
+  });
+
+  return pairs;
+}
+
+function renderHostPairApprovals(codes) {
+  const wrap=$('hostPairApproval');
+  const list=$('hostPairApprovalList');
+  if(!wrap||!list) return;
+
+  const active=radioValue('plotMode')==='compare' && compareSubmode()==='host';
+  const molkg=num($('compareMolKg')?.value);
+  if(!active||molkg===null){
+    wrap.classList.add('hidden');
+    list.innerHTML='';
+    return;
+  }
+
+  const {suggestions}=hostPairCandidates(codes,molkg);
+  if(!suggestions.length){
+    wrap.classList.add('hidden');
+    list.innerHTML='';
+    return;
+  }
+
+  list.innerHTML=suggestions.map(pair=>{
+    const checked=state.approvedHostPairKeys.has(pair.approvalKey)?'checked':'';
+    const key=String(pair.approvalKey).replaceAll('&','&amp;').replaceAll('"','&quot;');
+    const label=`${pair.codeA} ↔ ${pair.codeB}`;
+    return `<label><input type="checkbox" data-host-pair-approval="${key}" ${checked}> <span>${label}</span></label>`;
+  }).join('');
+
+  wrap.classList.remove('hidden');
 }
 
 function hostCompareDisplay() {
@@ -734,7 +868,7 @@ function eligibleElementsForCodes(codes) {
     if (codes.size < 2 || molkg === null) return [];
 
     if (compareSubmode() === 'host') {
-      const pairs = hostPairedCodes(codes);
+      const pairs = hostPairedCodes(codes, molkg);
       return state.elements.filter(element =>
         (!chondriteNormalizationEnabled() || chondritePpmForElement(element) !== null) &&
         pairs.some(pair =>
@@ -906,6 +1040,7 @@ function updateElementChoices({initial=false, autoSelectIfEmpty=false} = {}) {
   }
 
   syncCompareElementOrder();
+  renderHostPairApprovals(codes);
 }
 
 function clearWorkbook() {
@@ -917,6 +1052,7 @@ function clearWorkbook() {
   state.elements = [];
   state.codes = [];
   state.compareElementOrder = [];
+  state.approvedHostPairKeys = new Set();
   state.creeResults = [];
   state.yMin = null;
   state.yMax = null;
@@ -1339,7 +1475,7 @@ function buildComparePlot(codes) {
 
     const basis = radioValue('compareRatioBasis');
     const display = hostCompareDisplay();
-    const pairs = hostPairedCodes(codes);
+    const pairs = hostPairedCodes(codes, molkg);
     if (!pairs.length) {
       throw new Error(`No matching ${hostA} / ${hostB} Code pairs were found. Select both host versions of the same condition.`);
     }
@@ -1384,7 +1520,7 @@ function buildComparePlot(codes) {
           hoverinfo:'skip',
           x:[pointA.value, pointB.value],
           y:[conditionLabel, conditionLabel],
-          line:{width:2,color:'#aeb7c2'}
+          line:{width:2,color:'#9AA0A6'}
         });
 
         hostAX.push(pointA.value);
@@ -1421,13 +1557,14 @@ function buildComparePlot(codes) {
         name:hostA,
         x:hostAX,
         y:hostAY,
-        marker:{size:12},
+        marker:{size:12,color:hostCompareColor(hostA),symbol:hostCompareSymbol(hostA)},
         error_x:showErr ? {
           type:'data',
           array:hostAErrors,
           visible:true,
           thickness:1.2,
-          width:4
+          width:4,
+          color:hostCompareColor(hostA)
         } : undefined,
         customdata:hostACustom,
         hovertemplate:
@@ -1445,13 +1582,14 @@ function buildComparePlot(codes) {
         name:hostB,
         x:hostBX,
         y:hostBY,
-        marker:{size:12},
+        marker:{size:12,color:hostCompareColor(hostB),symbol:hostCompareSymbol(hostB)},
         error_x:showErr ? {
           type:'data',
           array:hostBErrors,
           visible:true,
           thickness:1.2,
-          width:4
+          width:4,
+          color:hostCompareColor(hostB)
         } : undefined,
         customdata:hostBCustom,
         hovertemplate:
@@ -1551,13 +1689,14 @@ function buildComparePlot(codes) {
       name:`${hostB} / ${hostA}`,
       x:foldX,
       y:foldY,
-      marker:{size:12},
+      marker:{size:12,color:hostCompareColor(hostB),symbol:hostCompareSymbol(hostB)},
       error_x:showErr ? {
         type:'data',
         array:foldErrors,
         visible:true,
         thickness:1.2,
-        width:4
+        width:4,
+        color:hostCompareColor(hostB)
       } : undefined,
       customdata:foldCustom,
       hovertemplate:
@@ -2240,6 +2379,16 @@ $('moveCompareElementLeft').addEventListener('click',()=>moveCompareElement(-1))
 $('moveCompareElementRight').addEventListener('click',()=>moveCompareElement(1));
 $('resetCompareElementOrder').addEventListener('click',()=>{
   syncCompareElementOrder({reset:true});
+  renderPlot();
+});
+
+$('hostPairApprovalList').addEventListener('change',event=>{
+  const box=event.target.closest('input[data-host-pair-approval]');
+  if(!box) return;
+  const key=box.dataset.hostPairApproval;
+  if(box.checked) state.approvedHostPairKeys.add(key);
+  else state.approvedHostPairKeys.delete(key);
+  updateElementChoices({autoSelectIfEmpty:true});
   renderPlot();
 });
 $('offsetSpread').addEventListener('input',()=>{$('offsetSpreadValue').textContent=`${Math.round(Number($('offsetSpread').value)*100)}%`;renderPlot();});

@@ -37,6 +37,16 @@
       width: 100%;
       min-width: 0;
     }
+    .pair-approval-list {
+      display: grid;
+      gap: .45rem;
+    }
+    .pair-approval-list label {
+      display: flex;
+      align-items: center;
+      gap: .55rem;
+      margin: 0;
+    }
     @media (max-width: 620px) {
       .axis-bound-grid { grid-template-columns: 1fr; }
       .quick-filter-grid { grid-template-columns: 1fr; }
@@ -160,6 +170,11 @@
                 <legend>Host comparison display</legend>
                 <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="paired" checked> Paired / dumbbell</label>
                 <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="fold"> Fold change</label>
+              </fieldset>
+
+              <fieldset id="hostPairApproval" class="hidden">
+                <legend>Suggested pair approvals</legend>
+                <div id="hostPairApprovalList" class="pair-approval-list"></div>
               </fieldset>
             </div>
           </fieldset>
@@ -385,6 +400,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261031-compare-settings-in-plot-type"></script>
+  <script defer src="./plotter.js?v=20261031-fuzzy-host-pairs-colours"></script>
 </body>
 </html>
