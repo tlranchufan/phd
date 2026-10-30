@@ -352,6 +352,19 @@ function hostConditionLabel(row, pair, molkg) {
   return `${base}${concentration}`;
 }
 
+function configureHostConditionAxis(layout, conditionOrder) {
+  if (!layout?.yaxis) return;
+  layout.yaxis.type = 'category';
+  layout.yaxis.categoryorder = 'array';
+  layout.yaxis.categoryarray = [...conditionOrder].reverse();
+  layout.yaxis.autorange = true;
+  delete layout.yaxis.range;
+  delete layout.yaxis.tickformat;
+  delete layout.yaxis.hoverformat;
+  delete layout.yaxis.exponentformat;
+  delete layout.yaxis.showexponent;
+}
+
 function elementWithSymbol(elements, symbol) {
   return elements.find(element => elemSymbol(element).toLowerCase() === String(symbol).toLowerCase()) || null;
 }
@@ -1464,8 +1477,7 @@ function buildComparePlot(codes) {
         layout.xaxis.exponentformat = 'none';
         layout.xaxis.showexponent = 'none';
       }
-      layout.yaxis.categoryorder = 'array';
-      layout.yaxis.categoryarray = [...conditionOrder].reverse();
+      configureHostConditionAxis(layout, conditionOrder);
       layout.margin = {...layout.margin, l:Math.max(layout.margin?.l || 70, 150)};
       layout.legend = {...layout.legend, orientation:'h'};
 
@@ -1569,8 +1581,7 @@ function buildComparePlot(codes) {
       layout.xaxis.exponentformat = 'none';
       layout.xaxis.showexponent = 'none';
     }
-    layout.yaxis.categoryorder = 'array';
-    layout.yaxis.categoryarray = [...conditionOrder].reverse();
+    configureHostConditionAxis(layout, conditionOrder);
     layout.margin = {...layout.margin, l:Math.max(layout.margin?.l || 70, 150)};
     layout.shapes = (layout.shapes || []).concat({
       type:'line',
