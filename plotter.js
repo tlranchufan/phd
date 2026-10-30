@@ -931,7 +931,7 @@ function clearWorkbook() {
   $('yMax').value='';
   $('yBoundsControls').classList.add('hidden');
   $('loadPlotFile').disabled=true; $('clearPlotFile').disabled=true;
-  $('plotConfig').classList.add('hidden'); $('graphControls').classList.add('hidden'); $('exportCard').classList.add('hidden');
+  $('plotTypeCard').classList.add('hidden'); $('plotConfig').classList.add('hidden'); $('graphControls').classList.add('hidden'); $('exportCard').classList.add('hidden');
   $('plotFileSummary').innerHTML=''; $('plotLoadStatus').textContent='Choose a workbook, then click Continue.';
   $('plotStatus').textContent=''; $('plotStatus').classList.add('hidden'); $('plotWarnings').classList.add('hidden');
   $('creeResultsCard').classList.add('hidden');
@@ -948,6 +948,7 @@ function renderLoaded() {
   updateElementChoices({initial:true});
 
   $('plotFileSummary').innerHTML = `<div class="file-item"><div class="file-meta"><div class="file-name">${state.file.name}</div><div class="file-detail">Sheet: ${state.file.sheetName} · ${state.avgRows.length} avg rows · ${state.elements.length} detected element columns</div></div></div>`;
+  $('plotTypeCard').classList.remove('hidden');
   $('plotConfig').classList.remove('hidden');
   $('graphControls').classList.remove('hidden');
   $('exportCard').classList.remove('hidden');
@@ -2334,7 +2335,7 @@ $('downloadPdf').addEventListener('click',exportPdf);
 $('downloadHtml').addEventListener('click',exportHtml);
 $('downloadCreeCsv').addEventListener('click',downloadCreeResultsCsv);
 
-document.querySelectorAll('#plotConfig input, #plotConfig select, #graphControls input, #graphControls select').forEach(el=>el.addEventListener('change',()=>{
+document.querySelectorAll('#plotTypeCard input, #plotConfig input, #plotConfig select, #graphControls input, #graphControls select').forEach(el=>el.addEventListener('change',()=>{
   const plotMode = radioValue('plotMode');
 
   if (el.id === 'elements') {
