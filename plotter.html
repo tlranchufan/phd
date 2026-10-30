@@ -189,9 +189,9 @@
             <legend>Compare settings</legend>
 
             <fieldset>
-              <legend>Compare quantity</legend>
+              <legend>Compare view</legend>
               <label class="inline-option"><input type="radio" name="compareMode" value="elements" checked> Elements</label>
-              <label class="inline-option"><input type="radio" name="compareMode" value="ratio"> Element/element ratio</label>
+              <label class="inline-option"><input type="radio" name="compareMode" value="host"> Host paired</label>
             </fieldset>
 
             <label>Common Mol/Kg
@@ -217,18 +217,43 @@
               </fieldset>
             </div>
 
-            <div id="compareRatioControls" class="hidden">
+            <div id="compareHostControls" class="hidden">
               <label>Numerator element
                 <select id="compareNumerator"></select>
               </label>
               <label>Denominator element
                 <select id="compareDenominator"></select>
               </label>
+
               <fieldset>
                 <legend>Ratio basis</legend>
                 <label class="inline-option"><input type="radio" name="compareRatioBasis" value="ww" checked> weight/weight</label>
                 <label class="inline-option"><input type="radio" name="compareRatioBasis" value="mm"> mol/mol</label>
               </fieldset>
+
+              <div class="grid two">
+                <label>Host A
+                  <select id="compareHostA">
+                    <option value="Quartz" selected>Quartz</option>
+                    <option value="Corundum">Corundum</option>
+                    <option value="Calcite">Calcite</option>
+                  </select>
+                </label>
+                <label>Host B
+                  <select id="compareHostB">
+                    <option value="Quartz">Quartz</option>
+                    <option value="Corundum" selected>Corundum</option>
+                    <option value="Calcite">Calcite</option>
+                  </select>
+                </label>
+              </div>
+
+              <fieldset>
+                <legend>Host comparison display</legend>
+                <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="paired" checked> Paired / dumbbell</label>
+                <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="fold"> Fold change</label>
+              </fieldset>
+              <p class="hint">Paired view connects matching host-neutral Codes (for example NaC1 ↔ CNaC1). Fold change is Host B / Host A, with a reference line at 1.</p>
             </div>
 
             <label class="toggle"><input id="compareShowErr" type="checkbox" checked> Show error bars (± standard deviation)</label>
@@ -351,6 +376,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261031-compare-host-defaults"></script>
+  <script defer src="./plotter.js?v=20261031-host-paired-fold"></script>
 </body>
 </html>

@@ -295,9 +295,54 @@ function uniqueNumericValues(values) {
 
 function hostFromCode(code) {
   const value = String(code ?? '').trim();
-  if (/^CC/i.test(value)) return 'Calcite';
-  if (/^C/i.test(value)) return 'Corundum';
+  if (/^CC(?:-|[A-Z])/.test(value)) return 'Calcite';
+  if (/^C(?:-|[A-Z])/.test(value)) return 'Corundum';
   return 'Quartz';
+}
+
+function hostNeutralCode(code) {
+  const value = String(code ?? '').trim();
+  const host = hostFromCode(value);
+  if (host === 'Calcite') return value.replace(/^CC-?/, '');
+  if (host === 'Corundum') return value.replace(/^C-?/, '');
+  return value;
+}
+
+function selectedHostPair() {
+  return {
+    hostA: $('compareHostA')?.value || 'Quartz',
+    hostB: $('compareHostB')?.value || 'Corundum'
+  };
+}
+
+function hostPairedCodes(codes) {
+  const {hostA, hostB} = selectedHostPair();
+  if (!hostA || !hostB || hostA === hostB) return [];
+
+  const grouped = new Map();
+  [...codes].forEach(code => {
+    const host = hostFromCode(code);
+    if (host !== hostA && host !== hostB) return;
+    const neutral = hostNeutralCode(code);
+    if (!neutral) return;
+    if (!grouped.has(neutral)) grouped.set(neutral, {});
+    const entry = grouped.get(neutral);
+    if (!entry[host]) entry[host] = code;
+  });
+
+  return [...grouped.entries()]
+    .filter(([,entry]) => entry[hostA] && entry[hostB])
+    .map(([condition,entry]) => ({
+      condition,
+      codeA:entry[hostA],
+      codeB:entry[hostB],
+      hostA,
+      hostB
+    }));
+}
+
+function hostCompareDisplay() {
+  return radioValue('hostCompareDisplay') || 'paired';
 }
 
 function elementWithSymbol(elements, symbol) {
@@ -325,13 +370,13 @@ function compareSubmode() {
 }
 
 
-function filteredAvgRows() {
+function filteredAvgRows({ignoreHost=false} = {}) {
   const compound = $('filterCompound').value;
   const host = $('filterHost').value;
   const mol = $('filterMolKg').value;
   return state.avgRows.filter(row =>
     (!compound || String(row.Compound ?? '').trim() === compound) &&
-    (!host || hostFromCode(row.Code) === host) &&
+    (ignoreHost || !host || hostFromCode(row.Code) === host) &&
     (!mol || (num(row['Mol/Kg']) !== null && sameNumericValue(num(row['Mol/Kg']), Number(mol))))
   );
 }
@@ -417,11 +462,45 @@ function updateCompareMolChoices() {
   }
 }
 
-function compareRowsForCode(code, molkg) {
-  return filteredAvgRows().filter(row =>
+function compareRowsForCode(code, molkg, {ignoreHost=false} = {}) {
+  return filteredAvgRows({ignoreHost}).filter(row =>
     String(row.Code) === code &&
     sameNumericValue(num(row['Mol/Kg']), molkg)
   );
+}
+
+function ratioPointForCode(code, molkg, numerator, denominator, basis, normalize, {ignoreHost=false} = {}) {
+  const rows = compareRowsForCode(code, molkg, {ignoreHost});
+  const row = rows.find(candidate =>
+    num(candidate[numerator]) !== null &&
+    num(candidate[denominator]) !== null
+  );
+  if (!row) return null;
+
+  const a = num(row[numerator]);
+  const b = num(row[denominator]);
+  if (a === null || b === null || b === 0) return null;
+
+  const numAw = atomicWeights[elemSymbol(numerator)];
+  const denAw = atomicWeights[elemSymbol(denominator)];
+  const ciNum = normalize ? chondritePpmForElement(numerator) : null;
+  const ciDen = normalize ? chondritePpmForElement(denominator) : null;
+
+  if (normalize && (ciNum === null || ciDen === null)) return null;
+  if (!normalize && basis === 'mm' && (!numAw || !denAw)) return null;
+
+  const factor = normalize
+    ? ciDen / ciNum
+    : (basis === 'mm' ? denAw / numAw : 1);
+  const value = factor * a / b;
+
+  const sdA = num(row.__sd?.[numerator]);
+  const sdB = num(row.__sd?.[denominator]);
+  const sd = (sdA === null || sdB === null)
+    ? null
+    : propagatedRatioSd(a, b, sdA, sdB, factor);
+
+  return {row, value, sd};
 }
 
 
@@ -634,9 +713,17 @@ function eligibleElementsForCodes(codes) {
     const molkg = num($('compareMolKg')?.value);
     if (codes.size < 2 || molkg === null) return [];
 
-    // In Compare mode, every selected Code must contain a numeric value for
-    // the element at the chosen shared Mol/Kg. This guarantees a complete
-    // double/triple/etc. bar group for each eligible element.
+    if (compareSubmode() === 'host') {
+      const pairs = hostPairedCodes(codes);
+      return state.elements.filter(element =>
+        (!chondriteNormalizationEnabled() || chondritePpmForElement(element) !== null) &&
+        pairs.some(pair =>
+          compareRowsForCode(pair.codeA, molkg, {ignoreHost:true}).some(row => num(row[element]) !== null) &&
+          compareRowsForCode(pair.codeB, molkg, {ignoreHost:true}).some(row => num(row[element]) !== null)
+        )
+      );
+    }
+
     return state.elements.filter(element =>
       (!chondriteNormalizationEnabled() || chondritePpmForElement(element) !== null) &&
       [...codes].every(code =>
@@ -784,8 +871,8 @@ function updateElementChoices({initial=false, autoSelectIfEmpty=false} = {}) {
           ? 'No element has at least two positive concentration points at positive Mol/Kg for the selected Codes.'
           : 'No element columns contain numeric avg values for the selected Codes.';
     } else if (plotMode === 'compare') {
-      hint.textContent = currentCompareMode === 'ratio'
-        ? `${eligible.length} element${eligible.length === 1 ? '' : 's'} are available for ratio comparison in every selected Code at ${formatMolKg(num($('compareMolKg').value))} Mol/Kg.`
+      hint.textContent = currentCompareMode === 'host'
+        ? `${eligible.length} element${eligible.length === 1 ? '' : 's'} are available in at least one matching host pair at ${formatMolKg(num($('compareMolKg').value))} Mol/Kg.`
         : `${eligible.length} element${eligible.length === 1 ? '' : 's'} available in every selected Code at ${formatMolKg(num($('compareMolKg').value))} Mol/Kg.`;
     } else if (plotMode === 'cree') {
       hint.textContent = `${eligible.length} element${eligible.length === 1 ? '' : 's'} have enough positive data for at least one log–log fit across the selected Codes.`;
@@ -1219,108 +1306,207 @@ function buildComparePlot(codes) {
   const warnings = [];
   const traces = [];
 
-  if (mode === 'ratio') {
+  if (mode === 'host') {
     const numerator = $('compareNumerator').value;
     const denominator = $('compareDenominator').value;
-    if (!numerator || !denominator) throw new Error('Choose numerator and denominator elements for Compare.');
-    if (numerator === denominator) throw new Error('Choose two different elements for the Compare ratio.');
+    if (!numerator || !denominator) throw new Error('Choose numerator and denominator elements for the host comparison.');
+    if (numerator === denominator) throw new Error('Choose two different elements for the host comparison.');
+
+    const {hostA, hostB} = selectedHostPair();
+    if (!hostA || !hostB || hostA === hostB) throw new Error('Choose two different host minerals.');
 
     const basis = radioValue('compareRatioBasis');
-    const numAw = atomicWeights[elemSymbol(numerator)];
-    const denAw = atomicWeights[elemSymbol(denominator)];
-    const ciNum = normalize ? chondritePpmForElement(numerator) : null;
-    const ciDen = normalize ? chondritePpmForElement(denominator) : null;
-
-    if (normalize && (ciNum === null || ciDen === null)) {
-      throw new Error('A CI chondrite reference value is missing for the selected Compare ratio.');
-    }
-    if (!normalize && basis === 'mm' && (!numAw || !denAw)) {
-      throw new Error('An atomic weight is missing for the selected Compare ratio.');
+    const display = hostCompareDisplay();
+    const pairs = hostPairedCodes(codes);
+    if (!pairs.length) {
+      throw new Error(`No matching ${hostA} / ${hostB} Code pairs were found. Select both host versions of the same condition.`);
     }
 
     const ratioLabel = `${elementDisplayName(numerator)}/${elementDisplayName(denominator)}`;
-    let missingRatioSd = 0;
-    let skippedZero = 0;
+    let missingErrors = 0;
+    let validPairs = 0;
 
-    [...codes].forEach(code => {
-      const matchingRows = compareRowsForCode(code, molkg);
-      if (!matchingRows.length) return;
+    if (display === 'paired') {
+      pairs.forEach(pair => {
+        const pointA = ratioPointForCode(pair.codeA, molkg, numerator, denominator, basis, normalize, {ignoreHost:true});
+        const pointB = ratioPointForCode(pair.codeB, molkg, numerator, denominator, basis, normalize, {ignoreHost:true});
+        if (!pointA || !pointB) {
+          warnings.push(`${pair.condition} was skipped because ${ratioLabel} could not be calculated for both hosts.`);
+          return;
+        }
+        if (logY && (pointA.value <= 0 || pointB.value <= 0)) {
+          warnings.push(`${pair.condition} was skipped because one paired ratio is not positive on a log10 axis.`);
+          return;
+        }
 
-      if (matchingRows.length > 1) {
-        warnings.push(
-          `${code} has ${matchingRows.length} avg rows at ${formatMolKg(molkg)} Mol/Kg; the first row containing both ratio elements is used.`
-        );
-      }
+        validPairs++;
+        if (showErr && (pointA.sd === null || pointB.sd === null)) missingErrors++;
 
-      const row = matchingRows.find(candidate =>
-        num(candidate[numerator]) !== null &&
-        num(candidate[denominator]) !== null
-      );
-      if (!row) return;
-
-      const a = num(row[numerator]);
-      const b = num(row[denominator]);
-      if (b === 0) {
-        skippedZero++;
-        return;
-      }
-
-      const factor = normalize
-        ? ciDen / ciNum
-        : (basis === 'mm' ? denAw / numAw : 1);
-      const ratio = factor * a / b;
-
-      if (logY && ratio <= 0) {
-        warnings.push(`${code} was omitted because its ${ratioLabel} ratio is not positive on a log10 axis.`);
-        return;
-      }
-
-      const sdA = num(row.__sd?.[numerator]);
-      const sdB = num(row.__sd?.[denominator]);
-      const ratioSd = (sdA === null || sdB === null)
-        ? null
-        : propagatedRatioSd(a, b, sdA, sdB, factor);
-      if (showErr && ratioSd === null) missingRatioSd++;
-
-      traces.push({
-        type:'bar',
-        name:code,
-        x:[ratioLabel],
-        y:[ratio],
-        error_y:showErr
-          ? {type:'data', array:[ratioSd ?? 0], visible:true, thickness:1.2, width:4}
-          : undefined,
-        customdata:[[
-          code,
-          row.Compound || '',
-          formatMolKg(molkg),
-          hostFromCode(code),
-          ratioSd,
-          normalize ? chondriteSourceText(numerator) : '',
-          normalize ? chondriteSourceText(denominator) : ''
-        ]],
-        hovertemplate:normalize
-          ? 'Code: %{customdata[0]}<br>Host: %{customdata[3]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>CI numerator: %{customdata[5]}<br>CI denominator: %{customdata[6]}<br>Normalized ratio: %{y:.10~f}<br>Propagated SD: %{customdata[4]:.6~g}<extra></extra>'
-          : 'Code: %{customdata[0]}<br>Host: %{customdata[3]}<br>Compound: %{customdata[1]}<br>Mol/Kg: %{customdata[2]}<br>Ratio: %{y:.10~f}<br>Propagated SD: %{customdata[4]:.6~g}<extra></extra>'
+        traces.push({
+          type:'scatter',
+          mode:'lines+markers',
+          name:pair.condition,
+          x:[hostA, hostB],
+          y:[pointA.value, pointB.value],
+          marker:{size:12},
+          line:{width:2},
+          error_y:showErr ? {
+            type:'data',
+            array:[pointA.sd ?? 0, pointB.sd ?? 0],
+            visible:true,
+            thickness:1.2,
+            width:4
+          } : undefined,
+          customdata:[
+            [pair.codeA, pointA.row.Compound || '', formatMolKg(molkg), hostA, pointA.sd, pair.condition],
+            [pair.codeB, pointB.row.Compound || '', formatMolKg(molkg), hostB, pointB.sd, pair.condition]
+          ],
+          hovertemplate:
+            'Condition: %{customdata[5]}<br>' +
+            'Code: %{customdata[0]}<br>' +
+            'Host: %{customdata[3]}<br>' +
+            'Compound: %{customdata[1]}<br>' +
+            'Mol/Kg: %{customdata[2]}<br>' +
+            ratioLabel + ': %{y:.10~f}<br>' +
+            'Propagated SD: %{customdata[4]:.6~g}<extra></extra>'
+        });
       });
-    });
 
-    if (!traces.length) throw new Error('No comparable ratio values were found.');
+      if (!validPairs) throw new Error('No complete host pairs contained usable ratio values.');
 
-    const yLabel = normalize
-      ? `Chondrite-normalized ${ratioLabel}`
-      : `${ratioLabel} (${basis === 'mm' ? 'mol/mol' : 'w/w'})`;
-    const layout = makeLayout(['Plot'], 'Ratio', yLabel, logY);
-    layout.barmode = 'group';
-    layout.bargap = 0.18;
-    layout.bargroupgap = 0.06;
+      const yLabel = normalize
+        ? `Chondrite-normalized ${ratioLabel}`
+        : `${ratioLabel} (${basis === 'mm' ? 'mol/mol' : 'w/w'})`;
+      const layout = makeLayout(['Plot'], 'Host mineral', yLabel, logY);
+      layout.xaxis.categoryorder = 'array';
+      layout.xaxis.categoryarray = [hostA, hostB];
 
-    if (skippedZero) warnings.push(`${skippedZero} ratio point(s) were skipped because the denominator was zero.`);
-    if (showErr && missingRatioSd) {
-      warnings.push(`${missingRatioSd} ratio point(s) have no error bar because numerator or denominator SD is missing.`);
+      if (showErr && missingErrors) {
+        warnings.push(`${missingErrors} paired condition(s) have at least one missing propagated SD; the available values are still plotted.`);
+      }
+
+      return {
+        traces,
+        layout,
+        warnings,
+        compareMode:'host',
+        hostDisplay:'paired',
+        ratioLabel,
+        hostA,
+        hostB,
+        pairCount:validPairs
+      };
     }
 
-    return {traces, layout, warnings, compareMode:'ratio', ratioLabel};
+    const x = [];
+    const y = [];
+    const errors = [];
+    const customdata = [];
+
+    pairs.forEach(pair => {
+      const pointA = ratioPointForCode(pair.codeA, molkg, numerator, denominator, basis, normalize, {ignoreHost:true});
+      const pointB = ratioPointForCode(pair.codeB, molkg, numerator, denominator, basis, normalize, {ignoreHost:true});
+      if (!pointA || !pointB || pointA.value === 0) {
+        warnings.push(`${pair.condition} was skipped because a complete non-zero ratio pair was unavailable.`);
+        return;
+      }
+
+      const fold = pointB.value / pointA.value;
+      if (logY && fold <= 0) {
+        warnings.push(`${pair.condition} was skipped because its fold change is not positive on a log10 axis.`);
+        return;
+      }
+
+      const foldSd = (pointA.sd === null || pointB.sd === null)
+        ? null
+        : propagatedRatioSd(pointB.value, pointA.value, pointB.sd, pointA.sd, 1);
+
+      if (showErr && foldSd === null) missingErrors++;
+
+      x.push(pair.condition);
+      y.push(fold);
+      errors.push(foldSd ?? 0);
+      customdata.push([
+        pair.codeA,
+        pair.codeB,
+        hostA,
+        hostB,
+        pointA.value,
+        pointB.value,
+        foldSd,
+        pair.condition
+      ]);
+    });
+
+    if (!x.length) throw new Error('No complete host pairs contained usable values for fold change.');
+
+    traces.push({
+      type:'scatter',
+      mode:'markers',
+      name:`${hostB} / ${hostA}`,
+      x,
+      y,
+      marker:{size:12},
+      error_y:showErr ? {
+        type:'data',
+        array:errors,
+        visible:true,
+        thickness:1.2,
+        width:4
+      } : undefined,
+      customdata,
+      hovertemplate:
+        'Condition: %{customdata[7]}<br>' +
+        hostA + ' Code: %{customdata[0]}<br>' +
+        hostB + ' Code: %{customdata[1]}<br>' +
+        hostA + ' ' + ratioLabel + ': %{customdata[4]:.10~f}<br>' +
+        hostB + ' ' + ratioLabel + ': %{customdata[5]:.10~f}<br>' +
+        'Fold change (' + hostB + '/' + hostA + '): %{y:.10~f}<br>' +
+        'Propagated SD: %{customdata[6]:.6~g}<extra></extra>'
+    });
+
+    const layout = makeLayout(
+      ['Plot'],
+      'Condition',
+      `${hostB} / ${hostA} fold change in ${ratioLabel}`,
+      logY
+    );
+    layout.shapes = (layout.shapes || []).concat({
+      type:'line',
+      xref:'paper',
+      x0:0,
+      x1:1,
+      yref:'y',
+      y0:1,
+      y1:1,
+      line:{width:1.5,dash:'dash'}
+    });
+    layout.annotations = (layout.annotations || []).concat({
+      text:'No change = 1',
+      xref:'paper',
+      x:1,
+      yref:'y',
+      y:1,
+      showarrow:false,
+      xanchor:'right',
+      yanchor:'bottom'
+    });
+
+    if (showErr && missingErrors) {
+      warnings.push(`${missingErrors} fold-change point(s) have no propagated error bar because one host ratio SD is missing.`);
+    }
+
+    return {
+      traces,
+      layout,
+      warnings,
+      compareMode:'host',
+      hostDisplay:'fold',
+      ratioLabel,
+      hostA,
+      hostB,
+      pairCount:x.length
+    };
   }
 
   const selectedElements = orderedCompareElements();
@@ -1755,8 +1941,10 @@ function renderPlot() {
     if (plotMode === 'compare') {
       result = buildComparePlot(codes);
       const molkg = num($('compareMolKg').value);
-      if (result.compareMode === 'ratio') {
-        statusText = `Compare: ${codes.size} Codes at ${formatMolKg(molkg)} Mol/Kg; ratio = ${result.ratioLabel}.`;
+      if (result.compareMode === 'host') {
+        statusText = result.hostDisplay === 'fold'
+          ? `Host comparison: ${result.pairCount} paired condition${result.pairCount === 1 ? '' : 's'} at ${formatMolKg(molkg)} Mol/Kg; ${result.ratioLabel} fold change = ${result.hostB}/${result.hostA}.`
+          : `Host comparison: ${result.pairCount} paired condition${result.pairCount === 1 ? '' : 's'} at ${formatMolKg(molkg)} Mol/Kg; ${result.ratioLabel}, ${result.hostA} → ${result.hostB}.`;
       } else {
         const elementCount = orderedCompareElements().length;
         statusText = `Compare: ${codes.size} Codes at ${formatMolKg(molkg)} Mol/Kg; ${elementCount} selected element${elementCount === 1 ? '' : 's'}.`;
@@ -2043,6 +2231,16 @@ document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>e
     updateElementChoices({autoSelectIfEmpty: plotMode === 'compare' || plotMode === 'cree'});
     updateYBoundsHint();
   } else if (el.name === 'compareMode') {
+    if (compareSubmode() === 'host' && $('filterHost').value) {
+      $('filterHost').value = '';
+      updateFilteredCodeChoices();
+      [...$('codes').options].forEach(option => { option.selected = true; });
+      updateCompareMolChoices();
+      updateElementChoices({autoSelectIfEmpty:true});
+    } else {
+      updateElementChoices({autoSelectIfEmpty:true});
+    }
+  } else if (el.id === 'compareHostA' || el.id === 'compareHostB') {
     updateElementChoices({autoSelectIfEmpty:true});
   } else if (el.id === 'showIsotopeLabels') {
     syncCompareElementOrder();
@@ -2056,15 +2254,15 @@ document.querySelectorAll('#plotConfig input, #plotConfig select').forEach(el=>e
   const ratio = plotMode === 'ratio';
   const compare = plotMode === 'compare';
   const cree = plotMode === 'cree';
-  const compareRatio = compare && compareSubmode() === 'ratio';
+  const compareHost = compare && compareSubmode() === 'host';
 
   $('simpleControls').classList.toggle('hidden', !simple);
   $('ratioControls').classList.toggle('hidden', !ratio);
   $('compareControls').classList.toggle('hidden', !compare);
-  $('compareElementControls').classList.toggle('hidden', !compare || compareRatio);
-  $('compareRatioControls').classList.toggle('hidden', !compare || !compareRatio);
+  $('compareElementControls').classList.toggle('hidden', !compare || compareHost);
+  $('compareHostControls').classList.toggle('hidden', !compare || !compareHost);
   $('creeControls').classList.toggle('hidden', !cree);
-  $('elementSelectionControls').classList.toggle('hidden', ratio || compareRatio);
+  $('elementSelectionControls').classList.toggle('hidden', ratio || compareHost);
   $('xAxisControls').classList.toggle('hidden', compare || cree);
   $('offsetControls').classList.toggle('hidden', compare || cree);
 
