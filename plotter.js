@@ -36,6 +36,97 @@ function hostCompareSymbol(host) {
   return HOST_COMPARE_SYMBOLS[host] || 'circle';
 }
 
+const GREYSCALE_SERIES = [
+  '#222222',
+  '#666666',
+  '#999999',
+  '#444444',
+  '#7A7A7A',
+  '#B0B0B0',
+  '#555555',
+  '#888888'
+];
+
+const GENERIC_MARKER_SYMBOLS = [
+  'circle',
+  'square',
+  'diamond',
+  'triangle-up',
+  'triangle-down',
+  'cross',
+  'x',
+  'star',
+  'hexagon',
+  'pentagon'
+];
+
+function traceStyleKey(trace, index) {
+  return String(trace?.legendgroup || trace?.name || `trace-${index}`);
+}
+
+function preferredTraceSymbol(trace, fallbackIndex) {
+  const name=String(trace?.name || '');
+  if (HOST_COMPARE_SYMBOLS[name]) return HOST_COMPARE_SYMBOLS[name];
+  return GENERIC_MARKER_SYMBOLS[fallbackIndex % GENERIC_MARKER_SYMBOLS.length];
+}
+
+function applyGraphStyleOptions(result) {
+  if (!result?.traces?.length) return result;
+
+  const greyscale=Boolean($('greyscalePlot')?.checked);
+  const distinctShapes=Boolean($('distinctMarkerShapes')?.checked);
+  const colorByKey=new Map();
+  const symbolByKey=new Map();
+  let nextColor=0;
+  let nextSymbol=0;
+
+  result.traces.forEach((trace,index)=>{
+    const key=traceStyleKey(trace,index);
+    const hasMarkers=String(trace.mode || '').includes('markers');
+    const isBar=trace.type==='bar';
+    const connectorOnly=
+      trace.type==='scatter' &&
+      trace.mode==='lines' &&
+      trace.showlegend===false &&
+      trace.hoverinfo==='skip' &&
+      !trace.legendgroup;
+
+    if (greyscale && !connectorOnly) {
+      if (!colorByKey.has(key)) {
+        colorByKey.set(key,GREYSCALE_SERIES[nextColor % GREYSCALE_SERIES.length]);
+        nextColor++;
+      }
+      const grey=colorByKey.get(key);
+
+      trace.marker={...(trace.marker || {}),color:grey};
+      if (trace.line) trace.line={...trace.line,color:grey};
+      if (trace.error_x) trace.error_x={...trace.error_x,color:grey};
+      if (trace.error_y) trace.error_y={...trace.error_y,color:grey};
+    } else if (greyscale && connectorOnly) {
+      trace.line={...(trace.line || {}),color:'#B5B5B5'};
+    }
+
+    if (hasMarkers) {
+      if (!symbolByKey.has(key)) {
+        symbolByKey.set(key,preferredTraceSymbol(trace,nextSymbol));
+        nextSymbol++;
+      }
+      trace.marker={
+        ...(trace.marker || {}),
+        symbol:distinctShapes ? symbolByKey.get(key) : 'circle'
+      };
+    }
+
+    // Marker symbols do not apply to bars; greyscale still does.
+    if (isBar && trace.marker?.symbol) {
+      const {symbol,...markerRest}=trace.marker;
+      trace.marker=markerRest;
+    }
+  });
+
+  return result;
+}
+
 const atomicWeights = {
   Na:22.98976928, Al:26.9815385, Si:28.085, K:39.0983, Ca:40.078, Ti:47.867,
   Cr:51.9961, Mn:54.938044, Fe:55.845, Co:58.933194, Ni:58.6934, Cu:63.546,
@@ -2237,6 +2328,8 @@ function renderPlot() {
 
       statusText = `${rawRows.length} sample row(s), ${codes.size} Code(s), x = ${xField}; offset mode: ${offsetMode}.`;
     }
+
+    applyGraphStyleOptions(result);
 
     const warnings = result.warnings || [];
     const width = $('plot').clientWidth || 900;
