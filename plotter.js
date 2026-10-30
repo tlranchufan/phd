@@ -10,6 +10,7 @@ const state = {
   elements: [],
   codes: [],
   compareElementOrder: [],
+  hostConditionOrder: [],
   approvedHostPairKeys: new Set(),
   creeResults: [],
   yMin: null,
@@ -405,6 +406,34 @@ function uniqueNumericValues(values) {
   return out.sort((a, b) => a - b);
 }
 
+const CHEMICAL_SUBSCRIPT_DIGITS = {
+  '0':'₀','1':'₁','2':'₂','3':'₃','4':'₄',
+  '5':'₅','6':'₆','7':'₇','8':'₈','9':'₉'
+};
+
+const DEFAULT_HOST_COMPOUND_ORDER = [
+  'NaCl',
+  'NaF',
+  'Na3PO4',
+  'Na2SO4',
+  'Na2CO3',
+  'K2CO3'
+];
+
+function formatCompoundFormula(value) {
+  return String(value ?? '').replace(/[0-9]/g,digit=>CHEMICAL_SUBSCRIPT_DIGITS[digit] || digit);
+}
+
+function compoundOrderKey(value) {
+  return String(value ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+}
+
+function defaultHostCompoundRank(value) {
+  const key=compoundOrderKey(value);
+  const index=DEFAULT_HOST_COMPOUND_ORDER.findIndex(compound=>compoundOrderKey(compound)===key);
+  return index >= 0 ? index : Number.MAX_SAFE_INTEGER;
+}
+
 function inclusionPhaseFromCode(code) {
   const value = String(code ?? '').trim();
   return /(?:_|-)M(?:[_-]?(?:COPY|REP|R)?\d+)?$/i.test(value) ? 'Melt' : 'Fluid';
@@ -579,11 +608,121 @@ function hostCompareDisplay() {
 
 function hostConditionLabel(row, pair, molkg) {
   const compound = String(row?.Compound || '').trim();
-  const base = compound || pair.condition;
+  const base = formatCompoundFormula(compound || pair.condition);
   const phase = inclusionPhaseFromCode(row?.Code || pair?.codeA);
   const phaseText = phase === 'Melt' ? ' · Melt' : '';
   const concentration = Number.isFinite(molkg) ? ` · ${formatMolKg(molkg)} mol/kg` : '';
   return `${base}${phaseText}${concentration}`;
+}
+
+function hostConditionPairKey(pair) {
+  return `${pair.codeA}||${pair.codeB}`;
+}
+
+function hostConditionCompound(pair,molkg) {
+  const meta=hostPairMetadata(pair.codeA,molkg);
+  return meta.compound || pair.condition || '';
+}
+
+function sortHostPairsDefault(pairs,molkg) {
+  return [...pairs].sort((a,b)=>{
+    const compA=hostConditionCompound(a,molkg);
+    const compB=hostConditionCompound(b,molkg);
+    const rankA=defaultHostCompoundRank(compA);
+    const rankB=defaultHostCompoundRank(compB);
+    if(rankA!==rankB) return rankA-rankB;
+    return compoundOrderKey(compA).localeCompare(compoundOrderKey(compB)) ||
+      hostConditionPairKey(a).localeCompare(hostConditionPairKey(b));
+  });
+}
+
+function orderedHostPairs(pairs,molkg) {
+  const byKey=new Map(pairs.map(pair=>[hostConditionPairKey(pair),pair]));
+  const ordered=[];
+
+  state.hostConditionOrder.forEach(key=>{
+    if(byKey.has(key)){
+      ordered.push(byKey.get(key));
+      byKey.delete(key);
+    }
+  });
+
+  ordered.push(...sortHostPairsDefault([...byKey.values()],molkg));
+  return ordered;
+}
+
+function syncHostConditionOrder({reset=false} = {}) {
+  const select=$('hostConditionOrder');
+  if(!select||!state.file) return;
+
+  const active=radioValue('plotMode')==='compare' && compareSubmode()==='host';
+  const codes=new Set(selectedValues($('codes')));
+  const molkg=num($('compareMolKg')?.value);
+
+  if(!active||molkg===null){
+    select.innerHTML='';
+    state.hostConditionOrder=[];
+    $('moveHostConditionUp').disabled=true;
+    $('moveHostConditionDown').disabled=true;
+    $('resetHostConditionOrder').disabled=true;
+    return;
+  }
+
+  const pairs=hostPairedCodes(codes,molkg);
+  const keys=new Set(pairs.map(hostConditionPairKey));
+
+  if(reset||!state.hostConditionOrder.length){
+    state.hostConditionOrder=sortHostPairsDefault(pairs,molkg).map(hostConditionPairKey);
+  } else {
+    const kept=state.hostConditionOrder.filter(key=>keys.has(key));
+    const missing=sortHostPairsDefault(
+      pairs.filter(pair=>!kept.includes(hostConditionPairKey(pair))),
+      molkg
+    ).map(hostConditionPairKey);
+    state.hostConditionOrder=[...kept,...missing];
+  }
+
+  const pairByKey=new Map(pairs.map(pair=>[hostConditionPairKey(pair),pair]));
+  const previous=select.value;
+
+  select.innerHTML=state.hostConditionOrder.map(key=>{
+    const pair=pairByKey.get(key);
+    if(!pair) return '';
+    const meta=hostPairMetadata(pair.codeA,molkg);
+    const label=hostConditionLabel(
+      {Compound:meta.compound,Code:pair.codeA},
+      pair,
+      molkg
+    );
+    const escapedKey=String(key).replaceAll('&','&amp;').replaceAll('"','&quot;');
+    return `<option value="${escapedKey}">${label}</option>`;
+  }).join('');
+
+  if(state.hostConditionOrder.includes(previous)) select.value=previous;
+  else if(state.hostConditionOrder.length) select.value=state.hostConditionOrder[0];
+
+  const enabled=state.hostConditionOrder.length>0;
+  $('moveHostConditionUp').disabled=!enabled;
+  $('moveHostConditionDown').disabled=!enabled;
+  $('resetHostConditionOrder').disabled=!enabled;
+}
+
+function moveHostCondition(direction) {
+  const select=$('hostConditionOrder');
+  const key=select.value;
+  if(!key) return;
+
+  const index=state.hostConditionOrder.indexOf(key);
+  if(index<0) return;
+  const target=index+direction;
+  if(target<0||target>=state.hostConditionOrder.length) return;
+
+  [state.hostConditionOrder[index],state.hostConditionOrder[target]]=
+    [state.hostConditionOrder[target],state.hostConditionOrder[index]];
+
+  syncHostConditionOrder();
+  select.value=key;
+  renderPlot();
 }
 
 function configureHostConditionAxis(layout, conditionOrder) {
@@ -644,7 +783,7 @@ function updateQuickFilters({reset=false} = {}) {
   const prevMol=reset?'':molSelect.value;
   const compounds=[...new Set(state.avgRows.map(r=>String(r.Compound ?? '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const concentrations=uniqueNumericValues(state.avgRows.map(r=>num(r['Mol/Kg'])));
-  compoundSelect.replaceChildren(new Option('All compounds',''),...compounds.map(c=>new Option(c,c)));
+  compoundSelect.replaceChildren(new Option('All compounds',''),...compounds.map(c=>new Option(formatCompoundFormula(c),c)));
   molSelect.replaceChildren(new Option('All concentrations',''),...concentrations.map(m=>new Option(formatMolKg(m),String(m))));
   compoundSelect.value=compounds.includes(prevCompound)?prevCompound:'';
   hostSelect.value=['Quartz','Corundum','Calcite'].includes(prevHost)?prevHost:'';
@@ -849,7 +988,7 @@ function creeElementColor(element) {
 }
 
 function creeRegressionLabel(element, compound, fit) {
-  const base = `${elementDisplayName(element)} · ${compound}`;
+  const base = `${elementDisplayName(element)} · ${formatCompoundFormula(compound)}`;
   if (!$('creeShowEquation')?.checked || !fit) return base;
   const nText = Number.isFinite(fit.slope) ? fit.slope.toFixed(2) : '—';
   const r2Text = Number.isFinite(fit.r2) ? fit.r2.toFixed(3) : '—';
@@ -1145,6 +1284,7 @@ function updateElementChoices({initial=false, autoSelectIfEmpty=false} = {}) {
 
   syncCompareElementOrder();
   renderHostPairApprovals(codes);
+  syncHostConditionOrder();
 }
 
 function clearWorkbook() {
@@ -1156,6 +1296,7 @@ function clearWorkbook() {
   state.elements = [];
   state.codes = [];
   state.compareElementOrder = [];
+  state.hostConditionOrder = [];
   state.approvedHostPairKeys = new Set();
   state.creeResults = [];
   state.yMin = null;
@@ -1164,6 +1305,10 @@ function clearWorkbook() {
   updateQuickFilters({reset:true});
   $('plotFile').value='';
   $('compareElementOrder').innerHTML='';
+  $('hostConditionOrder').innerHTML='';
+  $('moveHostConditionUp').disabled=true;
+  $('moveHostConditionDown').disabled=true;
+  $('resetHostConditionOrder').disabled=true;
   $('moveCompareElementLeft').disabled=true;
   $('moveCompareElementRight').disabled=true;
   $('resetCompareElementOrder').disabled=true;
@@ -1390,7 +1535,7 @@ function buildSimplePlot(rows, xField) {
       return `${elementDisplayName(matchingElement)}${panel.slice(matchingElement.length)}`;
     }
     if (facetElements) return elementDisplayName(panel);
-    return panel;
+    return formatCompoundFormula(panel);
   });
 
   const traces=[];
@@ -1426,7 +1571,7 @@ function buildSimplePlot(rows, xField) {
         pts.sort((a,b)=>a.r.__displayX-b.r.__displayX);
         const axis=panelIndex+1, suffix=axis===1?'':axis;
         traces.push({
-          type:'scatter', mode:'lines+markers', name:panelNames.length>1?`${elementDisplayName(element)} · ${comp}`:`${elementDisplayName(element)}${byCompound.size>1?' · '+comp:''}`,
+          type:'scatter', mode:'lines+markers', name:panelNames.length>1?`${elementDisplayName(element)} · ${formatCompoundFormula(comp)}`:`${elementDisplayName(element)}${byCompound.size>1?' · '+formatCompoundFormula(comp):''}`,
           x:pts.map(p=>p.r.__displayX), y:pts.map(p=>p.y), xaxis:`x${suffix}`, yaxis:`y${suffix}`,
           marker:{size:10}, line:{width:2},
           error_y:showErr?{type:'data',array:pts.map(p=>p.err??0),visible:true,thickness:1.2,width:4}:undefined,
@@ -1518,7 +1663,7 @@ function buildRatioPlot(rows,xField) {
   groups.forEach((pts,comp)=>{
     pts.sort((a,b)=>a.r.__displayX-b.r.__displayX);
     traces.push({
-      type:'scatter',mode:'lines+markers',name:comp,
+      type:'scatter',mode:'lines+markers',name:formatCompoundFormula(comp),
       x:pts.map(p=>p.r.__displayX),y:pts.map(p=>p.ratio),
       marker:{size:10},line:{width:2},
       error_y:showErr ? {
@@ -1580,7 +1725,8 @@ function buildComparePlot(codes) {
 
     const basis = radioValue('compareRatioBasis');
     const display = hostCompareDisplay();
-    const pairs = hostPairedCodes(codes, molkg);
+    syncHostConditionOrder();
+    const pairs = orderedHostPairs(hostPairedCodes(codes, molkg), molkg);
     if (!pairs.length) {
       throw new Error(`No matching ${hostA} / ${hostB} Code pairs were found. Select both host versions of the same condition.`);
     }
@@ -1975,7 +2121,7 @@ function creeElementAxisLabel(element) {
 
 function creeSoluteAxisLabel(compounds) {
   const unique = [...new Set((compounds || []).filter(Boolean))];
-  if (unique.length === 1) return `log10[${unique[0]}]`;
+  if (unique.length === 1) return `log10[${formatCompoundFormula(unique[0])}]`;
   return 'log10[solute]';
 }
 
@@ -2258,7 +2404,7 @@ function buildCreePlot(codes) {
       const siblingIndex = siblings.findIndex(item => item === label);
       const yShift = (siblingIndex - (siblings.length - 1) / 2) * 18;
       const hasMultipleCompounds = (fitsPerElement.get(label.element) || 0) > 1;
-      const compoundText = hasMultipleCompounds ? ` · ${label.compound}` : '';
+      const compoundText = hasMultipleCompounds ? ` · ${formatCompoundFormula(label.compound)}` : '';
       const text = `<b>${elementDisplayName(label.element)}</b>${compoundText}  n=${label.slope.toFixed(2)}`;
 
       layout.annotations = (layout.annotations || []).concat({
@@ -2509,8 +2655,17 @@ $('hostPairApprovalList').addEventListener('change',event=>{
   if(box.checked) state.approvedHostPairKeys.add(key);
   else state.approvedHostPairKeys.delete(key);
   updateElementChoices({autoSelectIfEmpty:true});
+  syncHostConditionOrder();
   renderPlot();
 });
+
+$('moveHostConditionUp').addEventListener('click',()=>moveHostCondition(-1));
+$('moveHostConditionDown').addEventListener('click',()=>moveHostCondition(1));
+$('resetHostConditionOrder').addEventListener('click',()=>{
+  syncHostConditionOrder({reset:true});
+  renderPlot();
+});
+
 $('offsetSpread').addEventListener('input',()=>{$('offsetSpreadValue').textContent=`${Math.round(Number($('offsetSpread').value)*100)}%`;renderPlot();});
 $('plotTextSize').addEventListener('input',()=>{
   $('plotTextSizeValue').textContent=`${$('plotTextSize').value} px`;
@@ -2657,6 +2812,7 @@ document.querySelectorAll('#plotTypeCard input, #plotTypeCard select, #plotConfi
   $('simpleGraphControls').classList.toggle('hidden', !simple);
   $('ratioGraphControls').classList.toggle('hidden', !ratio);
   $('compareGraphControls').classList.toggle('hidden', !compare);
+  $('hostConditionOrderControls').classList.toggle('hidden', !compareHost);
   $('creeGraphControls').classList.toggle('hidden', !cree);
   $('yBoundsControls').classList.toggle('hidden', compareHost || !state.file);
 

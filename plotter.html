@@ -320,6 +320,16 @@
         <div id="compareGraphControls" class="hidden">
           <label class="toggle"><input id="compareLogY" type="checkbox"> Log10 value axis</label>
           <label class="toggle"><input id="compareShowErr" type="checkbox" checked> Show error bars (± standard deviation)</label>
+
+          <fieldset id="hostConditionOrderControls" class="hidden">
+            <legend>Condition order</legend>
+            <select id="hostConditionOrder" size="7"></select>
+            <div class="actions mini-actions">
+              <button id="moveHostConditionUp" type="button">↑ Move up</button>
+              <button id="moveHostConditionDown" type="button">Move down ↓</button>
+              <button id="resetHostConditionOrder" type="button">Reset order</button>
+            </div>
+          </fieldset>
         </div>
 
         <div id="creeGraphControls" class="hidden">
@@ -409,6 +419,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261031-melt-phase-awareness"></script>
+  <script defer src="./plotter.js?v=20261031-host-order-subscripts"></script>
 </body>
 </html>
