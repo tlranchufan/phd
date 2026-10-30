@@ -91,6 +91,80 @@
           <label class="inline-option"><input type="radio" name="plotMode" value="cree"> CREE vs solute (log–log)</label>
         </fieldset>
 
+
+        <div id="compareControls" class="hidden">
+          <fieldset>
+            <legend>Compare settings</legend>
+
+            <fieldset>
+              <legend>Compare view</legend>
+              <label class="inline-option"><input type="radio" name="compareMode" value="elements" checked> Elements</label>
+              <label class="inline-option"><input type="radio" name="compareMode" value="host"> Host paired</label>
+            </fieldset>
+
+            <label>Common Mol/Kg
+              <select id="compareMolKg"></select>
+            </label>
+            <p id="compareMolHint" class="hint" style="display:none"></p>
+
+            <div id="compareElementControls">
+              <label>Element order (left → right)
+                <select id="compareElementOrder" size="8"></select>
+              </label>
+
+              <div class="actions mini-actions">
+                <button id="moveCompareElementLeft" type="button">← Move left</button>
+                <button id="moveCompareElementRight" type="button">Move right →</button>
+                <button id="resetCompareElementOrder" type="button">Reset order</button>
+              </div>
+
+              <fieldset>
+                <legend>Y-axis quantity</legend>
+                <label class="inline-option"><input type="radio" name="compareYMode" value="ppm" checked> ppm</label>
+                <label class="inline-option"><input type="radio" name="compareYMode" value="mol"> Element (mol/kg)</label>
+              </fieldset>
+            </div>
+
+            <div id="compareHostControls" class="hidden">
+              <label>Numerator element
+                <select id="compareNumerator"></select>
+              </label>
+              <label>Denominator element
+                <select id="compareDenominator"></select>
+              </label>
+
+              <fieldset>
+                <legend>Ratio basis</legend>
+                <label class="inline-option"><input type="radio" name="compareRatioBasis" value="ww" checked> weight/weight</label>
+                <label class="inline-option"><input type="radio" name="compareRatioBasis" value="mm"> mol/mol</label>
+              </fieldset>
+
+              <div class="grid two">
+                <label>Host A
+                  <select id="compareHostA">
+                    <option value="Quartz" selected>Quartz</option>
+                    <option value="Corundum">Corundum</option>
+                    <option value="Calcite">Calcite</option>
+                  </select>
+                </label>
+                <label>Host B
+                  <select id="compareHostB">
+                    <option value="Quartz">Quartz</option>
+                    <option value="Corundum" selected>Corundum</option>
+                    <option value="Calcite">Calcite</option>
+                  </select>
+                </label>
+              </div>
+
+              <fieldset>
+                <legend>Host comparison display</legend>
+                <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="paired" checked> Paired / dumbbell</label>
+                <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="fold"> Fold change</label>
+              </fieldset>
+            </div>
+          </fieldset>
+        </div>
+
       </section>
 
       <section id="plotConfig" class="card hidden">
@@ -167,79 +241,6 @@
           </fieldset>
           <label class="toggle"><input id="facetElements" type="checkbox"> Facet by element</label>
           <label class="toggle"><input id="facetCompounds" type="checkbox"> Facet by compound</label>
-        </div>
-
-        <div id="compareControls" class="hidden">
-          <fieldset>
-            <legend>Compare settings</legend>
-
-            <fieldset>
-              <legend>Compare view</legend>
-              <label class="inline-option"><input type="radio" name="compareMode" value="elements" checked> Elements</label>
-              <label class="inline-option"><input type="radio" name="compareMode" value="host"> Host paired</label>
-            </fieldset>
-
-            <label>Common Mol/Kg
-              <select id="compareMolKg"></select>
-            </label>
-            <p id="compareMolHint" class="hint" style="display:none"></p>
-
-            <div id="compareElementControls">
-              <label>Element order (left → right)
-                <select id="compareElementOrder" size="8"></select>
-              </label>
-
-              <div class="actions mini-actions">
-                <button id="moveCompareElementLeft" type="button">← Move left</button>
-                <button id="moveCompareElementRight" type="button">Move right →</button>
-                <button id="resetCompareElementOrder" type="button">Reset order</button>
-              </div>
-
-              <fieldset>
-                <legend>Y-axis quantity</legend>
-                <label class="inline-option"><input type="radio" name="compareYMode" value="ppm" checked> ppm</label>
-                <label class="inline-option"><input type="radio" name="compareYMode" value="mol"> Element (mol/kg)</label>
-              </fieldset>
-            </div>
-
-            <div id="compareHostControls" class="hidden">
-              <label>Numerator element
-                <select id="compareNumerator"></select>
-              </label>
-              <label>Denominator element
-                <select id="compareDenominator"></select>
-              </label>
-
-              <fieldset>
-                <legend>Ratio basis</legend>
-                <label class="inline-option"><input type="radio" name="compareRatioBasis" value="ww" checked> weight/weight</label>
-                <label class="inline-option"><input type="radio" name="compareRatioBasis" value="mm"> mol/mol</label>
-              </fieldset>
-
-              <div class="grid two">
-                <label>Host A
-                  <select id="compareHostA">
-                    <option value="Quartz" selected>Quartz</option>
-                    <option value="Corundum">Corundum</option>
-                    <option value="Calcite">Calcite</option>
-                  </select>
-                </label>
-                <label>Host B
-                  <select id="compareHostB">
-                    <option value="Quartz">Quartz</option>
-                    <option value="Corundum" selected>Corundum</option>
-                    <option value="Calcite">Calcite</option>
-                  </select>
-                </label>
-              </div>
-
-              <fieldset>
-                <legend>Host comparison display</legend>
-                <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="paired" checked> Paired / dumbbell</label>
-                <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="fold"> Fold change</label>
-              </fieldset>
-            </div>
-          </fieldset>
         </div>
 
         <div id="creeControls" class="hidden">
@@ -384,6 +385,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261031-five-section-layout"></script>
+  <script defer src="./plotter.js?v=20261031-compare-settings-in-plot-type"></script>
 </body>
 </html>

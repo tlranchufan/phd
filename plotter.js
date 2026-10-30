@@ -2335,7 +2335,7 @@ $('downloadPdf').addEventListener('click',exportPdf);
 $('downloadHtml').addEventListener('click',exportHtml);
 $('downloadCreeCsv').addEventListener('click',downloadCreeResultsCsv);
 
-document.querySelectorAll('#plotTypeCard input, #plotConfig input, #plotConfig select, #graphControls input, #graphControls select').forEach(el=>el.addEventListener('change',()=>{
+document.querySelectorAll('#plotTypeCard input, #plotTypeCard select, #plotConfig input, #plotConfig select, #graphControls input, #graphControls select').forEach(el=>el.addEventListener('change',()=>{
   const plotMode = radioValue('plotMode');
 
   if (el.id === 'elements') {
