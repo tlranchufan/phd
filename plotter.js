@@ -405,6 +405,11 @@ function uniqueNumericValues(values) {
   return out.sort((a, b) => a - b);
 }
 
+function inclusionPhaseFromCode(code) {
+  const value = String(code ?? '').trim();
+  return /(?:_|-)M(?:[_-]?(?:COPY|REP|R)?\d+)?$/i.test(value) ? 'Melt' : 'Fluid';
+}
+
 function hostFromCode(code) {
   const value = String(code ?? '').trim();
   if (/^CC(?:[-_]|[A-Z])/.test(value)) return 'Calcite';
@@ -444,14 +449,15 @@ function selectedHostPair() {
 }
 
 function hostPairMetadata(code, molkg) {
-  const rows = filteredAvgRows({ignoreHost:true}).filter(row =>
+  const rows = filteredAvgRows({ignoreHost:true,ignorePhase:true}).filter(row =>
     String(row.Code) === String(code) &&
     (molkg === null || sameNumericValue(num(row['Mol/Kg']), molkg))
   );
   const compounds = [...new Set(rows.map(row => String(row.Compound || '').trim()).filter(Boolean))];
   return {
     compound: compounds.length === 1 ? compounds[0] : '',
-    compounds
+    compounds,
+    phase: inclusionPhaseFromCode(code)
   };
 }
 
@@ -495,8 +501,9 @@ function hostPairCandidates(codes, molkg=null) {
         metaB.compound &&
         metaA.compound.toLowerCase()===metaB.compound.toLowerCase()
       );
+      const samePhase=metaA.phase===metaB.phase;
 
-      if(!fuzzyCodeMatch && !compoundMatch) return;
+      if(!samePhase || (!fuzzyCodeMatch && !compoundMatch)) return;
 
       suggestions.push({
         condition:metaA.compound || metaB.compound || hostNeutralCode(codeA),
@@ -573,8 +580,10 @@ function hostCompareDisplay() {
 function hostConditionLabel(row, pair, molkg) {
   const compound = String(row?.Compound || '').trim();
   const base = compound || pair.condition;
+  const phase = inclusionPhaseFromCode(row?.Code || pair?.codeA);
+  const phaseText = phase === 'Melt' ? ' · Melt' : '';
   const concentration = Number.isFinite(molkg) ? ` · ${formatMolKg(molkg)} mol/kg` : '';
-  return `${base}${concentration}`;
+  return `${base}${phaseText}${concentration}`;
 }
 
 function configureHostConditionAxis(layout, conditionOrder) {
@@ -615,20 +624,23 @@ function compareSubmode() {
 }
 
 
-function filteredAvgRows({ignoreHost=false} = {}) {
+function filteredAvgRows({ignoreHost=false,ignorePhase=false} = {}) {
   const compound = $('filterCompound').value;
   const host = $('filterHost').value;
+  const phase = $('filterPhase').value;
   const mol = $('filterMolKg').value;
   return state.avgRows.filter(row =>
     (!compound || String(row.Compound ?? '').trim() === compound) &&
     (ignoreHost || !host || hostFromCode(row.Code) === host) &&
+    (ignorePhase || !phase || inclusionPhaseFromCode(row.Code) === phase) &&
     (!mol || (num(row['Mol/Kg']) !== null && sameNumericValue(num(row['Mol/Kg']), Number(mol))))
   );
 }
 function updateQuickFilters({reset=false} = {}) {
-  const compoundSelect=$('filterCompound'), hostSelect=$('filterHost'), molSelect=$('filterMolKg');
+  const compoundSelect=$('filterCompound'), hostSelect=$('filterHost'), phaseSelect=$('filterPhase'), molSelect=$('filterMolKg');
   const prevCompound=reset?'':compoundSelect.value;
   const prevHost=reset?'':hostSelect.value;
+  const prevPhase=reset?'':phaseSelect.value;
   const prevMol=reset?'':molSelect.value;
   const compounds=[...new Set(state.avgRows.map(r=>String(r.Compound ?? '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const concentrations=uniqueNumericValues(state.avgRows.map(r=>num(r['Mol/Kg'])));
@@ -636,6 +648,7 @@ function updateQuickFilters({reset=false} = {}) {
   molSelect.replaceChildren(new Option('All concentrations',''),...concentrations.map(m=>new Option(formatMolKg(m),String(m))));
   compoundSelect.value=compounds.includes(prevCompound)?prevCompound:'';
   hostSelect.value=['Quartz','Corundum','Calcite'].includes(prevHost)?prevHost:'';
+  phaseSelect.value=['Fluid','Melt'].includes(prevPhase)?prevPhase:'';
   molSelect.value=concentrations.some(m=>String(m)===prevMol)?prevMol:'';
 }
 function updateFilteredCodeChoices() {
@@ -1421,11 +1434,12 @@ function buildSimplePlot(rows, xField) {
             p.r.Code,p.r.Compound,p.r[xField],p.r.__offset,p.r.File||'',
             elementDisplayName(element),
             normalize ? chondritePpmForElement(element) : '',
-            normalize ? chondriteSourceText(element) : ''
+            normalize ? chondriteSourceText(element) : '',
+            inclusionPhaseFromCode(p.r.Code)
           ]),
           hovertemplate:normalize
-            ? 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Element: %{customdata[5]}<br>CI reference: %{customdata[7]}<br>Sample / CI: %{y:.10~f}<extra></extra>'
-            : 'Code: %{customdata[0]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Element: %{customdata[5]}<br>Y: %{y:.10~f}<extra></extra>'
+            ? 'Code: %{customdata[0]}<br>Phase: %{customdata[8]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Element: %{customdata[5]}<br>CI reference: %{customdata[7]}<br>Sample / CI: %{y:.10~f}<extra></extra>'
+            : 'Code: %{customdata[0]}<br>Phase: %{customdata[8]}<br>Compound: %{customdata[1]}<br>'+xField+': %{customdata[2]}<br>Display offset: %{customdata[3]:.4g}<br>Element: %{customdata[5]}<br>Y: %{y:.10~f}<extra></extra>'
         });
       });
     });
@@ -1623,7 +1637,8 @@ function buildComparePlot(codes) {
           formatMolKg(molkg),
           hostA,
           pointA.sd,
-          pair.condition
+          pair.condition,
+          inclusionPhaseFromCode(pair.codeA)
         ]);
 
         hostBX.push(pointB.value);
@@ -1635,7 +1650,8 @@ function buildComparePlot(codes) {
           formatMolKg(molkg),
           hostB,
           pointB.sd,
-          pair.condition
+          pair.condition,
+          inclusionPhaseFromCode(pair.codeB)
         ]);
       });
 
@@ -1662,6 +1678,7 @@ function buildComparePlot(codes) {
           'Condition: %{customdata[5]}<br>' +
           'Code: %{customdata[0]}<br>' +
           'Host: %{customdata[3]}<br>' +
+          'Phase: %{customdata[6]}<br>' +
           'Compound: %{customdata[1]}<br>' +
           'Mol/Kg: %{customdata[2]}<br>' +
           ratioLabel + ': %{x:.10~f}<br>' +
@@ -1687,6 +1704,7 @@ function buildComparePlot(codes) {
           'Condition: %{customdata[5]}<br>' +
           'Code: %{customdata[0]}<br>' +
           'Host: %{customdata[3]}<br>' +
+          'Phase: %{customdata[6]}<br>' +
           'Compound: %{customdata[1]}<br>' +
           'Mol/Kg: %{customdata[2]}<br>' +
           ratioLabel + ': %{x:.10~f}<br>' +
@@ -2332,6 +2350,14 @@ function renderPlot() {
     applyGraphStyleOptions(result);
 
     const warnings = result.warnings || [];
+    if (plotMode !== 'compare' || result.compareMode !== 'host') {
+      const plottedCodes = new Set(selectedValues($('codes')));
+      const plottedRows = filteredAvgRows().filter(row => plottedCodes.has(String(row.Code)));
+      const phases = new Set(plottedRows.map(row => inclusionPhaseFromCode(row.Code)));
+      if (phases.has('Melt') && phases.has('Fluid')) {
+        warnings.unshift('Fluid and suspected melt (_M) data are plotted together; melt inclusions may be much higher in REE concentration. Use the Phase filter or a log axis if needed.');
+      }
+    }
     const width = $('plot').clientWidth || 900;
     const auto = $('autoAspect').checked;
     let aspect = Number($('aspectRatio').value) || .7;
@@ -2445,6 +2471,7 @@ $('loadPlotFile').addEventListener('click',async()=>{
 $('clearPlotFile').addEventListener('click',clearWorkbook);
 $('filterCompound').addEventListener('change',updateFilteredCodeChoices);
 $('filterHost').addEventListener('change',updateFilteredCodeChoices);
+$('filterPhase').addEventListener('change',updateFilteredCodeChoices);
 $('filterMolKg').addEventListener('change',updateFilteredCodeChoices);
 $('selectAllCodes').addEventListener('click',()=>{
   [...$('codes').options].forEach(o=>o.selected=true);

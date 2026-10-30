@@ -197,6 +197,13 @@
               <option value="Calcite">Calcite</option>
             </select>
           </label>
+          <label>Phase filter
+            <select id="filterPhase">
+              <option value="">All phases</option>
+              <option value="Fluid">Fluid</option>
+              <option value="Melt">Melt (_M)</option>
+            </select>
+          </label>
           <label>Mol/Kg filter
             <select id="filterMolKg"><option value="">All concentrations</option></select>
           </label>
@@ -402,6 +409,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261031-greyscale-shapes"></script>
+  <script defer src="./plotter.js?v=20261031-melt-phase-awareness"></script>
 </body>
 </html>
