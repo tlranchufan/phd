@@ -92,6 +92,7 @@ function applyGraphStyleOptions(result) {
       trace.hoverinfo==='skip' &&
       !trace.legendgroup;
     const openMarker=Boolean(trace.meta?.openMarker);
+    const preserveMarkerStyle=Boolean(trace.meta?.preserveMarkerStyle);
 
     if (greyscale && !connectorOnly) {
       if (!colorByKey.has(key)) {
@@ -115,14 +116,21 @@ function applyGraphStyleOptions(result) {
     }
 
     if (hasMarkers) {
-      if (!symbolByKey.has(key)) {
-        symbolByKey.set(key,preferredTraceSymbol(trace,nextSymbol));
-        nextSymbol++;
+      if (preserveMarkerStyle) {
+        trace.marker={
+          ...(trace.marker || {}),
+          symbol:distinctShapes ? (trace.marker?.symbol || 'circle') : 'circle'
+        };
+      } else {
+        if (!symbolByKey.has(key)) {
+          symbolByKey.set(key,preferredTraceSymbol(trace,nextSymbol));
+          nextSymbol++;
+        }
+        trace.marker={
+          ...(trace.marker || {}),
+          symbol:distinctShapes ? symbolByKey.get(key) : 'circle'
+        };
       }
-      trace.marker={
-        ...(trace.marker || {}),
-        symbol:distinctShapes ? symbolByKey.get(key) : 'circle'
-      };
     }
 
     // Marker symbols do not apply to bars; greyscale still does.
@@ -2148,6 +2156,7 @@ function buildComparePlot(codes) {
             symbol:HOST_RATIO_SYMBOLS[componentIndex%HOST_RATIO_SYMBOLS.length],
             line:{width:1.4,color:'#ffffff'}
           },
+          meta:{preserveMarkerStyle:true},
           customdata:custom,
           hovertemplate:'%{customdata[0]}<br>%{customdata[1]} fold: %{x:.4g}<extra></extra>'
         });
@@ -2187,6 +2196,7 @@ function buildComparePlot(codes) {
             size:20,color:'#232323',symbol:'star',
             line:{width:2.5,color:'#ffffff'}
           },
+          meta:{preserveMarkerStyle:true},
           error_x:showErr?{
             type:'data',array:completeErr,visible:true,
             color:'rgba(35,35,35,0.52)',thickness:1.4,width:5
@@ -2203,7 +2213,7 @@ function buildComparePlot(codes) {
         traces.push({
           type:'scatter',mode:'markers',name:'Geometric mean index · incomplete uncertainty',
           showlegend:false,
-          meta:{openMarker:true},
+          meta:{openMarker:true,preserveMarkerStyle:true},
           x:incompleteX,y:incompleteY,
           marker:{
             size:21,color:'#ffffff',symbol:'star',
@@ -2307,6 +2317,7 @@ function buildComparePlot(codes) {
           symbol:HOST_RATIO_SYMBOLS[ratioIndex%HOST_RATIO_SYMBOLS.length],
           line:{width:1.2,color:'#ffffff'}
         },
+        meta:{preserveMarkerStyle:true},
         error_x:showErr?{
           type:'data',array:errors,visible:true,
           thickness:1.2,width:4,
