@@ -47,6 +47,17 @@
       gap: .55rem;
       margin: 0;
     }
+    .compare-ratio-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: .55rem;
+      align-items: end;
+      margin: .55rem 0;
+    }
+    .compare-ratio-row > span {
+      padding-bottom: .7rem;
+      font-weight: 800;
+    }
     @media (max-width: 620px) {
       .axis-bound-grid { grid-template-columns: 1fr; }
       .quick-filter-grid { grid-template-columns: 1fr; }
@@ -112,7 +123,8 @@
           <fieldset id="hostCompareDisplayControls" class="hidden">
             <legend>Host comparison display</legend>
             <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="paired" checked> Paired / dumbbell</label>
-            <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="fold"> Fold change</label>
+            <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="fold"> Ratio fold change</label>
+            <label class="inline-option"><input type="radio" name="hostCompareDisplay" value="geo"> LREE/HREE geometric mean</label>
           </fieldset>
         </div>
 
@@ -197,12 +209,41 @@
             </div>
 
             <div id="compareHostControls" class="hidden">
-              <label>Numerator element
-                <select id="compareNumerator"></select>
-              </label>
-              <label>Denominator element
-                <select id="compareDenominator"></select>
-              </label>
+              <div id="compareSingleRatioControls">
+                <label>Numerator element
+                  <select id="compareNumerator"></select>
+                </label>
+                <label>Denominator element
+                  <select id="compareDenominator"></select>
+                </label>
+              </div>
+
+              <div id="compareMultipleRatioControls" class="hidden">
+                <label class="toggle"><input id="compareMultipleRatios" type="checkbox"> Multiple ratios</label>
+                <label id="compareRatioCountWrap" class="hidden">Number of ratios
+                  <select id="compareRatioCount">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4" selected>4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                  </select>
+                </label>
+                <div id="compareRatioRows" class="hidden"></div>
+              </div>
+
+              <div id="compareGeoControls" class="hidden">
+                <fieldset>
+                  <legend>Geometric mean index</legend>
+                  <div class="grid two">
+                    <label>LREE 1<select id="compareGeoLree1"></select></label>
+                    <label>LREE 2<select id="compareGeoLree2"></select></label>
+                    <label>HREE 1<select id="compareGeoHree1"></select></label>
+                    <label>HREE 2<select id="compareGeoHree2"></select></label>
+                  </div>
+                </fieldset>
+              </div>
 
               <fieldset>
                 <legend>Ratio basis</legend>
@@ -421,6 +462,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261031-compare-section-split"></script>
+  <script defer src="./plotter.js?v=20261102-multi-ratio-geomean"></script>
 </body>
 </html>
