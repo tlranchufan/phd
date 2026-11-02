@@ -47,6 +47,32 @@
       gap: .55rem;
       margin: 0;
     }
+
+    /* Plotter-only workspace proportions: match the standalone prototype. */
+    .hero > div {
+      max-width: 1580px;
+    }
+    .hero {
+      padding-top: 2.2rem;
+      padding-bottom: 2.2rem;
+    }
+    .plotter-layout {
+      width: min(1580px, calc(100vw - 28px));
+      max-width: 1580px;
+      padding: 1.1rem 0;
+      grid-template-columns: minmax(340px, 430px) minmax(0, 1fr);
+      gap: 1.15rem;
+    }
+    .plot-controls {
+      padding-right: .2rem;
+    }
+    .plot-main > .card {
+      padding: 1.15rem;
+    }
+    .plot-surface {
+      min-height: 680px;
+    }
+
     .compare-ratio-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -58,9 +84,23 @@
       padding-bottom: .7rem;
       font-weight: 800;
     }
+    @media (max-width: 1100px) {
+      .plotter-layout {
+        width: min(100%, calc(100vw - 24px));
+        grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+      }
+    }
+    @media (max-width: 980px) {
+      .plotter-layout {
+        width: min(100%, calc(100vw - 20px));
+        grid-template-columns: 1fr;
+      }
+      .plot-surface { min-height: 560px; }
+    }
     @media (max-width: 620px) {
       .axis-bound-grid { grid-template-columns: 1fr; }
       .quick-filter-grid { grid-template-columns: 1fr; }
+      .hero { padding-top: 1.5rem; padding-bottom: 1.5rem; }
     }
   </style>
 </head>
@@ -462,6 +502,6 @@
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script defer src="./plotter.js?v=20261102-preserve-host-styles"></script>
+  <script defer src="./plotter.js?v=20261102-prototype-layout"></script>
 </body>
 </html>

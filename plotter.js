@@ -2066,7 +2066,7 @@ function buildComparePlot(codes) {
         layout.xaxis.showexponent='none';
       }
       configureHostConditionAxis(layout,conditionOrder);
-      layout.margin={...layout.margin,l:Math.max(layout.margin?.l||70,150)};
+      layout.margin={...layout.margin,l:Math.max(layout.margin?.l||70,170)};
       layout.legend={...layout.legend,orientation:'h'};
 
       if(showErr&&missingErrors){
@@ -2245,7 +2245,7 @@ function buildComparePlot(codes) {
         layout.xaxis.showexponent='none';
       }
       configureHostNumericConditionAxis(layout,conditionLabels);
-      layout.margin={...layout.margin,l:Math.max(layout.margin?.l||70,150)};
+      layout.margin={...layout.margin,l:Math.max(layout.margin?.l||70,170)};
       layout.shapes=(layout.shapes||[]).concat({
         type:'line',xref:'x',x0:1,x1:1,yref:'paper',y0:0,y1:1,
         line:{width:1.5,dash:'dash'}
@@ -2351,7 +2351,7 @@ function buildComparePlot(codes) {
       layout.xaxis.showexponent='none';
     }
     configureHostNumericConditionAxis(layout,conditionLabels);
-    layout.margin={...layout.margin,l:Math.max(layout.margin?.l||70,150)};
+    layout.margin={...layout.margin,l:Math.max(layout.margin?.l||70,170)};
     layout.shapes=(layout.shapes||[]).concat({
       type:'line',xref:'x',x0:1,x1:1,yref:'paper',y0:0,y1:1,
       line:{width:1.5,dash:'dash'}
@@ -2865,9 +2865,9 @@ function renderPlot() {
         const facetRows=Math.ceil(count/cols);
         result.layout.height=Math.max(620, facetRows*430);
       } else if (plotMode === 'compare' && result.compareMode === 'host') {
-        result.layout.height=Math.max(520, 220 + result.pairCount * 72);
+        result.layout.height=Math.max(700, 260 + result.pairCount * 78);
       } else {
-        result.layout.height=Math.max(520,Math.round(width*.7));
+        result.layout.height=Math.max(620,Math.round(width*.72));
       }
     } else {
       result.layout.height=Math.max(520,Math.round(width*aspect));
