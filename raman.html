@@ -1,15 +1,45 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Raman Spectrums</title><link rel="stylesheet" href="./styles.css?v=20261025-unified-buttons"><style>
 :root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#233247;background:#f5f7fb}*{box-sizing:border-box}body{margin:0}.shell{max-width:1500px;margin:auto;padding:24px}.raman-local-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:18px}h1{font-size:25px;margin:0;letter-spacing:-.7px}h2{font-size:18px;margin:0 0 13px}h3{font-size:14px;margin:8px 0}p{color:#5b6b7e}small,.muted{color:#718096}button,.btn{border:1px solid #cad4e1;background:#fff;color:#253a55;border-radius:8px;padding:9px 12px;font:inherit;font-size:13px;cursor:pointer}button:hover{background:#eff4fa}button.primary{background:#2463d3;color:white;border-color:#2463d3}button.primary:hover{background:#174eaf}button.danger{color:#bd3241}button:disabled{opacity:.4;cursor:default}.tabs{display:flex;gap:8px;margin:20px 0}.tabs button.active{background:#233d63;color:white;border-color:#233d63}.panel{background:white;border:1px solid #e1e8f0;border-radius:13px;padding:19px;margin-bottom:16px;box-shadow:0 2px 8px #152a4409}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.layout{display:grid;grid-template-columns:330px minmax(0,1fr);gap:16px}.stack{display:grid;gap:13px}.field{display:grid;gap:4px}label{font-size:12px;color:#53677e;font-weight:600}input,select{font:inherit;color:#24364f;background:#fff;border:1px solid #ccd6e3;border-radius:7px;padding:7px 8px;min-width:0;width:100%}input[type=checkbox]{width:auto}input[type=file]{display:none}.filebtn{display:inline-flex;padding:10px 13px;border:1px dashed #7996c0;border-radius:9px;cursor:pointer;color:#2054ae;background:#f6faff;font-size:13px;font-weight:600}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.scroll{overflow:auto;max-height:560px}table{border-collapse:collapse;min-width:1280px;width:100%;font-size:12px}th,td{padding:7px;border-bottom:1px solid #e8edf4;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#f4f7fc;z-index:1;font-size:11px;text-transform:uppercase;color:#52677e}td input,td select{width:100%;min-width:70px;font-size:12px;padding:6px}td.filename{white-space:normal;max-width:240px;min-width:180px;overflow-wrap:anywhere}.status{padding:9px 12px;background:#edf5ff;border:1px solid #d8e7ff;border-radius:8px;font-size:12px;color:#36577e}.checkrow{display:flex;align-items:center;gap:8px;font-size:13px}.checkrow label{font-weight:400;color:#344860}.spectraList{max-height:360px;overflow:auto}.item{display:flex;align-items:center;gap:7px;padding:9px 7px;border-bottom:1px solid #eef2f8;font-size:12px}.item .name{flex:1;min-width:0;overflow-wrap:anywhere}.item button{padding:4px 7px}.swatch{width:11px;height:11px;border-radius:4px;flex-shrink:0}.plotbox{min-height:490px;border:1px solid #e1e8f0;border-radius:10px;background:white;overflow:hidden}.plotbox svg{display:block;width:100%;height:auto}.section{display:none}.section.active{display:block}.hint{font-size:12px;line-height:1.5}.right{margin-left:auto}.pill{display:inline-block;background:#ecf2f8;padding:4px 8px;border-radius:30px;font-size:12px}details summary{cursor:pointer;font-weight:600;font-size:13px;padding:10px 0}details>.grid3{padding:8px 0 15px}details{border-top:1px solid #e8edf4}details:first-of-type{border-top:0}hr{border:0;border-top:1px solid #e8edf4;margin:15px 0} @media(max-width:920px){.layout{grid-template-columns:1fr}.shell{padding:12px}.raman-local-header{align-items:start;flex-direction:column}.grid3{grid-template-columns:1fr 1fr}}
 .hero h1{font-size:clamp(2rem,5vw,3.6rem);margin:.25rem 0 .6rem;letter-spacing:normal;color:white}.hero .eyebrow{color:white;opacity:.8}.hero{margin:0}.shell{max-width:1500px}.site-nav a{font-size:inherit}
+.analysis-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}.analysis-status{font-size:12px;color:#53677e}.analysis-note{font-size:11px;color:#718096;line-height:1.4}.preview-key{display:inline-flex;align-items:center;gap:6px}.preview-key::before{content:"";width:18px;border-top:2px solid #9aa7b5}.heatmap-note{font-size:11px;color:#718096}
 </style></head><body><nav class="site-nav" aria-label="Primary navigation"><div class="nav-inner"><a class="site-brand" href="./index.html">Data Processing Tools</a><div class="nav-links"><a href="./index.html">Excel Processor</a><a href="./quicksheet.html">QuickSheet Builder</a><a href="./plotter.html">QuickSheet Plotter</a><a href="./extractor.html">Extractors</a><a href="./raman.html" class="active" aria-current="page">Raman Spectrums</a><a href="./raman-ratios.html">Raman Peak Ratios</a></div></div></nav><header class="hero"><div><p class="eyebrow">Data Processing Tools</p><h1>Raman Spectrums</h1></div></header><div class="shell"><div class="raman-local-header"><span class="pill" id="counter">0 spectra in session</span></div><div class="tabs"><button class="active" data-tab="compiler">1 · Spectrum Compiler</button><button data-tab="plotter">2 · Spectrum Plotter</button></div>
 <section class="section active" id="compiler"><div class="panel"><h2>Import & compile</h2><div class="toolbar"><label class="filebtn">＋ Add WDF / TXT / CSV <input id="upload" type="file" multiple accept=".wdf,.txt,.csv"></label><label class="filebtn">↥ Open compiled dataset<input id="opencompiled" type="file" accept=".json,.gz"></label><button id="compile" class="primary">Save compiled dataset (.json)</button><button id="metadataCsv">Export metadata CSV</button><button id="clear" class="danger right">Clear session</button></div><div id="importStatus" class="status">No spectra imported.</div></div><div class="panel"><div class="toolbar" style="justify-content:space-between"><h2 style="margin:0">Review metadata</h2></div><div id="duplicateSummary" class="status" style="margin-top:8px"></div><div class="scroll" style="margin-top:12px"><table id="metaTable"><thead><tr><th>Keep</th><th>Original filename</th><th>Compound</th><th>Host Mineral</th><th>mol/kg</th><th>Sample</th><th>Phase</th><th>Phase ID</th><th>Temp °C</th><th>Condition</th><th>Objective</th><th>Power mW</th><th>Seconds</th><th>Accum.</th><th>Points</th><th>Spike pts</th><th>Action</th></tr></thead><tbody id="metabody"></tbody></table></div></div></section>
 <section class="section" id="plotter"><div class="layout"><div><div class="panel stack"><h2>Find spectra</h2><div class="field"><label>Compound</label><select id="fCompound"></select></div><div class="grid2"><div class="field"><label>Phase</label><select id="fPhase"></select></div><div class="field"><label>mol/kg</label><select id="fMol"></select></div><div class="field"><label>Temperature °C</label><select id="fTemp"></select></div><div class="field"><label>Condition</label><select id="fCondition"></select></div></div><div id="matches" class="spectraList"></div></div><div class="panel stack"><h2>Selected & stacking order</h2><div id="selectedList" class="spectraList"></div><button id="removeAll">Remove all from plot</button></div></div><div><div class="panel"><div class="toolbar"><h2 style="margin:0">Comparative spectrum plot</h2><button class="right" id="saveSvg">Export SVG</button><button id="savePng">Export PNG</button><button id="savePlotCsv">Export plotted CSV</button></div><div class="plotbox" id="plot" style="margin-top:15px"></div></div><div class="panel"><h2>Plot settings</h2>
 <details open><summary>Intensity &amp; stacking</summary><div class="grid3">
 <div class="field"><label>Intensity</label><select id="intensity"><option value="normalised">Normalised (0–1)</option><option value="raw">Raw counts</option></select></div>
+<div class="field"><label>Display mode</label><select id="displayMode"><option value="stacked" selected>Stacked spectra</option><option value="ridgeline">Ridgeline</option><option value="heatmap">Heatmap</option></select><small class="muted">Ridgeline uses normalised intensity; heatmap compares all selected spectra on a common Raman-shift grid.</small></div>
 <div class="field"><label>Offset</label><input id="offset" type="number" value="0.45" min="0" step="0.1"></div>
 <div class="field"><label for="yscale">Vertical zoom: <output id="yscaleValue">1.00×</output></label><input id="yscale" type="range" value="1" min="0.5" max="4" step="0.05"><small class="muted">Zooms the Y-axis without altering spectrum intensities</small></div>
 <div class="field"><label class="checkrow"><input id="baseline" type="checkbox"> Subtract linear endpoint baseline</label></div><div class="field"><label class="checkrow"><input id="dragSpectra" type="checkbox" checked> Drag spectra to offset</label><small class="muted">Hold Shift while dragging for fine adjustment</small></div><div class="field"><button id="resetDragOffsets" type="button">Reset dragged offsets</button></div><div class="field"><button id="undoManualSpike" type="button" disabled>Undo last cosmic-ray correction</button><small class="muted">Shift + right-click a plotted spike to interpolate it; right-click a trace to add/remove a wavenumber arrow</small></div>
 </div></details>
+<details><summary>Processing preview</summary>
+<div class="grid3">
+<label class="checkrow"><input id="procDespike" type="checkbox" checked> Auto-despike</label>
+<div class="field"><label>Savitzky–Golay smoothing</label><select id="procSmooth"><option value="0" selected>None</option><option value="5">5-point</option><option value="7">7-point</option><option value="9">9-point</option></select></div>
+<div class="field"><label>Baseline correction</label><select id="procBaseline"><option value="none" selected>None</option><option value="rolling">Rolling-minimum baseline</option></select></div>
+<div class="field"><label>Baseline window (points)</label><input id="procBaselineWindow" type="number" min="9" max="401" step="2" value="41"></div>
+</div>
+<div class="analysis-actions"><button id="previewProcessing" type="button">Preview selected</button><button id="applyProcessing" type="button" disabled>Apply preview</button><button id="discardProcessing" type="button" disabled>Discard preview</button><button id="resetWorking" type="button">Reset selected to raw</button><span id="processingStatus" class="analysis-status"></span></div>
+<div class="analysis-note"><span class="preview-key">When preview is active, the current working spectrum is shown faintly behind the proposed processed spectrum.</span> Raw arrays are never overwritten. Apply operates on all selected spectra as a batch.</div>
+</details>
+<details><summary>Peak analysis</summary>
+<div class="grid3">
+<div class="field"><label>Search preset</label><select id="peakPreset"><option value="custom" selected>Custom</option><option value="phosphate">Phosphate · 850–1100 cm⁻¹</option><option value="sulfate">Sulfate · 900–1250 cm⁻¹</option><option value="carbonate">Carbonate · 950–1150 cm⁻¹</option><option value="oh">OH · 2800–3800 cm⁻¹</option></select></div>
+<div class="field"><label>Search minimum (cm⁻¹)</label><input id="peakMin" type="number" step="any" placeholder="Visible minimum"></div>
+<div class="field"><label>Search maximum (cm⁻¹)</label><input id="peakMax" type="number" step="any" placeholder="Visible maximum"></div>
+<div class="field"><label>Minimum prominence (% range)</label><input id="peakProminence" type="number" min="0" max="100" step="0.5" value="5"></div>
+<div class="field"><label>Minimum spacing (cm⁻¹)</label><input id="peakDistance" type="number" min="0" step="1" value="10"></div>
+<label class="checkrow"><input id="showDetectedPeakLabels" type="checkbox" checked> Show peak labels</label>
+</div>
+<div class="analysis-actions"><button id="findPeaks" type="button">Find peaks</button><button id="clearDetectedPeaks" type="button">Clear peaks</button><button id="exportPeakTable" type="button">Export peak table CSV</button><span id="peakStatus" class="analysis-status"></span></div>
+<hr>
+<div class="grid3">
+<div class="field"><label>Area start (cm⁻¹)</label><input id="areaMin" type="number" step="any" placeholder="e.g. 900"></div>
+<div class="field"><label>Area end (cm⁻¹)</label><input id="areaMax" type="number" step="any" placeholder="e.g. 1100"></div>
+<label class="checkrow"><input id="areaLocalBaseline" type="checkbox" checked> Subtract straight local baseline</label>
+</div>
+<div class="analysis-actions"><button id="integrateSelected" type="button">Integrate selected</button><button id="exportAreaTable" type="button">Export area table CSV</button><span id="areaStatus" class="analysis-status"></span></div>
+</details>
 <details open><summary>X-axis &amp; truncation</summary><div class="grid3">
 <div class="field"><label>X minimum (cm⁻¹)</label><input id="xmin" type="number" placeholder="Auto"></div>
 <div class="field"><label>X maximum (cm⁻¹)</label><input id="xmax" type="number" placeholder="Auto"></div>
@@ -119,8 +149,8 @@ document.querySelectorAll('#metaTable thead th').forEach((th,i)=>{
 });
 
 $('metabody').addEventListener('change',e=>{let el=e.target,s=spectra.find(o=>o.id===Number(el.dataset.id));if(!s)return;if(el.dataset.field==='keep')s.keep=el.checked;else s.meta[el.dataset.field]=el.value;renderMeta();});$('metabody').addEventListener('click',e=>{let id=e.target.dataset.remove;if(id){spectra=spectra.filter(s=>s.id!==Number(id));selected=selected.filter(i=>i!==Number(id));renderMeta();}});
-$('upload').onchange=async e=>{let good=0,errors=[];for(let f of [...e.target.files]){try{let raw=/\.wdf$/i.test(f.name)?readWdf(await f.arrayBuffer()):readTxt(await f.text());let sorted=raw.x.map((x,i)=>[x,raw.y[i]]).filter(v=>Number.isFinite(v[0])&&Number.isFinite(v[1])).sort((a,b)=>a[0]-b[0]);if(sorted.length<20)throw Error('Too few valid spectral points');let x=sorted.map(v=>v[0]),y=sorted.map(v=>v[1]),c=cosmic(y);spectra.push({id:++uid,name:f.name,meta:metadata(f.name),x,raw:y,corrected:c.corrected,modified:c.modified,keep:true});good++;}catch(err){errors.push(f.name+': '+err.message);}}$('importStatus').textContent=good+' imported'+(errors.length?' · '+errors.length+' failed: '+errors.join(' | '):'')+'.';e.target.value='';renderMeta();};
-$('clear').onclick=()=>{if(spectra.length&&!confirm('Clear all imported spectra and plot selections?'))return;spectra=[];selected=[];$('importStatus').textContent='Session cleared.';renderMeta();};
+$('upload').onchange=async e=>{let good=0,errors=[];for(let f of [...e.target.files]){try{let raw=/\.wdf$/i.test(f.name)?readWdf(await f.arrayBuffer()):readTxt(await f.text());let sorted=raw.x.map((x,i)=>[x,raw.y[i]]).filter(v=>Number.isFinite(v[0])&&Number.isFinite(v[1])).sort((a,b)=>a[0]-b[0]);if(sorted.length<20)throw Error('Too few valid spectral points');let x=sorted.map(v=>v[0]),y=sorted.map(v=>v[1]);spectra.push({id:++uid,name:f.name,meta:metadata(f.name),x,raw:y,corrected:y.slice(),modified:[],keep:true});good++;}catch(err){errors.push(f.name+': '+err.message);}}$('importStatus').textContent=good+' imported'+(errors.length?' · '+errors.length+' failed: '+errors.join(' | '):'')+'.';e.target.value='';renderMeta();};
+$('clear').onclick=()=>{if(spectra.length&&!confirm('Clear all imported spectra and plot selections?'))return;spectra=[];selected=[];processingPreview.clear();detectedPeaks.clear();areaResults=[];$('importStatus').textContent='Session cleared.';renderMeta();};
 function download(name,blob){let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200);}
 const csvVal=s=>'"'+String(s??'').replace(/"/g,'""')+'"';$('compile').onclick=()=>{let data={format:'raman-studio-v1',saved:new Date().toISOString(),spectra:spectra.filter(s=>s.keep).map(({id,...s})=>s)};download('raman_compiled.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};$('metadataCsv').onclick=()=>{let rows=[['filename',...fields,'points','cosmic_corrected_points'],...spectra.filter(s=>s.keep).map(s=>[s.name,...fields.map(k=>s.meta[k]),s.x.length,s.modified.length])];download('raman_metadata.csv',new Blob([rows.map(r=>r.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 $('opencompiled').onchange=async e=>{
@@ -220,10 +250,104 @@ function renderMatches(){let filters=[['fCompound','compound'],['fPhase','phase'
 $('matches').onclick=e=>{let id=e.target.dataset.add;if(id){selected.push(Number(id));renderSelected();renderMatches();renderPlot();}};
 function renderSelected(){$('selectedList').innerHTML=selected.length?selected.map((id,i)=>{let s=spectra.find(v=>v.id===id);return s?'<div class="item"><span class="swatch" style="background:'+COLORS[i%COLORS.length]+'"></span><span class="name">'+esc(label(s))+'</span><button data-up="'+id+'" '+(!i?'disabled':'')+' title="Move up">↑</button><button data-down="'+id+'" '+(i===selected.length-1?'disabled':'')+' title="Move down">↓</button><button data-del="'+id+'" title="Remove">×</button></div>':'';}).join(''):'<p class="hint">Add spectra from the filtered list above.</p>';}
 $('selectedList').onclick=e=>{let id=Number(e.target.dataset.up||e.target.dataset.down||e.target.dataset.del);if(!id)return;let i=selected.indexOf(id);if(e.target.dataset.del){selected.splice(i,1);}else{let j=i+(e.target.dataset.up?-1:1);if(j>=0&&j<selected.length)[selected[i],selected[j]]=[selected[j],selected[i]];}renderSelected();renderMatches();renderPlot();};$('removeAll').onclick=()=>{selected=[];renderSelected();renderMatches();renderPlot();};
-const peakAnnotations=new Map();const manualOffsets=new Map();let dragState=null,plotDragScale=1,plotHitGeometry=null;const spikeUndo=[];
-function plotData(){let ss=selected.map(id=>spectra.find(s=>s.id===id)).filter(Boolean),norm=$('intensity').value==='normalised',base=$('baseline').checked,off=Math.max(0,Number($('offset').value)||0),xmin=$('xmin').value===''?-Infinity:Number($('xmin').value),xmax=$('xmax').value===''?Infinity:Number($('xmax').value);let series=ss.map((s,i)=>{let y=s.corrected.slice();if(base){let v0=y[0],v1=y.at(-1),n=y.length-1;y=y.map((v,j)=>v-v0-(v1-v0)*j/n);}if(norm){let max=Math.max(...y.map(Math.abs))||1;y=y.map(v=>v/max);}let offset=(ss.length-1-i)*off;
-return {s,offset,color:COLORS[i%COLORS.length],x:s.x,y:y.map(v=>v+offset+(manualOffsets.get(s.id)||0)),indices:s.x.map((v,j)=>j).filter(j=>s.x[j]>=xmin&&s.x[j]<=xmax)};});return {series,ss};}
-let lastSvg='';function renderPlot(){if(!$('plot'))return;let {series,ss}=plotData();if(!ss.length){$('plot').innerHTML='<div style="padding:60px;text-align:center;color:#7b8da3">Select spectra from the left to begin plotting</div>';lastSvg='';return;}let cutEnabled=$('truncate').checked,cutA=Number($('cutMin').value),cutB=Number($('cutMax').value);if(!Number.isFinite(cutA)||!Number.isFinite(cutB)||cutB<=cutA)cutEnabled=false;let left=90,top=65,w=1200,plotHeight=Math.max(520,145+ss.length*72),h=plotHeight,bottom=plotHeight-75,right=810,px=[],py=[];for(let q of series)for(let k of q.indices){if(cutEnabled&&q.x[k]>cutA&&q.x[k]<cutB)continue;px.push(q.x[k]);py.push(q.y[k]-(manualOffsets.get(q.s.id)||0));}if(!px.length){$('plot').innerHTML='<p style="padding:30px">No data in this wavenumber range.</p>';lastSvg='';return;}let xlo=Math.min(...px),xhi=Math.max(...px),ylo=Math.min(...py),yhi=Math.max(...py);if(xhi===xlo)xhi++;if(yhi===ylo)yhi++;let padding=Math.max(0,Math.min(40,Number($('ypad').value)||0))/100;
+const peakAnnotations=new Map();const manualOffsets=new Map();const processingPreview=new Map();const detectedPeaks=new Map();let areaResults=[];let dragState=null,plotDragScale=1,plotHitGeometry=null;const spikeUndo=[];
+function medianValue(values){let a=values.filter(Number.isFinite).slice().sort((x,y)=>x-y);if(!a.length)return 0;let m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2;}
+function sgSmooth(y,windowSize){
+ const coeffs={
+  5:[-3,12,17,12,-3].map(v=>v/35),
+  7:[-2,3,6,7,6,3,-2].map(v=>v/21),
+  9:[-21,14,39,54,59,54,39,14,-21].map(v=>v/231)
+ }[windowSize];
+ if(!coeffs||y.length<windowSize)return y.slice();
+ const half=Math.floor(windowSize/2),out=y.slice();
+ for(let i=half;i<y.length-half;i++){let v=0;for(let j=-half;j<=half;j++)v+=y[i+j]*coeffs[j+half];out[i]=v;}
+ return out;
+}
+function rollingBaseline(y,windowSize){
+ let n=Math.max(9,Math.min(401,Math.round(windowSize)||41));if(n%2===0)n++;
+ const half=Math.floor(n/2),mins=new Array(y.length);
+ for(let i=0;i<y.length;i++){let lo=Math.max(0,i-half),hi=Math.min(y.length,i+half+1),m=Infinity;for(let j=lo;j<hi;j++)if(y[j]<m)m=y[j];mins[i]=m;}
+ const smoothWindow=Math.max(5,Math.floor(n/3)|1),sh=Math.floor(smoothWindow/2),base=mins.slice();
+ for(let pass=0;pass<2;pass++){let src=base.slice();for(let i=0;i<src.length;i++){let lo=Math.max(0,i-sh),hi=Math.min(src.length,i+sh+1),sum=0,count=0;for(let j=lo;j<hi;j++){sum+=src[j];count++;}base[i]=sum/Math.max(1,count);}}
+ return base;
+}
+function runProcessingPipeline(s){
+ let y=s.corrected.slice(),modified=[];
+ if($('procDespike').checked){let d=cosmic(y);y=d.corrected;modified=d.modified.slice();}
+ let w=Number($('procSmooth').value)||0;if(w)y=sgSmooth(y,w);
+ if($('procBaseline').value==='rolling'){let base=rollingBaseline(y,Number($('procBaselineWindow').value)||41);y=y.map((v,i)=>v-base[i]);}
+ return {y,modified};
+}
+function activeWorkingY(s){return processingPreview.get(s.id)?.y||s.corrected;}
+function processedForDisplay(y,base,norm){
+ let out=y.slice();
+ if(base&&out.length>1){let v0=out[0],v1=out.at(-1),n=out.length-1;out=out.map((v,j)=>v-v0-(v1-v0)*j/n);}
+ if(norm){let max=Math.max(...out.map(Math.abs))||1;out=out.map(v=>v/max);}
+ return out;
+}
+function interpolateAt(x,y,target){
+ if(target<=x[0])return y[0];if(target>=x.at(-1))return y.at(-1);
+ let lo=0,hi=x.length-1;while(hi-lo>1){let mid=(lo+hi)>>1;if(x[mid]<=target)lo=mid;else hi=mid;}
+ let dx=x[hi]-x[lo];if(!dx)return y[lo];let t=(target-x[lo])/dx;return y[lo]+(y[hi]-y[lo])*t;
+}
+function heatColor(t){
+ t=Math.max(0,Math.min(1,t));
+ const stops=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+ let p=t*(stops.length-1),i=Math.min(stops.length-2,Math.floor(p)),f=p-i;
+ let a=stops[i],b=stops[i+1];return 'rgb('+a.map((v,k)=>Math.round(v+(b[k]-v)*f)).join(',')+')';
+}
+function findSpectrumPeaks(s){
+ const y=activeWorkingY(s),x=s.x;
+ let min=$('peakMin').value===''?x[0]:Number($('peakMin').value),max=$('peakMax').value===''?x.at(-1):Number($('peakMax').value);
+ if(!Number.isFinite(min))min=x[0];if(!Number.isFinite(max))max=x.at(-1);if(max<min)[min,max]=[max,min];
+ const candidates=[],vals=y.filter((_,i)=>x[i]>=min&&x[i]<=max),range=(Math.max(...vals)-Math.min(...vals))||1,threshold=range*(Math.max(0,Number($('peakProminence').value)||0)/100);
+ for(let i=2;i<y.length-2;i++){
+  if(x[i]<min||x[i]>max||!(y[i]>y[i-1]&&y[i]>=y[i+1]))continue;
+  let left=Math.max(0,i-10),right=Math.min(y.length-1,i+10),leftMin=y[i],rightMin=y[i];
+  for(let j=left;j<i;j++)leftMin=Math.min(leftMin,y[j]);for(let j=i+1;j<=right;j++)rightMin=Math.min(rightMin,y[j]);
+  let prominence=y[i]-Math.max(leftMin,rightMin);if(prominence<threshold)continue;
+  let half=y[i]-prominence/2,l=i,r=i;while(l>0&&y[l]>half)l--;while(r<y.length-1&&y[r]>half)r++;
+  candidates.push({index:i,x:x[i],y:y[i],prominence,fwhm:Math.max(0,x[r]-x[l])});
+ }
+ candidates.sort((a,b)=>b.prominence-a.prominence);
+ const kept=[],distance=Math.max(0,Number($('peakDistance').value)||0);
+ for(const p of candidates){if(kept.every(q=>Math.abs(q.x-p.x)>=distance))kept.push(p);}
+ return kept.sort((a,b)=>a.x-b.x);
+}
+function integrateSpectrum(s,x0,x1,subtractBaseline){
+ const x=s.x,y=activeWorkingY(s);let lo=Math.min(x0,x1),hi=Math.max(x0,x1),idx=[];for(let i=0;i<x.length;i++)if(x[i]>=lo&&x[i]<=hi)idx.push(i);
+ if(idx.length<2)return null;
+ let first=idx[0],last=idx.at(-1),xA=x[first],xB=x[last],yA=y[first],yB=y[last],area=0;
+ for(let k=1;k<idx.length;k++){
+  let i0=idx[k-1],i1=idx[k],v0=y[i0],v1=y[i1];
+  if(subtractBaseline){let b0=yA+(yB-yA)*(x[i0]-xA)/Math.max(1e-12,xB-xA),b1=yA+(yB-yA)*(x[i1]-xA)/Math.max(1e-12,xB-xA);v0-=b0;v1-=b1;}
+  area+=(v0+v1)/2*(x[i1]-x[i0]);
+ }
+ return {area,start:xA,end:xB};
+}
+function renderHeatmap(){
+ const ss=selected.map(id=>spectra.find(s=>s.id===id)).filter(Boolean);if(!ss.length)return false;
+ let xmin=$('xmin').value===''?Math.max(...ss.map(s=>s.x[0])):Number($('xmin').value),xmax=$('xmax').value===''?Math.min(...ss.map(s=>s.x.at(-1))):Number($('xmax').value);
+ if(!Number.isFinite(xmin)||!Number.isFinite(xmax)||xmax<=xmin){xmin=Math.min(...ss.map(s=>s.x[0]));xmax=Math.max(...ss.map(s=>s.x.at(-1)));}
+ const cols=420,w=1200,left=170,right=1120,top=45,rowH=Math.max(36,Math.min(62,420/Math.max(1,ss.length))),bottom=top+rowH*ss.length,h=bottom+70;
+ const norm=$('intensity').value==='normalised',rows=[];let globalMin=Infinity,globalMax=-Infinity;
+ ss.forEach(s=>{let source=activeWorkingY(s),vals=[];for(let c=0;c<cols;c++){let xx=xmin+(xmax-xmin)*c/(cols-1),v=interpolateAt(s.x,source,xx);vals.push(v);}if(norm){let lo=Math.min(...vals),hi=Math.max(...vals),span=hi-lo||1;vals=vals.map(v=>(v-lo)/span);}for(const v of vals){globalMin=Math.min(globalMin,v);globalMax=Math.max(globalMax,v);}rows.push({s,vals});});
+ let span=globalMax-globalMin||1,out=['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="background:white"><rect width="100%" height="100%" fill="white"/>'];
+ rows.forEach((row,ri)=>{let y=top+ri*rowH;for(let c=0;c<cols;c++){let xx=left+(right-left)*c/cols,t=(row.vals[c]-globalMin)/span;out.push('<rect x="'+xx.toFixed(2)+'" y="'+y.toFixed(2)+'" width="'+((right-left)/cols+0.6).toFixed(2)+'" height="'+rowH.toFixed(2)+'" fill="'+heatColor(t)+'"/>');}out.push('<text x="'+(left-12)+'" y="'+(y+rowH*.62)+'" text-anchor="end" font-family="sans-serif" font-size="13" fill="#29374a">'+esc(plotLabel(row.s)||row.s.name)+'</text>');});
+ let tickStart=Math.ceil(xmin/500)*500;for(let x=tickStart;x<=xmax;x+=500){let xx=left+(x-xmin)/(xmax-xmin)*(right-left);out.push('<line x1="'+xx+'" y1="'+top+'" x2="'+xx+'" y2="'+bottom+'" stroke="#ffffff55"/><text x="'+xx+'" y="'+(bottom+26)+'" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#53667d">'+x+'</text>');}
+ out.push('<text x="'+((left+right)/2)+'" y="'+(h-20)+'" text-anchor="middle" font-family="sans-serif" font-size="17">Raman shift (cm⁻¹)</text></svg>');
+ lastSvg=out.join('');$('plot').innerHTML=lastSvg;return true;
+}
+function plotData(){
+ let ss=selected.map(id=>spectra.find(s=>s.id===id)).filter(Boolean),mode=$('displayMode').value,norm=mode==='ridgeline'||$('intensity').value==='normalised',base=$('baseline').checked,off=Math.max(0,Number($('offset').value)||0),xmin=$('xmin').value===''?-Infinity:Number($('xmin').value),xmax=$('xmax').value===''?Infinity:Number($('xmax').value);
+ let series=ss.map((s,i)=>{
+  let preview=processingPreview.get(s.id),source=preview?.y||s.corrected,display=processedForDisplay(source,base,norm),previous=preview?processedForDisplay(s.corrected,base,norm):null;
+  let offset=(ss.length-1-i)*(mode==='ridgeline'?Math.max(.25,off*.72):off),manual=manualOffsets.get(s.id)||0;
+  return {s,offset,color:COLORS[i%COLORS.length],x:s.x,y:display.map(v=>v+offset+manual),previewBase:previous?previous.map(v=>v+offset+manual):null,indices:s.x.map((v,j)=>j).filter(j=>s.x[j]>=xmin&&s.x[j]<=xmax)};
+ });
+ return {series,ss};
+}
+let lastSvg='';function renderPlot(){if(!$('plot'))return;let {series,ss}=plotData();if(!ss.length){$('plot').innerHTML='<div style="padding:60px;text-align:center;color:#7b8da3">Select spectra from the left to begin plotting</div>';lastSvg='';return;}if($('displayMode').value==='heatmap'){renderHeatmap();return;}let cutEnabled=$('truncate').checked,cutA=Number($('cutMin').value),cutB=Number($('cutMax').value);if(!Number.isFinite(cutA)||!Number.isFinite(cutB)||cutB<=cutA)cutEnabled=false;let left=90,top=65,w=1200,plotHeight=Math.max(520,145+ss.length*72),h=plotHeight,bottom=plotHeight-75,right=810,px=[],py=[];for(let q of series)for(let k of q.indices){if(cutEnabled&&q.x[k]>cutA&&q.x[k]<cutB)continue;px.push(q.x[k]);py.push(q.y[k]-(manualOffsets.get(q.s.id)||0));}if(!px.length){$('plot').innerHTML='<p style="padding:30px">No data in this wavenumber range.</p>';lastSvg='';return;}let xlo=Math.min(...px),xhi=Math.max(...px),ylo=Math.min(...py),yhi=Math.max(...py);if(xhi===xlo)xhi++;if(yhi===ylo)yhi++;let padding=Math.max(0,Math.min(40,Number($('ypad').value)||0))/100;
 let naturalLo=ylo,naturalHi=yhi,span=Math.max(1e-9,yhi-ylo);
 let manualLo=$('ymin').value.trim()===''?null:Number($('ymin').value);
 let manualHi=$('ymax').value.trim()===''?null:Number($('ymax').value);
@@ -245,7 +369,9 @@ for(let k=minorStart;k<=minorEnd;k++){
  if(major){out.push('<line x1="'+outx+'" y1="'+top+'" x2="'+outx+'" y2="'+bottom+'" stroke="#e9edf3"/>');}
  out.push('<line x1="'+outx+'" y1="'+bottom+'" x2="'+outx+'" y2="'+(bottom+(major?9:5))+'" stroke="#718399" stroke-width="1"/>');
  if(major){out.push('<text x="'+outx+'" y="'+(bottom+26)+'" fill="#53667d" font-size="'+t+'" text-anchor="middle" font-family="sans-serif">'+x+'</text>');}
-}if(doBreak){let bx=XX(cutA),dx=XX(cutB);out.push('<rect x="'+bx+'" y="'+top+'" width="'+(dx-bx)+'" height="'+(bottom-top+12)+'" fill="white"/>');for(let cy of [bottom,bottom+2])out.push('<path d="M'+(bx+3)+' '+(cy+5)+' l7 -11 m5 11 l7 -11" stroke="#53667d" stroke-width="1.5" fill="none"/>');}out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');out.push('<text x="'+((left+right)/2)+'" y="'+(plotHeight-22)+'" font-family="sans-serif" font-size="'+af+'" text-anchor="middle">Raman shift (cm⁻¹)</text><text transform="translate(24 '+((top+bottom)/2)+') rotate(-90)" font-family="sans-serif" font-size="'+af+'" text-anchor="middle">Intensity (a.u.) + offset</text>');series.forEach(({s,x,y,indices,color},i)=>{let shown=indices.filter(k=>!cutEnabled||(x[k]<=cutA||x[k]>=cutB));let dec=1,paths=[],previousSide=null;for(let j=0;j<shown.length;j+=dec){let k=shown[j],side=doBreak?(x[k]<=cutA?0:1):0;paths.push((previousSide===null||side!==previousSide?'M':'L')+XX(x[k]).toFixed(2)+' '+YY(y[k]).toFixed(2));previousSide=side;}if(shown.length){let k=shown.at(-1);paths.push('L'+XX(x[k]).toFixed(2)+' '+YY(y[k]).toFixed(2));}out.push('<path d="'+paths.join(' ')+'" stroke="'+color+'" stroke-width="1.4" fill="none" clip-path="url(#ramanPlotClip)"/>');out.push('<path data-drag-id="'+s.id+'" d="'+paths.join(' ')+'" stroke="transparent" stroke-width="18" fill="none" pointer-events="stroke" style="cursor:'+( $('dragSpectra').checked?'ns-resize':'crosshair')+'" clip-path="url(#ramanPlotClip)"/>');if($('labelPlacement').value!=='off'){
+}if(doBreak){let bx=XX(cutA),dx=XX(cutB);out.push('<rect x="'+bx+'" y="'+top+'" width="'+(dx-bx)+'" height="'+(bottom-top+12)+'" fill="white"/>');for(let cy of [bottom,bottom+2])out.push('<path d="M'+(bx+3)+' '+(cy+5)+' l7 -11 m5 11 l7 -11" stroke="#53667d" stroke-width="1.5" fill="none"/>');}out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');out.push('<text x="'+((left+right)/2)+'" y="'+(plotHeight-22)+'" font-family="sans-serif" font-size="'+af+'" text-anchor="middle">Raman shift (cm⁻¹)</text><text transform="translate(24 '+((top+bottom)/2)+') rotate(-90)" font-family="sans-serif" font-size="'+af+'" text-anchor="middle">Intensity (a.u.) + offset</text>');series.forEach(({s,x,y,indices,color},i)=>{let shown=indices.filter(k=>!cutEnabled||(x[k]<=cutA||x[k]>=cutB));let dec=1,paths=[],previousSide=null;for(let j=0;j<shown.length;j+=dec){let k=shown[j],side=doBreak?(x[k]<=cutA?0:1):0;paths.push((previousSide===null||side!==previousSide?'M':'L')+XX(x[k]).toFixed(2)+' '+YY(y[k]).toFixed(2));previousSide=side;}if(shown.length){let k=shown.at(-1);paths.push('L'+XX(x[k]).toFixed(2)+' '+YY(y[k]).toFixed(2));}if(previewBase){let oldPaths=[],oldSide=null;for(let j=0;j<shown.length;j++){let k=shown[j],side=doBreak?(x[k]<=cutA?0:1):0;oldPaths.push((oldSide===null||side!==oldSide?'M':'L')+XX(x[k]).toFixed(2)+' '+YY(previewBase[k]).toFixed(2));oldSide=side;}out.push('<path d="'+oldPaths.join(' ')+'" stroke="#a9b2bd" stroke-width="1.15" opacity=".75" fill="none" clip-path="url(#ramanPlotClip)"/>');}
+if($('displayMode').value==='ridgeline'&&shown.length){let first=shown[0],last=shown.at(-1),baseY=YY((ss.length-1-i)*Math.max(.25,(Number($('offset').value)||0)*.72)+(manualOffsets.get(s.id)||0));let fillPath=paths.join(' ')+' L'+XX(x[last]).toFixed(2)+' '+baseY.toFixed(2)+' L'+XX(x[first]).toFixed(2)+' '+baseY.toFixed(2)+' Z';out.push('<path d="'+fillPath+'" fill="'+color+'" fill-opacity=".13" stroke="none" clip-path="url(#ramanPlotClip)"/>');}
+out.push('<path d="'+paths.join(' ')+'" stroke="'+color+'" stroke-width="1.4" fill="none" clip-path="url(#ramanPlotClip)"/>');out.push('<path data-drag-id="'+s.id+'" d="'+paths.join(' ')+'" stroke="transparent" stroke-width="18" fill="none" pointer-events="stroke" style="cursor:'+( $('dragSpectra').checked?'ns-resize':'crosshair')+'" clip-path="url(#ramanPlotClip)"/>');if($('labelPlacement').value!=='off'){
  if($('labelPlacement').value==='floating'){
  let labelX=right+15,availableWidth=w-labelX-20;
  let labelText=plotLabel(s)||s.name;
@@ -264,7 +390,10 @@ for(let k=minorStart;k<=minorEnd;k++){
  let legendSpacing=Math.max(32,Math.min(54,(bottom-top-18)/Math.max(1,ss.length)));let ly=top+16+i*legendSpacing;
  out.push('<rect x="'+labelX+'" y="'+(ly-8)+'" width="12" height="12" rx="2" fill="'+color+'"/>');
  out.push('<text x="'+(labelX+22)+'" y="'+ly+'" font-family="sans-serif" font-size="'+lf+'" fill="#29374a">'+chunks.map((str,j)=>'<tspan x="'+(labelX+22)+'" dy="'+(j?Math.min(16,lf*1.1):0)+'">'+plotLabelSvg(s,str)+'</tspan>').join('')+'</text>');
- }}});out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');// User-added wavenumber labels stay attached to their spectrum through zoom and stacking.
+ }}});out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');// Detected peaks and integration window.
+for(const q of series){const peaks=detectedPeaks.get(q.s.id)||[];for(const peak of peaks){const k=peak.index;if(k<0||k>=q.x.length)continue;const x=q.x[k];if(x<xlo||x>xhi||(cutEnabled&&x>cutA&&x<cutB))continue;const xx=XX(x),yy=YY(q.y[k]);if(!Number.isFinite(xx)||!Number.isFinite(yy)||yy<top||yy>bottom)continue;out.push('<circle cx="'+xx+'" cy="'+yy+'" r="3.8" fill="white" stroke="'+q.color+'" stroke-width="2" pointer-events="none"/>');if($('showDetectedPeakLabels').checked)out.push('<text x="'+xx+'" y="'+Math.max(top+12,yy-10)+'" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="600" fill="'+q.color+'" pointer-events="none">'+peak.x.toFixed(1)+'</text>');}}
+let areaA=$('areaMin').value===''?null:Number($('areaMin').value),areaB=$('areaMax').value===''?null:Number($('areaMax').value);for(const v of [areaA,areaB])if(Number.isFinite(v)&&v>=xlo&&v<=xhi)out.push('<line x1="'+XX(v)+'" y1="'+top+'" x2="'+XX(v)+'" y2="'+bottom+'" stroke="#6b7280" stroke-width="1.2" stroke-dasharray="5 4" pointer-events="none"/>');
+// User-added wavenumber labels stay attached to their spectrum through zoom and stacking.
 for(const [id,marks] of peakAnnotations){const q=series.find(v=>v.s.id===id);if(!q)continue;
 for(const mark of marks){const k=mark.index;if(k<0||k>=q.x.length)continue;
 const x=q.x[k];if(x<xlo||x>xhi||(cutEnabled&&x>cutA&&x<cutB))continue;
@@ -354,7 +483,25 @@ function stopDrag(e){if(!dragState||e.pointerId!==dragState.pointer)return;dragS
 $('plot').addEventListener('pointerup',stopDrag);
 $('plot').addEventListener('pointercancel',stopDrag);
 $('resetDragOffsets').addEventListener('click',()=>{manualOffsets.clear();renderPlot();});
-for(let id of ['intensity','offset','xmin','xmax','axisfont','tickfont','labelfont','titlefont','plotTitle','baseline','labelPlacement','truncate','cutMin','cutMax','yscale','yPosition','ymin','ymax','ypad','label_compound','label_hostMineral','label_mol','label_sample','label_phase','label_temp','label_condition'])$(id).addEventListener('input',renderPlot);$('autoY').addEventListener('click',()=>{$('ymin').value='';$('ymax').value='';$('yPosition').value='0';renderPlot();});$('autoRescale').addEventListener('click',()=>{
+$('previewProcessing').addEventListener('click',()=>{
+ processingPreview.clear();let count=0,spikes=0;
+ for(const id of selected){let s=spectra.find(v=>v.id===id);if(!s)continue;let p=runProcessingPipeline(s);processingPreview.set(id,p);spikes+=p.modified.length;count++;}
+ $('applyProcessing').disabled=!count;$('discardProcessing').disabled=!count;$('processingStatus').textContent=count?('Previewing '+count+' spectra'+($('procDespike').checked?' · '+spikes+' candidate spike point(s) corrected':'')+'.'):'Select spectra first.';renderPlot();
+});
+$('applyProcessing').addEventListener('click',()=>{
+ let count=0;for(const [id,p] of processingPreview){let s=spectra.find(v=>v.id===id);if(!s)continue;s.corrected=p.y.slice();s.modified=[...new Set([...(s.modified||[]),...(p.modified||[])])];s.processingHistory=[...(s.processingHistory||[]),{at:new Date().toISOString(),despike:$('procDespike').checked,smoothing:Number($('procSmooth').value)||0,baseline:$('procBaseline').value,baselineWindow:Number($('procBaselineWindow').value)||41}];count++;}
+ processingPreview.clear();$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent=count?'Applied processing to '+count+' spectra. Raw data retained.':'';renderMeta();
+});
+$('discardProcessing').addEventListener('click',()=>{processingPreview.clear();$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='Preview discarded.';renderPlot();});
+$('resetWorking').addEventListener('click',()=>{let ss=selected.map(id=>spectra.find(s=>s.id===id)).filter(Boolean);if(!ss.length)return;if(!confirm('Reset '+ss.length+' selected spectra to their raw imported intensities?'))return;for(const s of ss){s.corrected=s.raw.slice();s.modified=[];s.processingHistory=[];processingPreview.delete(s.id);detectedPeaks.delete(s.id);}spikeUndo.length=0;$('undoManualSpike').disabled=true;$('processingStatus').textContent='Selected spectra reset to raw.';renderMeta();});
+$('peakPreset').addEventListener('change',()=>{const ranges={phosphate:[850,1100],sulfate:[900,1250],carbonate:[950,1150],oh:[2800,3800]};let r=ranges[$('peakPreset').value];if(r){$('peakMin').value=r[0];$('peakMax').value=r[1];} });
+$('findPeaks').addEventListener('click',()=>{detectedPeaks.clear();let total=0,files=0;for(const id of selected){let s=spectra.find(v=>v.id===id);if(!s)continue;let peaks=findSpectrumPeaks(s);detectedPeaks.set(id,peaks);total+=peaks.length;files++;}$('peakStatus').textContent=files?total+' peaks across '+files+' selected spectra.':'Select spectra first.';renderPlot();});
+$('clearDetectedPeaks').addEventListener('click',()=>{detectedPeaks.clear();$('peakStatus').textContent='';renderPlot();});
+$('exportPeakTable').addEventListener('click',()=>{let rows=[['filename','compound','host_mineral','mol_kg','phase','phase_id','temperature_C','condition','peak_cm-1','intensity','prominence','fwhm_cm-1']];for(const [id,peaks] of detectedPeaks){let s=spectra.find(v=>v.id===id);if(!s)continue;for(const p of peaks)rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.phaseId,s.meta.temp,s.meta.condition,p.x,p.y,p.prominence,p.fwhm]);}if(rows.length===1){$('peakStatus').textContent='Find peaks before exporting.';return;}download('raman_peak_table.csv',new Blob([rows.map(r=>r.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));});
+$('integrateSelected').addEventListener('click',()=>{let a=Number($('areaMin').value),b=Number($('areaMax').value);if(!Number.isFinite(a)||!Number.isFinite(b)||a===b){$('areaStatus').textContent='Enter two different integration bounds.';return;}areaResults=[];for(const id of selected){let s=spectra.find(v=>v.id===id);if(!s)continue;let r=integrateSpectrum(s,a,b,$('areaLocalBaseline').checked);if(r)areaResults.push({s,...r});}$('areaStatus').textContent=areaResults.length?('Integrated '+areaResults.length+' spectra from '+Math.min(a,b)+'–'+Math.max(a,b)+' cm⁻¹.'):'No selected spectra contain that interval.';renderPlot();});
+$('exportAreaTable').addEventListener('click',()=>{if(!areaResults.length){$('areaStatus').textContent='Integrate selected spectra before exporting.';return;}let rows=[['filename','compound','host_mineral','mol_kg','phase','phase_id','temperature_C','condition','start_cm-1','end_cm-1','area','local_linear_baseline']];for(const r of areaResults){let s=r.s;rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.phaseId,s.meta.temp,s.meta.condition,r.start,r.end,r.area,$('areaLocalBaseline').checked]);}download('raman_peak_areas.csv',new Blob([rows.map(r=>r.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));});
+
+for(let id of ['intensity','displayMode','offset','xmin','xmax','axisfont','tickfont','labelfont','titlefont','plotTitle','baseline','labelPlacement','truncate','cutMin','cutMax','yscale','yPosition','ymin','ymax','ypad','label_compound','label_hostMineral','label_mol','label_sample','label_phase','label_temp','label_condition','showDetectedPeakLabels','areaMin','areaMax'])$(id).addEventListener('input',renderPlot);$('autoY').addEventListener('click',()=>{$('ymin').value='';$('ymax').value='';$('yPosition').value='0';renderPlot();});$('autoRescale').addEventListener('click',()=>{
  const {series}=plotData();
  const cutEnabled=$('truncate').checked,cutA=Number($('cutMin').value),cutB=Number($('cutMax').value);
  let min=Infinity,max=-Infinity;
