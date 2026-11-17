@@ -10,14 +10,16 @@
 <div class="field"><label>Display mode</label><select id="displayMode"><option value="stacked" selected>Stacked spectra</option><option value="ridgeline">Ridgeline</option><option value="heatmap">Heatmap</option></select><small class="muted">Ridgeline uses normalised intensity; heatmap compares all selected spectra on a common Raman-shift grid.</small></div>
 <div class="field"><label>Offset</label><input id="offset" type="number" value="0.45" min="0" step="0.1"></div>
 <div class="field"><label for="yscale">Vertical zoom: <output id="yscaleValue">1.00×</output></label><input id="yscale" type="range" value="1" min="0.5" max="4" step="0.05"><small class="muted">Zooms the Y-axis without altering spectrum intensities</small></div>
-<div class="field"><label class="checkrow"><input id="baseline" type="checkbox"> Subtract linear endpoint baseline</label></div><div class="field"><label class="checkrow"><input id="dragSpectra" type="checkbox" checked> Drag spectra to offset</label><small class="muted">Hold Shift while dragging for fine adjustment</small></div><div class="field"><button id="resetDragOffsets" type="button">Reset dragged offsets</button></div><div class="field"><button id="undoManualSpike" type="button" disabled>Undo last cosmic-ray correction</button><small class="muted">Shift + right-click a plotted spike to interpolate it; right-click a trace to add/remove a wavenumber arrow</small></div>
+<div class="field"><label class="checkrow"><input id="baseline" type="checkbox"> Display-only linear endpoint baseline</label><small class="muted">Visual only; does not modify the working spectrum.</small></div><div class="field"><label class="checkrow"><input id="dragSpectra" type="checkbox" checked> Drag spectra to offset</label><small class="muted">Hold Shift while dragging for fine adjustment</small></div><div class="field"><button id="resetDragOffsets" type="button">Reset dragged offsets</button></div><div class="field"><button id="undoManualSpike" type="button" disabled>Undo last cosmic-ray correction</button><small class="muted">Shift + right-click a plotted spike to interpolate it; right-click a trace to add/remove a wavenumber arrow</small></div>
 </div></details>
 <details><summary>Processing preview</summary>
 <div class="grid3">
 <label class="checkrow"><input id="procDespike" type="checkbox" checked> Auto-despike</label>
 <div class="field"><label>Savitzky–Golay smoothing</label><select id="procSmooth"><option value="0" selected>None</option><option value="5">5-point</option><option value="7">7-point</option><option value="9">9-point</option></select></div>
-<div class="field"><label>Baseline correction</label><select id="procBaseline"><option value="none" selected>None</option><option value="rolling">Rolling-minimum baseline</option></select></div>
-<div class="field"><label>Baseline window (points)</label><input id="procBaselineWindow" type="number" min="9" max="401" step="2" value="41"></div>
+<div class="field"><label>Baseline correction</label><select id="procBaseline"><option value="none" selected>None</option><option value="linear">Linear endpoint</option><option value="als">ALS · asymmetric least squares</option><option value="airpls">airPLS · adaptive penalized least squares</option></select></div>
+<div class="field" id="procBaselineLambdaField" style="display:none"><label>Smoothness λ</label><input id="procBaselineLambda" type="number" min="1" max="1000000000000" step="any" value="1000000"><small class="muted">Higher values give a smoother/stiffer baseline.</small></div>
+<div class="field" id="procBaselinePField" style="display:none"><label>ALS asymmetry p</label><input id="procBaselineP" type="number" min="0.000001" max="0.49" step="0.001" value="0.001"><small class="muted">Smaller values reduce the influence of Raman peaks.</small></div>
+<div class="field" id="procBaselineIterationsField" style="display:none"><label>Iterations</label><input id="procBaselineIterations" type="number" min="1" max="50" step="1" value="12"></div>
 </div>
 <div class="analysis-actions"><button id="previewProcessing" type="button">Preview selected</button><button id="applyProcessing" type="button" disabled>Apply preview</button><button id="discardProcessing" type="button" disabled>Discard preview</button><button id="resetWorking" type="button">Reset selected to raw</button><span id="processingStatus" class="analysis-status"></span></div>
 <div class="analysis-note"><span class="preview-key">When preview is active, the current working spectrum is shown faintly behind the proposed processed spectrum.</span> Raw arrays are never overwritten. Apply operates on all selected spectra as a batch.</div>
@@ -263,20 +265,102 @@ function sgSmooth(y,windowSize){
  for(let i=half;i<y.length-half;i++){let v=0;for(let j=-half;j<=half;j++)v+=y[i+j]*coeffs[j+half];out[i]=v;}
  return out;
 }
-function rollingBaseline(y,windowSize){
- let n=Math.max(9,Math.min(401,Math.round(windowSize)||41));if(n%2===0)n++;
- const half=Math.floor(n/2),mins=new Array(y.length);
- for(let i=0;i<y.length;i++){let lo=Math.max(0,i-half),hi=Math.min(y.length,i+half+1),m=Infinity;for(let j=lo;j<hi;j++)if(y[j]<m)m=y[j];mins[i]=m;}
- const smoothWindow=Math.max(5,Math.floor(n/3)|1),sh=Math.floor(smoothWindow/2),base=mins.slice();
- for(let pass=0;pass<2;pass++){let src=base.slice();for(let i=0;i<src.length;i++){let lo=Math.max(0,i-sh),hi=Math.min(src.length,i+sh+1),sum=0,count=0;for(let j=lo;j<hi;j++){sum+=src[j];count++;}base[i]=sum/Math.max(1,count);}}
- return base;
+function linearEndpointBaseline(y){
+ if(y.length<2)return y.map(()=>0);
+ const first=y[0],last=y.at(-1),n=y.length-1;
+ return y.map((_,i)=>first+(last-first)*i/n);
+}
+// Solve (W + lambda D'D)z = Wy for a second-difference Whittaker penalty.
+// D'D is pentadiagonal, so a banded Cholesky solve keeps this O(n).
+function whittakerBaseline(y,weights,lambda){
+ const n=y.length;if(n<3)return y.slice();
+ const lam=Math.max(1e-12,Number(lambda)||1);
+ const diag=weights.map(w=>Math.max(1e-12,Number(w)||0));
+ const sub1=new Array(n).fill(0),sub2=new Array(n).fill(0);
+ for(let i=0;i<n-2;i++){
+  diag[i]+=lam;diag[i+1]+=4*lam;diag[i+2]+=lam;
+  sub1[i+1]-=2*lam;sub1[i+2]-=2*lam;sub2[i+2]+=lam;
+ }
+ const l0=new Array(n),l1=new Array(n).fill(0),l2=new Array(n).fill(0),eps=1e-24;
+ l0[0]=Math.sqrt(Math.max(diag[0],eps));
+ l1[1]=sub1[1]/l0[0];
+ l0[1]=Math.sqrt(Math.max(diag[1]-l1[1]*l1[1],eps));
+ for(let i=2;i<n;i++){
+  l2[i]=sub2[i]/l0[i-2];
+  l1[i]=(sub1[i]-l2[i]*l1[i-1])/l0[i-1];
+  l0[i]=Math.sqrt(Math.max(diag[i]-l1[i]*l1[i]-l2[i]*l2[i],eps));
+ }
+ const rhs=y.map((v,i)=>Math.max(1e-12,Number(weights[i])||0)*v);
+ const forward=new Array(n),out=new Array(n);
+ forward[0]=rhs[0]/l0[0];
+ forward[1]=(rhs[1]-l1[1]*forward[0])/l0[1];
+ for(let i=2;i<n;i++)forward[i]=(rhs[i]-l1[i]*forward[i-1]-l2[i]*forward[i-2])/l0[i];
+ out[n-1]=forward[n-1]/l0[n-1];
+ out[n-2]=(forward[n-2]-l1[n-1]*out[n-1])/l0[n-2];
+ for(let i=n-3;i>=0;i--)out[i]=(forward[i]-l1[i+1]*out[i+1]-l2[i+2]*out[i+2])/l0[i];
+ return out;
+}
+function alsBaseline(y,lambda,p,iterations){
+ const asym=Math.max(1e-6,Math.min(.49,Number(p)||.001));
+ const rounds=Math.max(1,Math.min(50,Math.round(iterations)||12));
+ let weights=new Array(y.length).fill(1),baseline=y.slice();
+ for(let iter=0;iter<rounds;iter++){
+  baseline=whittakerBaseline(y,weights,lambda);
+  for(let i=0;i<y.length;i++)weights[i]=y[i]>baseline[i]?asym:1-asym;
+ }
+ return baseline;
+}
+function airPlsBaseline(y,lambda,iterations){
+ const rounds=Math.max(1,Math.min(50,Math.round(iterations)||12));
+ let weights=new Array(y.length).fill(1),baseline=y.slice();
+ const total=Math.max(1e-12,y.reduce((sum,v)=>sum+Math.abs(v),0));
+ for(let iter=1;iter<=rounds;iter++){
+  baseline=whittakerBaseline(y,weights,lambda);
+  const residual=y.map((v,i)=>v-baseline[i]);
+  let negativeSum=0,maxNegative=0;
+  for(const d of residual)if(d<0){negativeSum+=d;maxNegative=Math.max(maxNegative,Math.abs(d));}
+  const dssn=Math.abs(negativeSum);
+  if(dssn<.001*total)break;
+  for(let i=0;i<weights.length;i++){
+   const d=residual[i];
+   weights[i]=d>=0?1e-12:Math.exp(Math.min(40,iter*Math.abs(d)/Math.max(dssn,1e-12)));
+  }
+  const edge=Math.exp(Math.min(40,iter*maxNegative/Math.max(dssn,1e-12)));
+  weights[0]=edge;weights[weights.length-1]=edge;
+ }
+ return baseline;
+}
+function baselineParameters(){
+ const method=$('procBaseline').value;
+ return {
+  method,
+  lambda:Math.max(1,Math.min(1e12,Number($('procBaselineLambda').value)||1e6)),
+  p:Math.max(1e-6,Math.min(.49,Number($('procBaselineP').value)||.001)),
+  iterations:Math.max(1,Math.min(50,Math.round(Number($('procBaselineIterations').value)||12)))
+ };
+}
+function updateBaselineControls(){
+ const method=$('procBaseline').value;
+ $('procBaselineLambdaField').style.display=(method==='als'||method==='airpls')?'grid':'none';
+ $('procBaselinePField').style.display=method==='als'?'grid':'none';
+ $('procBaselineIterationsField').style.display=(method==='als'||method==='airpls')?'grid':'none';
+}
+function applySelectedBaseline(y){
+ const settings=baselineParameters();
+ if(settings.method==='none')return {corrected:y.slice(),baseline:null,settings};
+ let baseline;
+ if(settings.method==='linear')baseline=linearEndpointBaseline(y);
+ else if(settings.method==='als')baseline=alsBaseline(y,settings.lambda,settings.p,settings.iterations);
+ else if(settings.method==='airpls')baseline=airPlsBaseline(y,settings.lambda,settings.iterations);
+ else baseline=null;
+ return {corrected:baseline?y.map((v,i)=>v-baseline[i]):y.slice(),baseline,settings};
 }
 function runProcessingPipeline(s){
  let y=s.corrected.slice(),modified=[];
  if($('procDespike').checked){let d=cosmic(y);y=d.corrected;modified=d.modified.slice();}
  let w=Number($('procSmooth').value)||0;if(w)y=sgSmooth(y,w);
- if($('procBaseline').value==='rolling'){let base=rollingBaseline(y,Number($('procBaselineWindow').value)||41);y=y.map((v,i)=>v-base[i]);}
- return {y,modified};
+ const baselineResult=applySelectedBaseline(y);y=baselineResult.corrected;
+ return {y,modified,baseline:baselineResult.baseline,baselineSettings:baselineResult.settings};
 }
 function activeWorkingY(s){return processingPreview.get(s.id)?.y||s.corrected;}
 function processedForDisplay(y,base,norm){
@@ -483,13 +567,15 @@ function stopDrag(e){if(!dragState||e.pointerId!==dragState.pointer)return;dragS
 $('plot').addEventListener('pointerup',stopDrag);
 $('plot').addEventListener('pointercancel',stopDrag);
 $('resetDragOffsets').addEventListener('click',()=>{manualOffsets.clear();renderPlot();});
+$('procBaseline').addEventListener('change',updateBaselineControls);
+updateBaselineControls();
 $('previewProcessing').addEventListener('click',()=>{
  processingPreview.clear();let count=0,spikes=0;
  for(const id of selected){let s=spectra.find(v=>v.id===id);if(!s)continue;let p=runProcessingPipeline(s);processingPreview.set(id,p);spikes+=p.modified.length;count++;}
- $('applyProcessing').disabled=!count;$('discardProcessing').disabled=!count;$('processingStatus').textContent=count?('Previewing '+count+' spectra'+($('procDespike').checked?' · '+spikes+' candidate spike point(s) corrected':'')+'.'):'Select spectra first.';renderPlot();
+ $('applyProcessing').disabled=!count;$('discardProcessing').disabled=!count;let baselineLabel={none:'no baseline',linear:'linear baseline',als:'ALS baseline',airpls:'airPLS baseline'}[$('procBaseline').value]||$('procBaseline').value;$('processingStatus').textContent=count?('Previewing '+count+' spectra · '+baselineLabel+($('procDespike').checked?' · '+spikes+' candidate spike point(s) corrected':'')+'.'):'Select spectra first.';renderPlot();
 });
 $('applyProcessing').addEventListener('click',()=>{
- let count=0;for(const [id,p] of processingPreview){let s=spectra.find(v=>v.id===id);if(!s)continue;s.corrected=p.y.slice();s.modified=[...new Set([...(s.modified||[]),...(p.modified||[])])];s.processingHistory=[...(s.processingHistory||[]),{at:new Date().toISOString(),despike:$('procDespike').checked,smoothing:Number($('procSmooth').value)||0,baseline:$('procBaseline').value,baselineWindow:Number($('procBaselineWindow').value)||41}];count++;}
+ let count=0;for(const [id,p] of processingPreview){let s=spectra.find(v=>v.id===id);if(!s)continue;s.corrected=p.y.slice();s.modified=[...new Set([...(s.modified||[]),...(p.modified||[])])];s.processingHistory=[...(s.processingHistory||[]),{at:new Date().toISOString(),despike:$('procDespike').checked,smoothing:Number($('procSmooth').value)||0,baseline:$('procBaseline').value,baselineLambda:Number($('procBaselineLambda').value)||1e6,baselineP:Number($('procBaselineP').value)||.001,baselineIterations:Number($('procBaselineIterations').value)||12}];count++;}
  processingPreview.clear();$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent=count?'Applied processing to '+count+' spectra. Raw data retained.':'';renderMeta();
 });
 $('discardProcessing').addEventListener('click',()=>{processingPreview.clear();$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='Preview discarded.';renderPlot();});
