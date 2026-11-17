@@ -29,16 +29,16 @@ function renderList(){
  $('spectrumList').innerHTML=shown.length?shown.map(s=>'<div class="spectrum-item '+(s.id===currentId?'active':'')+'" data-spectrum="'+s.id+'">'+esc(s.name)+'</div>').join(''):'<div class="hint" style="padding:10px">No spectra match.</div>';
  let s=current();$('metaSummary').innerHTML=s?['compound','hostMineral','mol','phase','phaseId','temp','condition'].map(k=>s.meta?.[k]?'<span class="fit-chip">'+esc(k)+': '+esc(s.meta[k])+'</span>':'').join(' '):'';
 }
-function chooseSpectrum(id){currentId=Number(id);preview=null;fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();pickMode=false;$('pickPeaks').classList.remove('primary');$('pickPeaks').textContent='Pick centres on plot';renderList();syncRanges();renderSeeds();renderFit();renderPlot();maybeAutoBaselinePreview();}
+function chooseSpectrum(id){currentId=Number(id);preview=null;fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();pickMode=false;$('pickPeaks').classList.remove('primary');$('pickPeaks').textContent='Pick centres on plot';renderList();syncRanges();renderSeeds();renderFit();renderPlot();refreshProcessingPreview();}
 $('spectrumList').onclick=e=>{let id=e.target.closest('[data-spectrum]')?.dataset.spectrum;if(id)chooseSpectrum(id);};
 $('search').oninput=renderList;
 
 $('upload').onchange=async e=>{
  let good=0,errors=[];for(const f of [...e.target.files]){try{let raw=/\.wdf$/i.test(f.name)?readWdf(await f.arrayBuffer()):readTxt(await f.text());addSpectrum(f.name,raw,metadata(f.name));good++;}catch(err){errors.push(f.name+': '+err.message);}}
- $('loadStatus').textContent=good+' imported'+(errors.length?' · '+errors.length+' failed':'')+'.';e.target.value='';renderList();syncRanges();renderPlot();maybeAutoBaselinePreview();
+ $('loadStatus').textContent=good+' imported'+(errors.length?' · '+errors.length+' failed':'')+'.';e.target.value='';renderList();syncRanges();renderPlot();refreshProcessingPreview();
 };
 $('openCompiled').onchange=async e=>{
- const f=e.target.files?.[0];if(!f)return;try{let data=JSON.parse(await f.text());if(data.format!=='raman-studio-v1'||!Array.isArray(data.spectra))throw Error('Unsupported compiled Raman dataset');let count=0;for(const a of data.spectra){if(!Array.isArray(a.x)||!Array.isArray(a.raw))continue;addSpectrum(a.name||('Spectrum '+(count+1)),{x:a.x,y:a.raw},a.meta||metadata(a.name||''),Array.isArray(a.corrected)?a.corrected:null);count++;}$('loadStatus').textContent='Loaded '+count+' spectra from '+f.name+'.';renderList();syncRanges();renderPlot();maybeAutoBaselinePreview();}catch(err){$('loadStatus').textContent='Import failed: '+err.message;}finally{e.target.value='';}
+ const f=e.target.files?.[0];if(!f)return;try{let data=JSON.parse(await f.text());if(data.format!=='raman-studio-v1'||!Array.isArray(data.spectra))throw Error('Unsupported compiled Raman dataset');let count=0;for(const a of data.spectra){if(!Array.isArray(a.x)||!Array.isArray(a.raw))continue;addSpectrum(a.name||('Spectrum '+(count+1)),{x:a.x,y:a.raw},a.meta||metadata(a.name||''),Array.isArray(a.corrected)?a.corrected:null);count++;}$('loadStatus').textContent='Loaded '+count+' spectra from '+f.name+'.';renderList();syncRanges();renderPlot();refreshProcessingPreview();}catch(err){$('loadStatus').textContent='Import failed: '+err.message;}finally{e.target.value='';}
 };
 
 function cosmic(y,x){
@@ -60,35 +60,40 @@ function whittakerBaseline(y,weights,lambda){
 function alsBaseline(y,lambda,p,iterations){let asym=Math.max(1e-6,Math.min(.49,Number(p)||.001)),rounds=Math.max(1,Math.min(50,Math.round(iterations)||12)),weights=new Array(y.length).fill(1),base=y.slice();for(let k=0;k<rounds;k++){base=whittakerBaseline(y,weights,lambda);for(let i=0;i<y.length;i++)weights[i]=y[i]>base[i]?asym:1-asym;}return base;}
 function airPlsBaseline(y,lambda,iterations){let rounds=Math.max(1,Math.min(50,Math.round(iterations)||12)),weights=new Array(y.length).fill(1),base=y.slice(),total=Math.max(1e-12,y.reduce((s,v)=>s+Math.abs(v),0));for(let k=1;k<=rounds;k++){base=whittakerBaseline(y,weights,lambda);let r=y.map((v,i)=>v-base[i]),neg=r.filter(v=>v<0),dssn=Math.abs(neg.reduce((s,v)=>s+v,0));if(dssn<.001*total)break;for(let i=0;i<weights.length;i++)weights[i]=r[i]>=0?1e-12:Math.exp(Math.min(40,k*Math.abs(r[i])/Math.max(dssn,1e-12)));}return base;}
 function updateBaselineUi(){
- let auto=$('autoBaseline').checked,m=$('baselineMethod').value;
- $('baselineMethod').disabled=auto;
- $('lambdaField').style.display=!auto&&(m==='als'||m==='airpls')?'grid':'none';
- $('pField').style.display=!auto&&m==='als'?'grid':'none';
- $('iterationsField').style.display=!auto&&(m==='als'||m==='airpls')?'grid':'none';
+ let m=$('baselineMethod').value;
+ $('lambdaField').style.display=(m==='als'||m==='airpls')?'grid':'none';
+ $('pField').style.display=m==='als'?'grid':'none';
+ $('iterationsField').style.display=(m==='als'||m==='airpls')?'grid':'none';
 }
-function autoBaselineSettings(y){
- return {method:'airpls',lambda:1e6,p:.001,iterations:15};
-}
-$('baselineMethod').onchange=updateBaselineUi;
-$('autoBaseline').onchange=()=>{updateBaselineUi();if($('autoBaseline').checked)maybeAutoBaselinePreview();};
-updateBaselineUi();
 function runProcessing(s){
- let y=s.working.slice(),spikes=[],auto=$('autoBaseline').checked,settings=auto?autoBaselineSettings(y):{method:$('baselineMethod').value,lambda:Math.max(1,Number($('lambda').value)||1e6),p:Math.max(1e-6,Math.min(.49,Number($('asymmetry').value)||.001)),iterations:Math.max(1,Math.min(50,Number($('iterations').value)||12))},baseline=null;
+ let y=s.working.slice(),spikes=[],settings={method:$('baselineMethod').value,lambda:Math.max(1,Number($('lambda').value)||1e6),p:Math.max(1e-6,Math.min(.49,Number($('asymmetry').value)||.001)),iterations:Math.max(1,Math.min(50,Number($('iterations').value)||12))},baseline=null;
  if($('despike').checked){let d=cosmic(y,s.x);y=d.corrected;spikes=d.modified;}
  let w=Number($('smooth').value)||0;if(w)y=sgSmooth(y,w);
  if(settings.method==='linear')baseline=linearEndpointBaseline(y);
  if(settings.method==='als')baseline=alsBaseline(y,settings.lambda,settings.p,settings.iterations);
  if(settings.method==='airpls')baseline=airPlsBaseline(y,settings.lambda,settings.iterations);
  if(baseline)y=y.map((v,i)=>v-baseline[i]);
- return {y,baseline,spikes,method:auto?'auto-airPLS':settings.method,settings};
+ return {y,baseline,spikes,method:settings.method,settings};
 }
-function maybeAutoBaselinePreview(){
- let s=current();if(!s||!$('autoBaseline').checked)return;
+function processingActive(){
+ return $('despike').checked||Number($('smooth').value)!==0||$('baselineMethod').value!=='none';
+}
+function refreshProcessingPreview(){
+ let s=current();if(!s)return;
+ if(!processingActive()){
+  preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='';renderPlot();return;
+ }
  preview=runProcessing(s);$('applyProcessing').disabled=false;$('discardProcessing').disabled=false;
- $('processingStatus').textContent='Auto baseline preview · airPLS'+(preview.spikes.length?' · '+preview.spikes.length+' spike point(s) corrected':'')+'.';
+ let parts=[];if($('despike').checked)parts.push('auto-despike'+(preview.spikes.length?' · '+preview.spikes.length+' spike point(s) corrected':''));
+ if(Number($('smooth').value))parts.push($('smooth').value+'-point smoothing');
+ if(preview.method!=='none')parts.push(preview.method+' baseline');
+ $('processingStatus').textContent='Previewing '+parts.join(' · ')+'.';
  fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();
 }
-$('previewProcessing').onclick=()=>{let s=current();if(!s)return;preview=runProcessing(s);$('applyProcessing').disabled=false;$('discardProcessing').disabled=false;$('processingStatus').textContent='Previewing '+preview.method+(preview.spikes.length?' · '+preview.spikes.length+' spike point(s) corrected':'')+'.';fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();};
+$('baselineMethod').onchange=()=>{updateBaselineUi();refreshProcessingPreview();};
+for(const id of ['despike','smooth','lambda','asymmetry','iterations'])$(id).addEventListener('input',refreshProcessingPreview);
+updateBaselineUi();
+$('previewProcessing').onclick=refreshProcessingPreview;
 $('applyProcessing').onclick=()=>{let s=current();if(!s||!preview)return;s.working=preview.y.slice();preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='Applied to working spectrum. Raw data retained.';fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();};
 $('discardProcessing').onclick=()=>{preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='Preview discarded.';renderPlot();};
 $('resetRaw').onclick=()=>{let s=current();if(!s)return;s.working=s.raw.slice();preview=null;fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();renderSeeds();renderFit();renderPlot();};
@@ -146,7 +151,7 @@ $('fitTable').onchange=e=>{let kind=e.target.dataset.ratio,i=Number(e.target.dat
 $('profile').onchange=()=>{fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();};
 
 function download(name,blob){let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200);}
-$('exportAnalysisCsv').onclick=()=>{let s=current(),r=fitResult;if(!s||!r)return;let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),ratio=num.length&&den.length&&denArea!==0?numArea/denArea:'',rows=[['filename','compound','host_mineral','mol_kg','phase','temperature_C','baseline_mode','fit_profile','peak','selected_cm-1','fitted_cm-1','height','fwhm_cm-1','eta','area','numerator_selected','denominator_selected','numerator_area_sum','denominator_area_sum','area_ratio','r2','rmse']];r.peaks.forEach((p,i)=>rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.temp,$('autoBaseline').checked?'auto-airPLS':$('baselineMethod').value,r.profile,i+1,r.seedXs?.[i]??p.c,p.c,p.h,p.w,r.profile==='pseudo'?p.eta:r.profile==='lorentzian'?1:0,peakArea(p,r.profile),ratioNumerator.has(i),ratioDenominator.has(i),numArea,denArea,ratio,r.r2,r.rmse]));download('raman_analysis.csv',new Blob([rows.map(row=>row.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
+$('exportAnalysisCsv').onclick=()=>{let s=current(),r=fitResult;if(!s||!r)return;let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),ratio=num.length&&den.length&&denArea!==0?numArea/denArea:'',rows=[['filename','compound','host_mineral','mol_kg','phase','temperature_C','baseline_mode','fit_profile','peak','selected_cm-1','fitted_cm-1','height','fwhm_cm-1','eta','area','numerator_selected','denominator_selected','numerator_area_sum','denominator_area_sum','area_ratio','r2','rmse']];r.peaks.forEach((p,i)=>rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.temp,$('baselineMethod').value,r.profile,i+1,r.seedXs?.[i]??p.c,p.c,p.h,p.w,r.profile==='pseudo'?p.eta:r.profile==='lorentzian'?1:0,peakArea(p,r.profile),ratioNumerator.has(i),ratioDenominator.has(i),numArea,denArea,ratio,r.r2,r.rmse]));download('raman_analysis.csv',new Blob([rows.map(row=>row.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 
 function renderPlot(){
  let s=current();if(!s){$('plot').innerHTML='<div style="padding:70px;text-align:center;color:#7b8da3">Load and select a spectrum to begin analysis</div>';lastSvg='';return;}let y=activeY(),xmin=$('xMin').value===''?s.x[0]:Number($('xMin').value),xmax=$('xMax').value===''?s.x.at(-1):Number($('xMax').value);if(xmax<xmin)[xmin,xmax]=[xmax,xmin];let idx=s.x.map((x,i)=>i).filter(i=>s.x[i]>=xmin&&s.x[i]<=xmax);if(idx.length<2)return;let vals=idx.map(i=>y[i]),ylo=Math.min(...vals),yhi=Math.max(...vals),pad=(Number($('yPad').value)||8)/100*(yhi-ylo||1),residualSpace=$('showResidual').checked&&fitResult?130:0,w=1240,h=680+residualSpace,left=82,right=1170,top=55,bottom=610,YY=v=>bottom-(v-(ylo-pad))/Math.max(1e-12,(yhi+pad)-(ylo-pad))*(bottom-top),XX=x=>left+(x-xmin)/(xmax-xmin)*(right-left);plotGeometry={xmin,xmax,left,right};let out=['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="background:white"><rect width="100%" height="100%" fill="white"/>'];for(let x=Math.ceil(xmin/500)*500;x<=xmax;x+=500){let xx=XX(x);out.push('<line x1="'+xx+'" y1="'+top+'" x2="'+xx+'" y2="'+bottom+'" stroke="#e9edf3"/><text x="'+xx+'" y="'+(bottom+26)+'" text-anchor="middle" font-size="12" fill="#53667d">'+x+'</text>');}out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');let path=(xs,ys,map)=>xs.map((x,i)=>(i?'L':'M')+XX(x).toFixed(2)+' '+map(ys[i]).toFixed(2)).join(' '),xs=idx.map(i=>s.x[i]);if(preview)out.push('<path d="'+path(xs,idx.map(i=>s.working[i]),YY)+'" stroke="#aab3be" stroke-width="1.2" fill="none"/>');out.push('<path d="'+path(xs,vals,YY)+'" stroke="#315cc6" stroke-width="1.5" fill="none"/>');let visibleSeeds=seeds.filter(c=>c>=xmin&&c<=xmax).sort((a,b)=>a-b),placedSeedLabels=[];
