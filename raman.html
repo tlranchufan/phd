@@ -680,13 +680,19 @@ function stopDrag(e){if(!dragState||e.pointerId!==dragState.pointer)return;dragS
 $('plot').addEventListener('pointerup',stopDrag);
 $('plot').addEventListener('pointercancel',stopDrag);
 $('resetDragOffsets').addEventListener('click',()=>{manualOffsets.clear();renderPlot();});
-$('procBaseline').addEventListener('change',updateBaselineControls);
-updateBaselineControls();
-$('previewProcessing').addEventListener('click',()=>{
+function refreshProcessingPreview(){
  processingPreview.clear();let count=0,spikes=0;
  for(const id of selected){let s=spectra.find(v=>v.id===id);if(!s)continue;let p=runProcessingPipeline(s);processingPreview.set(id,p);spikes+=p.modified.length;count++;}
- $('applyProcessing').disabled=!count;$('discardProcessing').disabled=!count;let baselineLabel={none:'no baseline',linear:'linear baseline',als:'ALS baseline',airpls:'airPLS baseline'}[$('procBaseline').value]||$('procBaseline').value;$('processingStatus').textContent=count?('Previewing '+count+' spectra · '+baselineLabel+($('procDespike').checked?' · '+spikes+' candidate spike point(s) corrected':'')+'.'):'Select spectra first.';renderPlot();
-});
+ $('applyProcessing').disabled=!count;$('discardProcessing').disabled=!count;
+ let baselineLabel={none:'no baseline',linear:'linear baseline',als:'ALS baseline',airpls:'airPLS baseline'}[$('procBaseline').value]||$('procBaseline').value;
+ $('processingStatus').textContent=count?('Previewing '+count+' spectra · '+baselineLabel+($('procDespike').checked?' · '+spikes+' candidate spike point(s) corrected':'')+'.'):'Select spectra first.';
+ renderPlot();
+}
+$('procBaseline').addEventListener('change',()=>{updateBaselineControls();refreshProcessingPreview();});
+for(const id of ['procDespike','procSmooth','procBaselineLambda','procBaselineP','procBaselineIterations'])$(id).addEventListener('input',refreshProcessingPreview);
+$('baseline').addEventListener('change',renderPlot);
+updateBaselineControls();
+$('previewProcessing').addEventListener('click',refreshProcessingPreview);
 $('applyProcessing').addEventListener('click',()=>{
  let count=0;for(const [id,p] of processingPreview){let s=spectra.find(v=>v.id===id);if(!s)continue;s.corrected=p.y.slice();s.modified=[...new Set([...(s.modified||[]),...(p.modified||[])])];s.processingHistory=[...(s.processingHistory||[]),{at:new Date().toISOString(),despike:$('procDespike').checked,smoothing:Number($('procSmooth').value)||0,baseline:$('procBaseline').value,baselineLambda:Number($('procBaselineLambda').value)||1e6,baselineP:Number($('procBaselineP').value)||.001,baselineIterations:Number($('procBaselineIterations').value)||12}];count++;}
  processingPreview.clear();$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent=count?'Applied processing to '+count+' spectra. Raw data retained.':'';renderMeta();
