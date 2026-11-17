@@ -19,7 +19,7 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 .plotbox{min-height:650px;border:1px solid #e1e8f0;border-radius:10px;background:#fff;overflow:hidden}.plotbox svg{display:block;width:100%;height:auto}
 .spectrum-list{max-height:300px;overflow:auto;border:1px solid #e7edf4;border-radius:9px}.spectrum-item{padding:8px 9px;border-bottom:1px solid #edf1f6;font-size:12px;cursor:pointer}.spectrum-item:last-child{border-bottom:0}.spectrum-item.active{background:#edf4ff;color:#174eaf;font-weight:600}
 .seed-list{display:flex;gap:6px;flex-wrap:wrap}.seed{display:inline-flex;align-items:center;gap:5px;border:1px solid #cad4e1;border-radius:999px;padding:4px 7px;font-size:12px;background:#fff}.seed button{border:0;padding:0 2px;background:transparent;color:#8a3b45}
-.fit-summary{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#53677e}.scroll{overflow:auto;max-height:350px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:7px;border-bottom:1px solid #e8edf4;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#f4f7fc;font-size:11px;text-transform:uppercase;color:#52677e}.fit-chip{display:inline-block;padding:3px 7px;border-radius:999px;background:#eef3f8;font-size:11px;color:#516579;margin:2px 2px 0 0}
+.fit-summary{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#53677e}.ratio-cell{text-align:center}.ratio-cell input{margin:0}.scroll{overflow:auto;max-height:350px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:7px;border-bottom:1px solid #e8edf4;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#f4f7fc;font-size:11px;text-transform:uppercase;color:#52677e}.fit-chip{display:inline-block;padding:3px 7px;border-radius:999px;background:#eef3f8;font-size:11px;color:#516579;margin:2px 2px 0 0}
 @media(max-width:980px){.analysis-layout{grid-template-columns:1fr}.shell{padding:12px}.plotbox{min-height:520px}}
 </style>
 </head>
@@ -54,7 +54,8 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 <div class="panel"><h2>Processing</h2><div class="stack">
 <label class="checkrow"><input id="despike" type="checkbox"> Auto-despike</label>
 <div class="field"><label>Savitzky–Golay smoothing</label><select id="smooth"><option value="0" selected>None</option><option value="5">5-point</option><option value="7">7-point</option><option value="9">9-point</option></select></div>
-<div class="field"><label>Baseline correction</label><select id="baselineMethod"><option value="none" selected>None</option><option value="linear">Linear endpoint</option><option value="als">ALS · asymmetric least squares</option><option value="airpls">airPLS · adaptive penalized least squares</option></select></div>
+<label class="checkrow"><input id="autoBaseline" type="checkbox" checked> Auto baseline correction</label>
+<div class="field"><label>Manual baseline</label><select id="baselineMethod"><option value="none">None</option><option value="linear">Linear endpoint</option><option value="als">ALS · asymmetric least squares</option><option value="airpls" selected>airPLS · adaptive penalized least squares</option></select></div>
 <div id="lambdaField" class="field" style="display:none"><label>Smoothness λ</label><input id="lambda" type="number" min="1" max="1000000000000" step="any" value="1000000"></div>
 <div id="pField" class="field" style="display:none"><label>ALS asymmetry p</label><input id="asymmetry" type="number" min="0.000001" max="0.49" step="0.001" value="0.001"></div>
 <div id="iterationsField" class="field" style="display:none"><label>Iterations</label><input id="iterations" type="number" min="1" max="50" step="1" value="12"></div>
@@ -64,6 +65,8 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 
 <div class="panel"><h2>Peak fitting</h2><div class="stack">
 <div class="grid2"><div class="field"><label>Fit minimum (cm⁻¹)</label><input id="fitMin" type="number" step="any"></div><div class="field"><label>Fit maximum (cm⁻¹)</label><input id="fitMax" type="number" step="any"></div></div>
+<label class="checkrow"><input id="autoPeaks" type="checkbox" checked> Auto peak selection</label>
+<div class="grid2"><div class="field"><label>Auto prominence (% range)</label><input id="autoPeakProminence" type="number" min="0.1" max="100" step="0.5" value="5"></div><div class="field"><label>Minimum spacing (cm⁻¹)</label><input id="autoPeakDistance" type="number" min="0" step="1" value="10"></div></div>
 <div class="field"><label>Profile</label><select id="profile"><option value="pseudo" selected>Pseudo-Voigt</option><option value="gaussian">Gaussian</option><option value="lorentzian">Lorentzian</option></select></div>
 <div class="grid2"><div class="field"><label>Max iterations</label><input id="fitIterations" type="number" min="10" max="300" step="10" value="120"></div><div class="field"><label>Initial FWHM (cm⁻¹)</label><input id="initialWidth" type="number" min="0.2" step="0.5" value="12"></div></div>
 <label class="checkrow"><input id="showComponents" type="checkbox" checked> Show fitted components</label>
@@ -83,14 +86,15 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 </div>
 
 <div class="panel">
-<div class="toolbar"><h2 style="margin:0">Fit results</h2><button id="exportFitCsv" class="right">Export fit CSV</button></div>
+<div class="toolbar"><h2 style="margin:0">Fit results</h2><button id="exportAnalysisCsv" class="right">Export analysis CSV</button></div>
 <div id="fitSummary" class="fit-summary" style="margin:10px 0"></div>
-<div class="scroll"><table><thead><tr><th>#</th><th>Centre cm⁻¹</th><th>Height</th><th>FWHM cm⁻¹</th><th>η</th><th>Area</th></tr></thead><tbody id="fitTable"></tbody></table></div>
+<div class="scroll"><table><thead><tr><th>#</th><th>Selected cm⁻¹</th><th>Fitted cm⁻¹</th><th>Height</th><th>FWHM cm⁻¹</th><th>η</th><th>Area</th><th>N</th><th>D</th></tr></thead><tbody id="fitTable"></tbody></table></div>
+<div id="ratioSummary" class="status" style="margin-top:12px">Select numerator (N) and denominator (D) peaks.</div>
 </div>
 </main>
 </div></div>
 
-<script src="./raman-analysis.js?v=20261117"></script>
+<script src="./raman-analysis.js?v=20261117b"></script>
 <footer>Data Processing Tools · Timothy Leong</footer>
 </body>
 </html>
