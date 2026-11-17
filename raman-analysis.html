@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Raman Analysis</title>
+<link rel="stylesheet" href="./styles.css?v=20261117-raman-analysis">
+<style>
+:root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#233247;background:#f5f7fb}
+*{box-sizing:border-box}body{margin:0}.shell{width:min(1580px,calc(100vw - 28px));max-width:1580px;margin:auto;padding:20px 0 30px}
+.hero h1{font-size:clamp(2rem,5vw,3.6rem);margin:.25rem 0 .6rem;letter-spacing:normal;color:white}.hero .eyebrow{color:white;opacity:.8}.hero{margin:0}
+.analysis-layout{display:grid;grid-template-columns:minmax(330px,410px) minmax(0,1fr);gap:16px;align-items:start}
+.panel{background:#fff;border:1px solid #e1e8f0;border-radius:13px;padding:18px;margin-bottom:16px;box-shadow:0 2px 8px #152a4409}
+h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.field{display:grid;gap:4px}label{font-size:12px;color:#53677e;font-weight:600}input,select{font:inherit;color:#24364f;background:#fff;border:1px solid #ccd6e3;border-radius:7px;padding:7px 8px;min-width:0;width:100%}input[type=checkbox]{width:auto}input[type=file]{display:none}
+.checkrow{display:flex;align-items:center;gap:8px;font-size:13px}button,.filebtn{border:1px solid #cad4e1;background:#fff;color:#253a55;border-radius:8px;padding:9px 12px;font:inherit;font-size:13px;cursor:pointer}button:hover,.filebtn:hover{background:#eff4fa}button.primary{background:#2463d3;color:#fff;border-color:#2463d3}button:disabled{opacity:.45;cursor:default}
+.filebtn{display:inline-flex;border-style:dashed;border-color:#7996c0;color:#2054ae;background:#f6faff;font-weight:600}.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.right{margin-left:auto}
+.status{padding:9px 11px;background:#edf5ff;border:1px solid #d8e7ff;border-radius:8px;font-size:12px;color:#36577e}.muted,small,.hint{color:#718096}.hint{font-size:12px;line-height:1.45}
+.plotbox{min-height:650px;border:1px solid #e1e8f0;border-radius:10px;background:#fff;overflow:hidden}.plotbox svg{display:block;width:100%;height:auto}
+.spectrum-list{max-height:300px;overflow:auto;border:1px solid #e7edf4;border-radius:9px}.spectrum-item{padding:8px 9px;border-bottom:1px solid #edf1f6;font-size:12px;cursor:pointer}.spectrum-item:last-child{border-bottom:0}.spectrum-item.active{background:#edf4ff;color:#174eaf;font-weight:600}
+.seed-list{display:flex;gap:6px;flex-wrap:wrap}.seed{display:inline-flex;align-items:center;gap:5px;border:1px solid #cad4e1;border-radius:999px;padding:4px 7px;font-size:12px;background:#fff}.seed button{border:0;padding:0 2px;background:transparent;color:#8a3b45}
+.fit-summary{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#53677e}.scroll{overflow:auto;max-height:350px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:7px;border-bottom:1px solid #e8edf4;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#f4f7fc;font-size:11px;text-transform:uppercase;color:#52677e}.fit-chip{display:inline-block;padding:3px 7px;border-radius:999px;background:#eef3f8;font-size:11px;color:#516579;margin:2px 2px 0 0}
+@media(max-width:980px){.analysis-layout{grid-template-columns:1fr}.shell{width:min(100% - 24px,1580px)}.plotbox{min-height:520px}}
+</style>
+</head>
+<body>
+<nav class="site-nav" aria-label="Primary navigation"><div class="nav-inner"><a class="site-brand" href="./index.html">Data Processing Tools</a><div class="nav-links"><a href="./index.html">Excel Processor</a><a href="./quicksheet.html">QuickSheet Builder</a><a href="./plotter.html">QuickSheet Plotter</a><a href="./extractor.html">Extractors</a><a href="./raman-analysis.html" class="active" aria-current="page">Raman Analysis</a><a href="./raman.html">Raman Spectrums</a><a href="./raman-ratios.html">Raman Peak Ratios</a></div></div></nav>
+<header class="hero"><div><p class="eyebrow">Data Processing Tools</p><h1>Raman Analysis</h1></div></header>
+
+<div class="shell"><div class="analysis-layout">
+<aside>
+<div class="panel stack">
+<h2>Load spectrum</h2>
+<div class="toolbar"><label class="filebtn">＋ Add WDF / TXT / CSV<input id="upload" type="file" multiple accept=".wdf,.txt,.csv"></label><label class="filebtn">↥ Open compiled dataset<input id="openCompiled" type="file" accept=".json"></label></div>
+<div id="loadStatus" class="status">No spectra loaded.</div>
+<div class="field"><label>Search spectra</label><input id="search" placeholder="Filename, compound, phase…"></div>
+<div id="spectrumList" class="spectrum-list"></div>
+<div id="metaSummary" class="hint"></div>
+</div>
+
+<div class="panel"><h2>Processing</h2><div class="stack">
+<label class="checkrow"><input id="despike" type="checkbox"> Auto-despike</label>
+<div class="field"><label>Savitzky–Golay smoothing</label><select id="smooth"><option value="0" selected>None</option><option value="5">5-point</option><option value="7">7-point</option><option value="9">9-point</option></select></div>
+<div class="field"><label>Baseline correction</label><select id="baselineMethod"><option value="none" selected>None</option><option value="linear">Linear endpoint</option><option value="als">ALS · asymmetric least squares</option><option value="airpls">airPLS · adaptive penalized least squares</option></select></div>
+<div id="lambdaField" class="field" style="display:none"><label>Smoothness λ</label><input id="lambda" type="number" min="1" max="1000000000000" step="any" value="1000000"><small>Higher values give a smoother/stiffer baseline.</small></div>
+<div id="pField" class="field" style="display:none"><label>ALS asymmetry p</label><input id="asymmetry" type="number" min="0.000001" max="0.49" step="0.001" value="0.001"></div>
+<div id="iterationsField" class="field" style="display:none"><label>Iterations</label><input id="iterations" type="number" min="1" max="50" step="1" value="12"></div>
+<div class="toolbar"><button id="previewProcessing">Preview</button><button id="applyProcessing" class="primary" disabled>Apply</button><button id="discardProcessing" disabled>Discard</button><button id="resetRaw">Reset raw</button></div>
+<div id="processingStatus" class="hint"></div>
+</div></div>
+
+<div class="panel"><h2>Peak fitting</h2><div class="stack">
+<div class="grid2"><div class="field"><label>Fit minimum (cm⁻¹)</label><input id="fitMin" type="number" step="any"></div><div class="field"><label>Fit maximum (cm⁻¹)</label><input id="fitMax" type="number" step="any"></div></div>
+<div class="field"><label>Profile</label><select id="profile"><option value="pseudo" selected>Pseudo-Voigt</option><option value="gaussian">Gaussian</option><option value="lorentzian">Lorentzian</option></select></div>
+<div class="grid2"><div class="field"><label>Max iterations</label><input id="fitIterations" type="number" min="10" max="300" step="10" value="120"></div><div class="field"><label>Initial FWHM (cm⁻¹)</label><input id="initialWidth" type="number" min="0.2" step="0.5" value="12"></div></div>
+<label class="checkrow"><input id="showComponents" type="checkbox" checked> Show fitted components</label>
+<label class="checkrow"><input id="showResidual" type="checkbox" checked> Show residual</label>
+<div class="toolbar"><button id="pickPeaks">Pick centres on plot</button><button id="fitPeaks" class="primary">Fit peaks</button><button id="clearSeeds">Clear peaks</button></div>
+<div id="seedList" class="seed-list"></div>
+<div class="hint">Click the spectrum while peak-picking is active. Click near a seed again to remove it. Up to 10 components.</div>
+<div id="fitStatus" class="status">No fit calculated.</div>
+</div></div>
+</aside>
+
+<main>
+<div class="panel">
+<div class="toolbar"><h2 style="margin:0">Spectrum</h2><button id="autoRange" class="right">Auto range</button><button id="exportSvg">Export SVG</button><button id="exportPng">Export PNG</button></div>
+<div class="grid3" style="margin-top:12px"><div class="field"><label>X minimum</label><input id="xMin" type="number" placeholder="Auto"></div><div class="field"><label>X maximum</label><input id="xMax" type="number" placeholder="Auto"></div><div class="field"><label>Y padding (%)</label><input id="yPad" type="number" min="0" max="40" value="8"></div></div>
+<div id="plot" class="plotbox" style="margin-top:14px"></div>
+</div>
+
+<div class="panel">
+<div class="toolbar"><h2 style="margin:0">Fit results</h2><button id="exportFitCsv" class="right">Export fit CSV</button></div>
+<div id="fitSummary" class="fit-summary" style="margin:10px 0"></div>
+<div class="scroll"><table><thead><tr><th>#</th><th>Centre cm⁻¹</th><th>Height</th><th>FWHM cm⁻¹</th><th>η</th><th>Area</th></tr></thead><tbody id="fitTable"></tbody></table></div>
+</div>
+</main>
+</div></div>
+
+<script src="./raman-analysis.js?v=20261117"></script>
+<footer>Data Processing Tools · Timothy Leong</footer>
+</body>
+</html>
