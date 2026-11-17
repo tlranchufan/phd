@@ -14,7 +14,7 @@
 </div></details>
 <details><summary>Processing preview</summary>
 <div class="grid3">
-<label class="checkrow"><input id="procDespike" type="checkbox" checked> Auto-despike</label>
+<label class="checkrow"><input id="procDespike" type="checkbox" checked> Auto-despike (single + multi-point)</label>
 <div class="field"><label>Savitzky–Golay smoothing</label><select id="procSmooth"><option value="0" selected>None</option><option value="5">5-point</option><option value="7">7-point</option><option value="9">9-point</option></select></div>
 <div class="field"><label>Baseline correction</label><select id="procBaseline"><option value="none" selected>None</option><option value="linear">Linear endpoint</option><option value="als">ALS · asymmetric least squares</option><option value="airpls">airPLS · adaptive penalized least squares</option></select></div>
 <div class="field" id="procBaselineLambdaField" style="display:none"><label>Smoothness λ</label><input id="procBaselineLambda" type="number" min="1" max="1000000000000" step="any" value="1000000"><small class="muted">Higher values give a smoother/stiffer baseline.</small></div>
@@ -90,9 +90,104 @@ function metadata(name){
 }
 function readWdf(ab){let d=new DataView(ab);if(ab.byteLength<512||String.fromCharCode(...new Uint8Array(ab,0,4))!=='WDF1')throw Error('Invalid WDF signature');let n=d.getUint32(60,true),count=Number(d.getBigUint64(64,true));if(!n||n>1000000||count!==1)throw Error('Only single-spectrum WDF files are supported (found '+count+' spectra)');let pos=512,X=null,Y=null;while(pos+16<=ab.byteLength){let tag=String.fromCharCode(...new Uint8Array(ab,pos,4)),size=Number(d.getBigUint64(pos+8,true)),start=pos+16;if(size<16||pos+size>ab.byteLength)throw Error('Invalid WDF block length');if(tag==='DATA'){if(size<16+n*4)throw Error('Truncated DATA block');Y=Array.from({length:n},(_,i)=>d.getFloat32(start+i*4,true));}if(tag==='XLST'){if(size<24+n*4)throw Error('Truncated XLST block');X=Array.from({length:n},(_,i)=>d.getFloat32(start+8+i*4,true));}pos+=size;}if(!X||!Y)throw Error('Missing WDF DATA or XLST block');return {x:X,y:Y};}
 function readTxt(text){let x=[],y=[];for(let line of text.split(/\r?\n/)){let tok=line.trim().replace(/[,;\t]+/g,' ').split(/\s+/);if(tok.length<2)continue;let a=Number(tok[0]),b=Number(tok[1]);if(Number.isFinite(a)&&Number.isFinite(b)){x.push(a);y.push(b);}}if(x.length<20)throw Error('Expected at least 20 rows with numeric wavenumber and intensity columns');return {x,y};}
-// Conservative narrow-spike detector: compare each point to local median, require prominence > 8 robust sigma and sharp width.
-function cosmic(y){let z=y.slice(),mask=[];const median=a=>{let s=a.slice().sort((a,b)=>a-b);return s[Math.floor(s.length/2)]};for(let i=4;i<y.length-4;i++){let neighbors=[...y.slice(i-4,i-1),...y.slice(i+2,i+5)],m=median(neighbors),sigma=1.4826*median(neighbors.map(v=>Math.abs(v-m)));let deviation=y[i]-m,local=Math.max(sigma,Math.sqrt(Math.max(1,Math.abs(m)))*0.65,2);if(deviation>8*local && y[i]>(y[i-1]+y[i+1])/2+6*local){mask.push(i);}}
-let groups=[];for(let idx of mask){let g=groups.at(-1);if(g&&idx-g.at(-1)<=2)g.push(idx);else groups.push([idx]);}let changed=[];for(let g of groups){let a=g[0],b=g.at(-1);if(b-a>2||a<1||b>=y.length-1)continue;for(let j=a;j<=b;j++){z[j]=y[a-1]+(y[b+1]-y[a-1])*(j-a+1)/(b-a+2);changed.push(j);}}return {corrected:z,modified:changed};}
+// Two-stage cosmic-ray removal. Retain the conservative isolated-spike rule,
+// then detect short multi-channel spikes that can evade a single-point check.
+// Raw intensities are never modified; output records every interpolated channel.
+function cosmic(y,x){
+  const n=y.length,flagged=new Uint8Array(n);
+  const median=values=>{
+    const sorted=values.slice().sort((a,b)=>a-b);
+    return sorted[Math.floor(sorted.length/2)];
+  };
+  // First pass: original Raman page single-point detector.
+  const hits=[];
+  for(let i=4;i<n-4;i++){
+    const neighbors=[...y.slice(i-4,i-1),...y.slice(i+2,i+5)],m=median(neighbors);
+    const sigma=1.4826*median(neighbors.map(v=>Math.abs(v-m)));
+    const local=Math.max(sigma,Math.sqrt(Math.max(1,Math.abs(m)))*0.65,2);
+    if(y[i]-m>8*local && y[i]>(y[i-1]+y[i+1])/2+6*local)hits.push(i);
+  }
+  const groups=[];
+  for(const idx of hits){
+    const g=groups.at(-1);
+    if(g && idx-g.at(-1)<=2)g.push(idx);
+    else groups.push([idx]);
+  }
+  for(const g of groups){
+    const a=g[0],b=g.at(-1);
+    if(b-a>2||a<1||b>=n-1)continue;
+    for(let j=a;j<=b;j++)flagged[j]=1;
+  }
+  // Median-based local continuum and MAD noise estimates. Edge replication
+  // agrees with scipy.ndimage.median_filter(...,mode="nearest").
+  const medianFilter=(a,width)=>{
+    const half=Math.floor(width/2),out=new Array(a.length);
+    for(let i=0;i<a.length;i++){
+      const window=new Array(width);
+      for(let j=0;j<width;j++)window[j]=a[Math.max(0,Math.min(a.length-1,i+j-half))];
+      window.sort((p,q)=>p-q);
+      out[i]=window[half];
+    }
+    return out;
+  };
+  if(n>=105 && x && x.length===n){
+    const continuum=medianFilter(y,41);
+    const response=y.map((v,i)=>v-continuum[i]);
+    const near=medianFilter(y,11);
+    const hf=y.map((v,i)=>v-near[i]);
+    const hfTrend=medianFilter(hf,101);
+    const noise=medianFilter(hf.map((v,i)=>Math.abs(v-hfTrend[i])),101)
+      .map(v=>Math.max(1.4826*v,6));
+    const seed=new Uint8Array(n),wings=new Uint8Array(n);
+    for(let i=0;i<n;i++){
+      // The supplemental pass intentionally avoids narrow fingerprint bands
+      // (e.g. phosphate/sulfate/carbonate), which may be genuine Raman peaks.
+      const eligible=x[i]>=1500&&x[i]<=4150;
+      if(eligible&&response[i]>Math.max(7*noise[i],105))seed[i]=1;
+      if(eligible&&response[i]>Math.max(2.7*noise[i],23))wings[i]=1;
+    }
+    for(let i=0;i<n;i++){
+      if(!seed[i])continue;
+      let a=i,b=i;
+      while(a>1&&a>i-25&&(wings[a-1]||
+        (a>2&&wings[a-2]&&response[a-1]>-1.5*noise[a-1])))a--;
+      while(b<n-2&&b<i+25&&(wings[b+1]||
+        (b<n-3&&wings[b+2]&&response[b+1]>-1.5*noise[b+1])))b++;
+      if(b-a+1<=20)for(let j=a;j<=b;j++)flagged[j]=1;
+    }
+    // Join small interior gaps within the same high-positive cosmic event.
+    const flaggedIdx=[];
+    for(let i=0;i<n;i++)if(flagged[i])flaggedIdx.push(i);
+    for(let k=1;k<flaggedIdx.length;k++){
+      const left=flaggedIdx[k-1],right=flaggedIdx[k];
+      if(right-left<=1||right-left>3||x[left]<1500)continue;
+      let maxSignal=-Infinity,maxNoise=0;
+      for(let j=left;j<=right;j++){
+        maxSignal=Math.max(maxSignal,response[j]);
+        maxNoise=Math.max(maxNoise,noise[j]);
+      }
+      if(maxSignal>7*maxNoise)for(let j=left;j<=right;j++)flagged[j]=1;
+    }
+  }
+  // Interpolate whole contiguous spike runs in Raman shift, without smoothing
+  // neighboring true bands; preserve raw channels for reset and export.
+  const corrected=y.slice(),modified=[];
+  for(let i=0;i<n;i++){
+    if(!flagged[i])continue;
+    const start=i;
+    while(i+1<n&&flagged[i+1])i++;
+    const end=i;
+    if(start<1||end>=n-1)continue;
+    const x0=x?.[start-1]??start-1,x1=x?.[end+1]??end+1;
+    if(!Number.isFinite(x1-x0)||x1===x0)continue;
+    for(let j=start;j<=end;j++){
+      const xj=x?.[j]??j;
+      corrected[j]=y[start-1]+(y[end+1]-y[start-1])*(xj-x0)/(x1-x0);
+      modified.push(j);
+    }
+  }
+  return {corrected,modified};
+}
 let metaSort={key:'name',direction:1};
 const metaColumns=['keep','name',...fields,'points','spikes','action'];
 const normalizeDuplicateName=name=>String(name||'').trim().replace(/^output_/i,'').replace(/\.(wdf|txt|csv)$/i,'').toLowerCase().replace(/\s+/g,'');
@@ -357,7 +452,7 @@ function applySelectedBaseline(y){
 }
 function runProcessingPipeline(s){
  let y=s.corrected.slice(),modified=[];
- if($('procDespike').checked){let d=cosmic(y);y=d.corrected;modified=d.modified.slice();}
+ if($('procDespike').checked){let d=cosmic(y,s.x);y=d.corrected;modified=d.modified.slice();}
  let w=Number($('procSmooth').value)||0;if(w)y=sgSmooth(y,w);
  const baselineResult=applySelectedBaseline(y);y=baselineResult.corrected;
  return {y,modified,baseline:baselineResult.baseline,baselineSettings:baselineResult.settings};
