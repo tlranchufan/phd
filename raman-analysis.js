@@ -92,17 +92,24 @@ function isHostReference(s){
  const phase=String(s?.meta?.phase||'').trim().toLowerCase(),host=String(s?.meta?.hostMineral||'').trim().toLowerCase(),code=String(s?.meta?.phaseCode||'').trim().toLowerCase();
  return !!s&&(phase&&host&&phase===host||['crn','cor','corundum','qtz','qz','quartz','qt','cc','cal','calc','calcite','host'].includes(code));
 }
+function normSampleKey(v){return String(v??'').trim().toLowerCase().replace(/[‐‑–—]/g,'-').replace(/\s+/g,'');}
+function filenameSampleKey(s){
+ let n=String(s?.name||'').replace(/\.(?:wdf|txt|csv)$/i,'').replace(/^output_/i,''),m=n.match(/^(.+?)-(?:liq(?:uid)?|vap(?:our|or)?|dc|crn|cor|corundum|qtz|qz|quartz|qt|cc|cal|calc|calcite|melt\d*|white\d*|solid|gas)(?:[-_（(]|$)/i);
+ return normSampleKey(m?.[1]||'');
+}
+function sampleKey(s){
+ let explicit=normSampleKey(s?.meta?.sampleId||s?.meta?.sample||'');
+ return explicit||filenameSampleKey(s);
+}
 function hostCandidates(s){
  if(!s)return [];
- let all=spectra.filter(v=>v.id!==s.id&&isHostReference(v)),sampleId=String(s.meta?.sampleId||s.meta?.sample||'').trim(),compound=String(s.meta?.compound||'').trim(),mol=String(s.meta?.mol||'').trim(),host=String(s.meta?.hostMineral||'').trim();
- return all.sort((a,b)=>{
-  const score=v=>(String(v.meta?.sampleId||v.meta?.sample||'').trim()===sampleId?100:0)+(String(v.meta?.compound||'').trim()===compound?20:0)+(String(v.meta?.mol||'').trim()===mol?5:0)+(String(v.meta?.hostMineral||'').trim()===host?3:0);
-  return score(b)-score(a)||a.name.localeCompare(b.name);
- });
+ let all=spectra.filter(v=>v.id!==s.id&&isHostReference(v)),key=sampleKey(s),compound=normSampleKey(s.meta?.compound),mol=normSampleKey(s.meta?.mol),host=normSampleKey(s.meta?.hostMineral);
+ if(key)return all.filter(v=>sampleKey(v)===key).sort((a,b)=>a.name.localeCompare(b.name));
+ return all.filter(v=>(!compound||normSampleKey(v.meta?.compound)===compound)&&(!mol||normSampleKey(v.meta?.mol)===mol)&&(!host||normSampleKey(v.meta?.hostMineral)===host)).sort((a,b)=>a.name.localeCompare(b.name));
 }
 function autoHostReference(s){
- let c=hostCandidates(s),sid=String(s?.meta?.sampleId||s?.meta?.sample||'').trim();
- return c.find(v=>String(v.meta?.sampleId||v.meta?.sample||'').trim()===sid)||c[0]||null;
+ let c=hostCandidates(s);
+ return c[0]||null;
 }
 function selectedHostReference(){
  let id=Number($('hostReference').value);return spectra.find(s=>s.id===id)||null;
@@ -119,7 +126,7 @@ function updateHostUi(){
  $('hostScale').disabled=$('hostScaleMode').value!=='manual';
  if($('hostPrepStatus')){
   if(selfHost)$('hostPrepStatus').textContent=s?.preparedHost?'Prepared host ✓ · '+(s.processing?.baseline||'baseline corrected'):'Host reference · choose a baseline correction and Apply to prepare it for subtraction.';
-  else if(!cands.length)$('hostPrepStatus').textContent='No matching host reference found in this dataset.';
+  else if(!cands.length)$('hostPrepStatus').textContent='No host reference found for sample '+(s?.meta?.sampleId||s?.meta?.sample||filenameSampleKey(s)||'unknown')+'.';
   else if(!ready)$('hostPrepStatus').textContent='Matched '+chosen.name+', but it is not prepared yet. Open that host spectrum, baseline-correct it, then Apply.';
   else $('hostPrepStatus').textContent='Prepared host: '+chosen.name+'. Only narrow host bands below 1800 cm⁻¹ will be subtracted.';
  }
