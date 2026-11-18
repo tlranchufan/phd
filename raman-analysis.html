@@ -66,10 +66,11 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 
 <div class="panel"><h2>Processing</h2><div class="stack">
 <label class="checkrow"><input id="despike" type="checkbox" checked> Auto-despike</label>
-<label class="checkrow"><input id="subtractHost" type="checkbox"> Subtract host spectrum</label>
+<label class="checkrow"><input id="subtractHost" type="checkbox"> Subtract prepared host peaks</label>
+<div id="hostPrepStatus" class="hint"></div>
 <div id="hostSubtractFields" class="stack" style="display:none">
 <div class="field"><label>Host reference</label><select id="hostReference"></select></div>
-<div class="grid2"><div class="field"><label>Host scale</label><select id="hostScaleMode"><option value="auto" selected>Auto-fit</option><option value="manual">Manual</option></select></div><div class="field"><label>Scale factor</label><input id="hostScale" type="number" min="0" max="100" step="0.01" value="1" disabled></div></div>
+<div class="grid2"><div class="field"><label>Host scale</label><select id="hostScaleMode"><option value="auto" selected>Auto-fit each band</option><option value="manual">Manual global scale</option></select></div><div class="field"><label>Scale factor</label><input id="hostScale" type="number" min="0" max="100" step="0.01" value="1" disabled></div></div>
 <div id="hostStatus" class="hint"></div>
 </div>
 <div class="field"><label>Savitzky–Golay smoothing</label><select id="smooth"><option value="0" selected>None</option><option value="5">5-point</option><option value="7">7-point</option><option value="9">9-point</option></select></div>
@@ -85,7 +86,7 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 <div class="grid2"><div class="field"><label>Fit minimum (cm⁻¹)</label><input id="fitMin" type="number" step="any"></div><div class="field"><label>Fit maximum (cm⁻¹)</label><input id="fitMax" type="number" step="any"></div></div>
 <label class="checkrow"><input id="autoPeaks" type="checkbox" checked> Auto peak selection</label>
 <div class="grid2"><div class="field"><label>Auto prominence (% range)</label><input id="autoPeakProminence" type="number" min="0.1" max="100" step="0.5" value="5"></div><div class="field"><label>Minimum spacing (cm⁻¹)</label><input id="autoPeakDistance" type="number" min="0" step="1" value="10"></div></div>
-<div class="field"><label>Profile</label><select id="profile"><option value="pseudo" selected>Pseudo-Voigt</option><option value="gaussian">Gaussian</option><option value="lorentzian">Lorentzian</option></select></div>
+<div class="grid2"><div class="field"><label>Profile</label><select id="profile"><option value="pseudo" selected>Pseudo-Voigt</option><option value="gaussian">Gaussian</option><option value="lorentzian">Lorentzian</option></select></div><div class="field"><label>Fit baseline</label><select id="fitBaseline"><option value="constant" selected>Constant</option><option value="linear">Linear</option><option value="quadratic">Quadratic · broad OH</option></select></div></div>
 <div class="grid2"><div class="field"><label>Max iterations</label><input id="fitIterations" type="number" min="10" max="300" step="10" value="120"></div><div class="field"><label>Initial FWHM (cm⁻¹)</label><input id="initialWidth" type="number" min="0.2" step="0.5" value="12"></div></div>
 <label class="checkrow"><input id="showComponents" type="checkbox" checked> Show fitted components</label>
 <label class="checkrow"><input id="showResidual" type="checkbox" checked> Show residual</label>
@@ -116,7 +117,7 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 </main>
 </div></div>
 
-<script src="./raman-analysis.js?v=20261118-host-subtract"></script>
+<script src="./raman-analysis.js?v=20261118-prepared-host"></script>
 <footer>Data Processing Tools · Timothy Leong</footer>
 </body>
 </html>
