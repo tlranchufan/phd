@@ -130,7 +130,7 @@ function updateHostUi(){
   else if(!ready)$('hostPrepStatus').textContent='Matched '+chosen.name+', but it is not prepared yet. Open that host spectrum, baseline-correct it, then Apply.';
   else {let bands=hostPeakBands(chosen.x,chosen.working);$('hostPrepStatus').textContent='Prepared host: '+chosen.name+' · '+bands.length+' narrow band(s) detected across the full Raman range. Broad features (>110 cm⁻¹ FWHM) are protected.';}
  }
- if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Using conservative local host-band subtraction: quadratic local detrending, shape matching and anti-overshoot caps.':'';
+ if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Host subtraction: aggressive matched-band removal below 2500 cm⁻¹; conservative OH-safe subtraction above 2500 cm⁻¹.':'';
 }
 function interpolateSeries(xs,ys,targetX){
  let out=new Array(targetX.length).fill(NaN),j=0;if(!xs?.length||xs.length!==ys?.length)return out;
@@ -185,15 +185,23 @@ function subtractHostSignal(sampleY,s){
    if(hv<=0)continue;num+=hv*sv;den+=hv*hv;ss2+=sv*sv;
   }
   if(hostPeak<=1e-12||den<=1e-12)continue;
-  let corr=ss2>1e-12?num/Math.sqrt(den*ss2):0,centerHost=Math.max(0,hs.signal[centerJ]),centerSample=Math.max(0,ss.signal[centerJ]);
-  if(mode==='auto'&&(corr<.58||centerHost<=1e-12||centerSample<=0))continue;
-  let rawScale=mode==='manual'?manual:Math.max(0,num/den),centerCap=centerHost>1e-12?.88*centerSample/centerHost:0,peakCap=.88*Math.max(0,samplePeak)/hostPeak,scale=mode==='manual'?manual:Math.min(rawScale,centerCap,peakCap,2.5);
+  let corr=ss2>1e-12?num/Math.sqrt(den*ss2):0,centerHost=Math.max(0,hs.signal[centerJ]),centerSample=Math.max(0,ss.signal[centerJ]),aggressive=band.center<2500;
+  let minCorr=aggressive?.45:.58;if(mode==='auto'&&(corr<minCorr||centerHost<=1e-12||centerSample<=0))continue;
+  let rawScale=mode==='manual'?manual:Math.max(0,num/den),scale=0;
+  if(mode==='manual')scale=manual;
+  else if(aggressive){
+   let centerCap=centerHost>1e-12?1.05*centerSample/centerHost:0,peakCap=1.05*Math.max(0,samplePeak)/hostPeak;
+   scale=Math.min(rawScale,centerCap,peakCap,3);
+  }else{
+   let centerCap=centerHost>1e-12?.88*centerSample/centerHost:0,peakCap=.88*Math.max(0,samplePeak)/hostPeak;
+   scale=Math.min(rawScale,centerCap,peakCap,2.5);
+  }
   if(scale<=0)continue;
   for(let j=0;j<hs.idx.length;j++){
-   let i=hs.idx[j],hv=Math.max(0,hs.signal[j]),d=Math.abs(s.x[i]-band.center)/band.halfWidth,taper=.5*(1+Math.cos(Math.PI*Math.min(1,d))),requested=scale*hv*taper,localHeadroom=Math.max(0,ss.signal[j])*.92;
+   let i=hs.idx[j],hv=Math.max(0,hs.signal[j]),d=Math.abs(s.x[i]-band.center)/band.halfWidth,taper=.5*(1+Math.cos(Math.PI*Math.min(1,d))),requested=scale*hv*taper,localSignal=Math.max(0,ss.signal[j]),localHeadroom=localSignal*(aggressive?1.02:.92);
    out[i]-=Math.min(requested,localHeadroom);
   }
-  used.push({center:band.center,scale,correlation:corr,halfWidth:band.halfWidth,fwhm:band.fwhm,prominence:band.prominence});
+  used.push({center:band.center,scale,correlation:corr,regime:aggressive?'aggressive':'OH-safe',halfWidth:band.halfWidth,fwhm:band.fwhm,prominence:band.prominence});
  }
  let scale=used.length?medianArray(used.map(v=>v.scale)):0;if(mode==='auto')$('hostScale').value=scale.toFixed(3);
  return {y:out,host,scale,bands:used};
