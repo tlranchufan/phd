@@ -305,7 +305,7 @@ function updatePeakSelectionUi(){
  let auto=$('autoPeaks').checked;$('pickPeaks').disabled=auto;if(auto&&pickMode){pickMode=false;$('pickPeaks').classList.remove('primary');$('pickPeaks').textContent='Pick centres on plot';}
 }
 $('autoPeaks').onchange=updatePeakSelectionUi;updatePeakSelectionUi();
-function updateFitModeUi(){
+function updateFitModeUi(resetFit=true){
  let broad=$('fitMode').value==='broadOH',s=current();$('broadOhHint').style.display=broad?'block':'none';
  if(broad){
   $('autoPeaks').checked=false;$('autoPeaks').disabled=true;$('autoPeakProminence').disabled=true;$('autoPeakDistance').disabled=true;$('profile').value='gaussian';$('fitBaseline').value='linear';$('initialWidth').value=220;$('fitIterations').value=Math.max(200,Number($('fitIterations').value)||200);
@@ -313,9 +313,10 @@ function updateFitModeUi(){
  }else{
   $('autoPeaks').disabled=false;$('autoPeakProminence').disabled=false;$('autoPeakDistance').disabled=false;
  }
- updatePeakSelectionUi();fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();
+ updatePeakSelectionUi();
+ if(resetFit){fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();}
 }
-$('fitMode').addEventListener('change',updateFitModeUi);
+$('fitMode').addEventListener('change',()=>updateFitModeUi(true));
 function renderSeeds(){$('seedList').innerHTML=seeds.length?seeds.map((x,i)=>'<span class="seed">'+(i+1)+': '+x.toFixed(1)+'<button data-seed="'+i+'">×</button></span>').join(''):'<span class="hint">No peak centres selected.</span>';}
 $('seedList').onclick=e=>{if(e.target.dataset.seed!==undefined){seeds.splice(Number(e.target.dataset.seed),1);fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderSeeds();renderFit();renderPlot();}};
 $('pickPeaks').onclick=()=>{pickMode=!pickMode;$('pickPeaks').classList.toggle('primary',pickMode);$('pickPeaks').textContent=pickMode?'Picking centres…':'Pick centres on plot';};
@@ -384,7 +385,31 @@ function fitNonlinear(xs,ys,seedXs,profile,maxIterations,initialWidth,baselineMo
  let peaks=pairs.map(v=>v.p),cleanSeeds=pairs.map(v=>v.seed);
  return {offset:u.offset,baselineCoeffs:u.baseline,baselineMode,baseline,peaks,seedXs:cleanSeeds,fit,residual:ys.map((v,i)=>v-fit[i]),sse,rmse:Math.sqrt(sse/wsum),r2:sst>0?1-sse/sst:1,iterations,profile,xs,fitMode,maskedRanges,maskedPoints:wts.filter(v=>v<=0).length,fitPoints:wts.filter(v=>v>0).length};
 }
-$('fitPeaks').onclick=()=>{let s=current();if(!s){$('fitStatus').textContent='Load a spectrum first.';return;}let fitMode=$('fitMode').value;if(fitMode==='standard'&&$('autoPeaks').checked)autoSelectPeaks();if(!seeds.length){$('fitStatus').textContent=fitMode==='broadOH'?'Pick 1–5 broad OH component centres manually first.':'No peaks selected. Adjust auto settings or use manual selection.';return;}let lo=Number($('fitMin').value),hi=Number($('fitMax').value);if(!Number.isFinite(lo)||!Number.isFinite(hi)||lo===hi)return;if(hi<lo)[lo,hi]=[hi,lo];let y=activeY(),idx=s.x.map((x,i)=>[x,i]).filter(v=>v[0]>=lo&&v[0]<=hi),ranges=fitMode==='broadOH'?broadOhMaskRanges(s,lo,hi):[],valid=seeds.filter(v=>v>=lo&&v<=hi&&!seedInRanges(v,ranges));if(fitMode==='broadOH'&&valid.length>5)valid=valid.slice(0,5);if(idx.length<20||!valid.length){$('fitStatus').textContent=fitMode==='broadOH'&&ranges.length?'No usable OH centres remain after excluding prepared-host bands. Pick centres outside the shaded host regions.':'Fit range/centres are invalid.';return;}let xs=idx.map(v=>v[0]),ys=idx.map(v=>y[v[1]]),weights=fitMode==='broadOH'?fitWeightsForRanges(xs,ranges):null;fitResult=fitNonlinear(xs,ys,valid,$('profile').value,Math.max(10,Math.min(300,Number($('fitIterations').value)||120)),Math.max(.2,Number($('initialWidth').value)||12),$('fitBaseline').value,fitMode,weights,ranges);ratioNumerator.clear();ratioDenominator.clear();let fitted=current();if(fitted){fitted.reviewed=false;fitted.approved=false;storeCurrentFit();}renderReviewUi();renderList();renderApprovedPreview();renderFit();renderPlot();};
+$('fitPeaks').onclick=()=>{
+ let s=current();if(!s){$('fitStatus').textContent='Load a spectrum first.';return;}
+ let fitMode=$('fitMode').value;
+ if(fitMode==='broadOH')updateFitModeUi(false);
+ if(fitMode==='standard'&&$('autoPeaks').checked)autoSelectPeaks();
+ if(!seeds.length){$('fitStatus').textContent=fitMode==='broadOH'?'Pick 1–5 broad OH component centres manually first.':'No peaks selected. Adjust auto settings or use manual selection.';return;}
+ let lo=Number($('fitMin').value),hi=Number($('fitMax').value);if(!Number.isFinite(lo)||!Number.isFinite(hi)||lo===hi){$('fitStatus').textContent='Enter a valid fit minimum and maximum.';return;}if(hi<lo)[lo,hi]=[hi,lo];
+ let y=activeY(),idx=s.x.map((x,i)=>[x,i]).filter(v=>v[0]>=lo&&v[0]<=hi),ranges=fitMode==='broadOH'?broadOhMaskRanges(s,lo,hi):[],valid=seeds.filter(v=>v>=lo&&v<=hi&&!seedInRanges(v,ranges));
+ if(fitMode==='broadOH'&&valid.length>5)valid=valid.slice(0,5);
+ if(idx.length<20||!valid.length){$('fitStatus').textContent=fitMode==='broadOH'&&ranges.length?'No usable OH centres remain after excluding prepared-host bands. Pick centres outside the shaded host regions.':'Fit range/centres are invalid.';return;}
+ let xs=idx.map(v=>v[0]),ys=idx.map(v=>y[v[1]]),weights=fitMode==='broadOH'?fitWeightsForRanges(xs,ranges):null,usable=weights?weights.reduce((n,w)=>n+(w>0?1:0),0):xs.length;
+ if(usable<20){$('fitStatus').textContent='Too few unmasked points remain for fitting.';return;}
+ $('fitStatus').textContent='Fitting '+valid.length+' '+(fitMode==='broadOH'?'broad OH':'Raman')+' component'+(valid.length===1?'':'s')+'…';
+ $('fitPeaks').disabled=true;
+ setTimeout(()=>{
+  try{
+   fitResult=fitNonlinear(xs,ys,valid,$('profile').value,Math.max(10,Math.min(300,Number($('fitIterations').value)||120)),Math.max(.2,Number($('initialWidth').value)||12),$('fitBaseline').value,fitMode,weights,ranges);
+   if(!fitResult||!Number.isFinite(fitResult.rmse)||!fitResult.peaks?.length)throw new Error('Fit did not converge to a usable solution.');
+   ratioNumerator.clear();ratioDenominator.clear();let fitted=current();if(fitted){fitted.reviewed=false;fitted.approved=false;storeCurrentFit();}
+   renderReviewUi();renderList();renderApprovedPreview();renderFit();renderPlot();
+  }catch(err){
+   fitResult=null;$('fitStatus').textContent='Fit failed: '+(err?.message||String(err));console.error('Raman fit failed',err);
+  }finally{$('fitPeaks').disabled=false;}
+ },0);
+};
 function renderRatio(){
  let r=fitResult;if(!r){$('ratioSummary').textContent='Select numerator (N) and denominator (D) peaks.';return;}
  let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((s,i)=>s+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((s,i)=>s+peakArea(r.peaks[i],r.profile),0);
@@ -435,4 +460,4 @@ $('autoRange').onclick=()=>{$('xMin').value='';$('xMax').value='';renderPlot();}
 $('exportSvg').onclick=()=>{if(lastSvg)download('raman_analysis.svg',new Blob([lastSvg],{type:'image/svg+xml'}));};
 $('exportPng').onclick=()=>{if(!lastSvg)return;let blob=new Blob([lastSvg],{type:'image/svg+xml;charset=utf-8'}),url=URL.createObjectURL(blob),im=new Image;im.onload=()=>{let c=document.createElement('canvas');c.width=2200;c.height=Math.round(2200*im.height/im.width);let ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(im,0,0,c.width,c.height);c.toBlob(b=>download('raman_analysis.png',b),'image/png');URL.revokeObjectURL(url);};im.src=url;};
 
-renderList();renderSeeds();renderFit();renderPlot();renderApprovedPreview();
+updateFitModeUi(false);renderList();renderSeeds();renderFit();renderPlot();renderApprovedPreview();
