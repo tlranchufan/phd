@@ -90,7 +90,7 @@ function alsBaseline(y,lambda,p,iterations){let asym=Math.max(1e-6,Math.min(.49,
 function airPlsBaseline(y,lambda,iterations){let rounds=Math.max(1,Math.min(50,Math.round(iterations)||12)),weights=new Array(y.length).fill(1),base=y.slice(),total=Math.max(1e-12,y.reduce((s,v)=>s+Math.abs(v),0));for(let k=1;k<=rounds;k++){base=whittakerBaseline(y,weights,lambda);let r=y.map((v,i)=>v-base[i]),neg=r.filter(v=>v<0),dssn=Math.abs(neg.reduce((s,v)=>s+v,0));if(dssn<.001*total)break;for(let i=0;i<weights.length;i++)weights[i]=r[i]>=0?1e-12:Math.exp(Math.min(40,k*Math.abs(r[i])/Math.max(dssn,1e-12)));}return base;}
 function isHostReference(s){
  const phase=String(s?.meta?.phase||'').trim().toLowerCase(),host=String(s?.meta?.hostMineral||'').trim().toLowerCase(),code=String(s?.meta?.phaseCode||'').trim().toLowerCase();
- return !!s&&(phase&&host&&phase===host||['crn','qtz','qz','quartz','calcite','host'].includes(code));
+ return !!s&&(phase&&host&&phase===host||['crn','cor','corundum','qtz','qz','quartz','qt','cc','cal','calc','calcite','host'].includes(code));
 }
 function hostCandidates(s){
  if(!s)return [];
