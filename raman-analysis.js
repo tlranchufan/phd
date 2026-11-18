@@ -21,7 +21,7 @@ function readTxt(text){let x=[],y=[];for(const line of text.split(/\r?\n/)){let 
 function addSpectrum(name,raw,meta,working,extra={}){
  let sorted=raw.x.map((x,i)=>[x,raw.y[i]]).filter(v=>Number.isFinite(v[0])&&Number.isFinite(v[1])).sort((a,b)=>a[0]-b[0]);if(sorted.length<20)throw Error('Too few valid spectral points');
  let x=sorted.map(v=>v[0]),y=sorted.map(v=>v[1]),w=working&&working.length===y.length?working.slice():y.slice();
- spectra.push({id:++uid,name,meta:meta||metadata(name),x,raw:y,working:w,modified:Array.isArray(extra.modified)?extra.modified.slice():[],reviewed:extra.reviewed===true,approved:extra.approved===true,processing:extra.processing||null,fit:extra.fit||null,preparedHost:extra.preparedHost===true});if(currentId===null)currentId=uid;
+ spectra.push({id:++uid,name,meta:meta||metadata(name),x,raw:y,working:w,modified:Array.isArray(extra.modified)?extra.modified.slice():[],reviewed:extra.reviewed===true,approved:extra.approved===true,processing:extra.processing||null,fit:extra.fit||null,preparedHost:extra.preparedHost===true,preparedHostBaseline:Array.isArray(extra.preparedHostBaseline)?extra.preparedHostBaseline.slice():null});if(currentId===null)currentId=uid;
 }
 function current(){return spectra.find(s=>s.id===currentId)||null;}
 function renderList(){
@@ -119,18 +119,28 @@ function updateHostUi(){
  select.replaceChildren(...cands.map(v=>new Option(v.name+(v.preparedHost?' · prepared':''),String(v.id))));
  let chosen=cands.find(v=>v.id===was)||cands.find(v=>v.name===storedName)||auto;
  if(chosen)select.value=String(chosen.id);
- let selfHost=isHostReference(s),ready=!!chosen?.preparedHost;
+ let selfHost=isHostReference(s),ready=!!chosen?.preparedHost,bgReady=ready&&Array.isArray(chosen?.preparedHostBaseline)&&chosen.preparedHostBaseline.length===chosen.x.length;
  box.disabled=selfHost||!cands.length||!ready;
  if(box.disabled&&box.checked)box.checked=false;
- fields.style.display=box.checked&&!box.disabled?'grid':'none';
+ fields.style.display=(box.checked||$('subtractHostBackground').checked)&&!selfHost&&!!cands.length?'grid':'none';
  $('hostScale').disabled=$('hostScaleMode').value!=='manual';
+ $('subtractHostBackground').disabled=selfHost||!bgReady;
+ if($('subtractHostBackground').disabled&&$('subtractHostBackground').checked)$('subtractHostBackground').checked=false;
+ $('hostBackgroundFields').style.display=$('subtractHostBackground').checked&&!$('subtractHostBackground').disabled?'grid':'none';
+ $('hostBgScale').disabled=$('hostBgScaleMode').value!=='manual';
  if($('hostPrepStatus')){
   if(selfHost)$('hostPrepStatus').textContent=s?.preparedHost?'Prepared host ✓ · '+(s.processing?.baseline||'baseline corrected'):'Host reference · choose a baseline correction and Apply to prepare it for subtraction.';
   else if(!cands.length)$('hostPrepStatus').textContent='No host reference found for sample '+(s?.meta?.sampleId||s?.meta?.sample||filenameSampleKey(s)||'unknown')+'.';
   else if(!ready)$('hostPrepStatus').textContent='Matched '+chosen.name+', but it is not prepared yet. Open that host spectrum, baseline-correct it, then Apply.';
   else {let bands=hostPeakBands(chosen.x,chosen.working);$('hostPrepStatus').textContent='Prepared host: '+chosen.name+' · '+bands.length+' narrow band(s) detected across the full Raman range. Broad features (>110 cm⁻¹ FWHM) are protected.';}
  }
- if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Host subtraction: aggressive matched-band removal below 2500 cm⁻¹; conservative OH-safe subtraction above 2500 cm⁻¹.':'';
+ if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Host peak subtraction: aggressive matched-band removal below 2500 cm⁻¹; conservative OH-safe subtraction above 2500 cm⁻¹.':'';
+ if($('hostBgStatus')){
+  if(selfHost)$('hostBgStatus').textContent='';
+  else if(chosen&&!bgReady)$('hostBgStatus').textContent='Prepared host background unavailable. Re-apply baseline correction to the host with this version.';
+  else if(bgReady)$('hostBgStatus').textContent='Host background shape will be scaled outside the OH region and subtracted separately from the narrow host peaks.';
+  else $('hostBgStatus').textContent='';
+ }
 }
 function interpolateSeries(xs,ys,targetX){
  let out=new Array(targetX.length).fill(NaN),j=0;if(!xs?.length||xs.length!==ys?.length)return out;
@@ -206,10 +216,34 @@ function subtractHostSignal(sampleY,s){
  let scale=used.length?medianArray(used.map(v=>v.scale)):0;if(mode==='auto')$('hostScale').value=scale.toFixed(3);
  return {y:out,host,scale,bands:used};
 }
+function fitHostBackgroundScale(sampleY,s,host){
+ let lo=Number($('hostBgMin').value),hi=Number($('hostBgMax').value);if(!Number.isFinite(lo))lo=1500;if(!Number.isFinite(hi))hi=2700;if(hi<lo)[lo,hi]=[hi,lo];
+ let interp=interpolateSeries(host.x,host.preparedHostBaseline||[],s.x),idx=[];for(let i=0;i<s.x.length;i++)if(s.x[i]>=lo&&s.x[i]<=hi&&Number.isFinite(interp[i])&&Number.isFinite(sampleY[i]))idx.push(i);
+ if(idx.length<20)return {scale:0,lo,hi,intercept:0,hostBaseline:interp,referencePoints:idx.length};
+ let hmed=medianArray(idx.map(i=>interp[i])),xv=idx.map(i=>interp[i]-hmed),ymed=medianArray(idx.map(i=>sampleY[i])),yv=idx.map(i=>sampleY[i]-ymed),num=0,den=0;
+ for(let j=0;j<idx.length;j++){num+=xv[j]*yv[j];den+=xv[j]*xv[j];}
+ let scale=den>1e-18?Math.max(0,Math.min(20,num/den)):0;
+ for(let iter=0;iter<3;iter++){
+  let residual=idx.map((i,j)=>sampleY[i]-(ymed+scale*(interp[i]-hmed))),med=medianArray(residual),mad=Math.max(1e-9,1.4826*medianArray(residual.map(v=>Math.abs(v-med)))),keep=[];
+  for(let j=0;j<idx.length;j++)if(Math.abs(residual[j]-med)<=2.8*mad)keep.push(idx[j]);
+  if(keep.length<20)break;
+  let hm=medianArray(keep.map(i=>interp[i])),ym=medianArray(keep.map(i=>sampleY[i]));num=0;den=0;
+  for(const i of keep){let hx=interp[i]-hm,yy=sampleY[i]-ym;num+=hx*yy;den+=hx*hx;}
+  if(den>1e-18){scale=Math.max(0,Math.min(20,num/den));hmed=hm;ymed=ym;idx=keep;}
+ }
+ return {scale,lo,hi,intercept:ymed,hmed,hostBaseline:interp,referencePoints:idx.length};
+}
+function subtractHostBackground(sampleY,s){
+ let host=selectedHostReference();if(!$('subtractHostBackground').checked||$('subtractHostBackground').disabled||!host?.preparedHostBaseline)return {y:sampleY.slice(),host:null,scale:null,lo:null,hi:null};
+ let fit=fitHostBackgroundScale(sampleY,s,host),mode=$('hostBgScaleMode').value,scale=mode==='manual'?Math.max(0,Number($('hostBgScale').value)||0):fit.scale;
+ if(mode==='auto')$('hostBgScale').value=Number.isFinite(scale)?scale.toFixed(3):'0';
+ let interp=fit.hostBaseline,hmed=Number.isFinite(fit.hmed)?fit.hmed:medianArray(interp.filter(Number.isFinite)),y=sampleY.map((v,i)=>Number.isFinite(interp[i])?v-scale*(interp[i]-hmed):v);
+ return {y,host,scale,lo:fit.lo,hi:fit.hi,referencePoints:fit.referencePoints};
+}
 function syncProcessingControlsFromSpectrum(s){
- if(!s?.processing){$('despike').checked=true;$('smooth').value='0';$('baselineMethod').value='none';$('lambda').value=1000000;$('asymmetry').value=.001;$('iterations').value=12;$('subtractHost').checked=false;$('hostScaleMode').value='auto';$('hostScale').value=1;updateBaselineUi();updateHostUi();return;}
+ if(!s?.processing){$('despike').checked=true;$('smooth').value='0';$('baselineMethod').value='none';$('lambda').value=1000000;$('asymmetry').value=.001;$('iterations').value=12;$('subtractHost').checked=false;$('hostScaleMode').value='auto';$('hostScale').value=1;$('subtractHostBackground').checked=false;$('hostBgScaleMode').value='auto';$('hostBgScale').value=1;$('hostBgMin').value=1500;$('hostBgMax').value=2700;updateBaselineUi();updateHostUi();return;}
  let p=s.processing;$('despike').checked=p.despike!==false;$('smooth').value=String(p.smoothing||0);$('baselineMethod').value=p.baseline||'none';$('lambda').value=p.lambda??1e6;$('asymmetry').value=p.p??.001;$('iterations').value=p.iterations??12;
- if(p.host){$('subtractHost').checked=p.host.enabled===true;$('hostScaleMode').value=p.host.scaleMode||'auto';$('hostScale').value=Number.isFinite(Number(p.host.scale))?Number(p.host.scale):1;}else $('subtractHost').checked=false;
+ if(p.host){$('subtractHost').checked=p.host.enabled===true;$('hostScaleMode').value=p.host.scaleMode||'auto';$('hostScale').value=Number.isFinite(Number(p.host.scale))?Number(p.host.scale):1;$('subtractHostBackground').checked=p.host.backgroundEnabled===true;$('hostBgScaleMode').value=p.host.backgroundScaleMode||'auto';$('hostBgScale').value=Number.isFinite(Number(p.host.backgroundScale))?Number(p.host.backgroundScale):1;$('hostBgMin').value=Number.isFinite(Number(p.host.backgroundMin))?Number(p.host.backgroundMin):1500;$('hostBgMax').value=Number.isFinite(Number(p.host.backgroundMax))?Number(p.host.backgroundMax):2700;}else {$('subtractHost').checked=false;$('subtractHostBackground').checked=false;}
  updateBaselineUi();updateHostUi();
 }
 function updateBaselineUi(){
@@ -222,15 +256,16 @@ function runProcessing(s){
  let y=s.raw.slice(),spikes=[],settings={method:$('baselineMethod').value,lambda:Math.max(1,Number($('lambda').value)||1e6),p:Math.max(1e-6,Math.min(.49,Number($('asymmetry').value)||.001)),iterations:Math.max(1,Math.min(50,Number($('iterations').value)||12))},baseline=null;
  if($('despike').checked){let d=cosmic(y,s.x);y=d.corrected;spikes=d.modified;}
  let hostSub=subtractHostSignal(y,s);y=hostSub.y;
+ let hostBg=subtractHostBackground(y,s);y=hostBg.y;
  let w=Number($('smooth').value)||0;if(w)y=sgSmooth(y,w);
  if(settings.method==='linear')baseline=linearEndpointBaseline(y);
  if(settings.method==='als')baseline=alsBaseline(y,settings.lambda,settings.p,settings.iterations);
  if(settings.method==='airpls')baseline=airPlsBaseline(y,settings.lambda,settings.iterations);
  if(baseline)y=y.map((v,i)=>v-baseline[i]);
- return {y,baseline,spikes,method:settings.method,settings,hostSub};
+ return {y,baseline,spikes,method:settings.method,settings,hostSub,hostBg};
 }
 function processingActive(){
- return $('despike').checked||($('subtractHost').checked&&!$('subtractHost').disabled)||Number($('smooth').value)!==0||$('baselineMethod').value!=='none';
+ return $('despike').checked||($('subtractHost').checked&&!$('subtractHost').disabled)||($('subtractHostBackground').checked&&!$('subtractHostBackground').disabled)||Number($('smooth').value)!==0||$('baselineMethod').value!=='none';
 }
 function refreshProcessingPreview(){
  let s=current();if(!s)return;
@@ -240,21 +275,20 @@ function refreshProcessingPreview(){
  preview=runProcessing(s);$('applyProcessing').disabled=false;$('discardProcessing').disabled=false;
  let parts=[];if($('despike').checked)parts.push('auto-despike'+(preview.spikes.length?' · '+preview.spikes.length+' spike point(s) corrected':''));
  if(preview.hostSub?.host)parts.push('prepared host peaks '+preview.hostSub.host.name+' · '+preview.hostSub.bands.length+' band(s) · median × '+preview.hostSub.scale.toFixed(3));
+ if(preview.hostBg?.host)parts.push('host background × '+preview.hostBg.scale.toFixed(3)+' from '+Math.round(preview.hostBg.lo)+'–'+Math.round(preview.hostBg.hi)+' cm⁻¹');
  if(Number($('smooth').value))parts.push($('smooth').value+'-point smoothing');
  if(preview.method!=='none')parts.push(preview.method+' baseline');
  $('processingStatus').textContent='Previewing '+parts.join(' · ')+'.';
  fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();
 }
 $('baselineMethod').onchange=()=>{updateBaselineUi();refreshProcessingPreview();};
-for(const id of ['despike','smooth','lambda','asymmetry','iterations','subtractHost','hostReference','hostScaleMode','hostScale'])$(id).addEventListener('input',()=>{updateHostUi();refreshProcessingPreview();});
-$('hostScaleMode').addEventListener('change',()=>{updateHostUi();refreshProcessingPreview();});
-$('hostReference').addEventListener('change',()=>{updateHostUi();refreshProcessingPreview();});
-$('subtractHost').addEventListener('change',()=>{updateHostUi();refreshProcessingPreview();});
+for(const id of ['despike','smooth','lambda','asymmetry','iterations','subtractHost','hostReference','hostScaleMode','hostScale','subtractHostBackground','hostBgMin','hostBgMax','hostBgScaleMode','hostBgScale'])$(id).addEventListener('input',()=>{updateHostUi();refreshProcessingPreview();});
+for(const id of ['hostScaleMode','hostReference','subtractHost','subtractHostBackground','hostBgScaleMode'])$(id).addEventListener('change',()=>{updateHostUi();refreshProcessingPreview();});
 updateBaselineUi();updateHostUi();
 $('previewProcessing').onclick=refreshProcessingPreview;
-$('applyProcessing').onclick=()=>{let s=current();if(!s||!preview)return;if(isHostReference(s)&&preview.method==='none'){$('processingStatus').textContent='Choose and preview a baseline correction before preparing a host reference.';return;}s.working=preview.y.slice();s.modified=preview.spikes.slice();s.preparedHost=isHostReference(s)&&preview.method!=='none';s.processing={despike:$('despike').checked,smoothing:Number($('smooth').value)||0,baseline:preview.method,lambda:Number($('lambda').value)||1e6,p:Number($('asymmetry').value)||.001,iterations:Number($('iterations').value)||12,host:{enabled:!!preview.hostSub?.host,referenceName:preview.hostSub?.host?.name||'',referenceSampleId:preview.hostSub?.host?.meta?.sampleId||preview.hostSub?.host?.meta?.sample||'',scaleMode:$('hostScaleMode').value,scale:preview.hostSub?.scale??null,bands:preview.hostSub?.bands||[]},appliedAt:new Date().toISOString()};preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent=s.preparedHost?'Prepared host reference saved. Raw data retained.':'Applied to working spectrum. Raw data retained.';updateHostUi();fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
+$('applyProcessing').onclick=()=>{let s=current();if(!s||!preview)return;if(isHostReference(s)&&preview.method==='none'){$('processingStatus').textContent='Choose and preview a baseline correction before preparing a host reference.';return;}s.working=preview.y.slice();s.modified=preview.spikes.slice();s.preparedHost=isHostReference(s)&&preview.method!=='none';s.preparedHostBaseline=s.preparedHost&&Array.isArray(preview.baseline)?preview.baseline.slice():s.preparedHostBaseline;s.processing={despike:$('despike').checked,smoothing:Number($('smooth').value)||0,baseline:preview.method,lambda:Number($('lambda').value)||1e6,p:Number($('asymmetry').value)||.001,iterations:Number($('iterations').value)||12,host:{enabled:!!preview.hostSub?.host,referenceName:preview.hostSub?.host?.name||preview.hostBg?.host?.name||'',referenceSampleId:preview.hostSub?.host?.meta?.sampleId||preview.hostSub?.host?.meta?.sample||preview.hostBg?.host?.meta?.sampleId||preview.hostBg?.host?.meta?.sample||'',scaleMode:$('hostScaleMode').value,scale:preview.hostSub?.scale??null,bands:preview.hostSub?.bands||[],backgroundEnabled:!!preview.hostBg?.host,backgroundScaleMode:$('hostBgScaleMode').value,backgroundScale:preview.hostBg?.scale??null,backgroundMin:Number($('hostBgMin').value)||1500,backgroundMax:Number($('hostBgMax').value)||2700},appliedAt:new Date().toISOString()};preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent=s.preparedHost?'Prepared host reference saved. Raw data retained.':'Applied to working spectrum. Raw data retained.';updateHostUi();fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
 $('discardProcessing').onclick=()=>{preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='Preview discarded.';renderPlot();};
-$('resetRaw').onclick=()=>{let s=current();if(!s)return;s.working=s.raw.slice();s.modified=[];s.processing=null;s.preparedHost=false;preview=null;fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
+$('resetRaw').onclick=()=>{let s=current();if(!s)return;s.working=s.raw.slice();s.modified=[];s.processing=null;s.preparedHost=false;s.preparedHostBaseline=null;preview=null;fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
 function activeY(){let s=current();return s?(preview?.y||s.working):[];}
 
 function syncRanges(){let s=current();if(!s)return;if($('fitMin').value==='')$('fitMin').value=Math.round(s.x[0]);if($('fitMax').value==='')$('fitMax').value=Math.round(s.x.at(-1));}
@@ -315,8 +349,8 @@ function download(name,blob){let u=URL.createObjectURL(blob),a=document.createEl
 $('reviewed').onchange=()=>{let s=current();if(!s)return;s.reviewed=$('reviewed').checked;if(!s.reviewed)s.approved=false;renderList();renderReviewUi();renderApprovedPreview();};
 $('approved').onchange=()=>{let s=current();if(!s)return;s.approved=$('approved').checked;if(s.approved)s.reviewed=true;renderList();renderReviewUi();renderApprovedPreview();};
 $('nextUnreviewed').onclick=()=>{if(!spectra.length)return;let start=Math.max(0,spectra.findIndex(s=>s.id===currentId));for(let n=1;n<=spectra.length;n++){let s=spectra[(start+n)%spectra.length];if(!s.reviewed){chooseSpectrum(s.id);return;}}$('reviewStatus').textContent='All spectra are reviewed.';};
-$('saveProcessed').onclick=()=>{let data={format:'raman-studio-v1',workflow:'processed',saved:new Date().toISOString(),spectra:spectra.map(s=>({name:s.name,meta:s.meta,x:s.x,raw:s.raw,corrected:s.working,modified:s.modified||[],keep:true,reviewed:!!s.reviewed,approved:!!s.approved,processing:s.processing||null,fit:s.fit||null,preparedHost:!!s.preparedHost}))};download('raman_processed.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};
-$('exportAnalysisCsv').onclick=()=>{let s=current(),r=fitResult;if(!s||!r)return;let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),ratio=num.length&&den.length&&denArea!==0?numArea/denArea:'',rows=[['filename','compound','host_mineral','mol_kg','phase','temperature_C','host_subtracted','host_reference','host_scale','baseline_mode','fit_profile','fit_baseline','peak','selected_cm-1','fitted_cm-1','height','fwhm_cm-1','eta','area','numerator_selected','denominator_selected','numerator_area_sum','denominator_area_sum','area_ratio','r2','rmse']];r.peaks.forEach((p,i)=>rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.temp,!!s.processing?.host?.enabled,s.processing?.host?.referenceName||'',s.processing?.host?.scale??'',$('baselineMethod').value,r.profile,r.baselineMode||'constant',i+1,r.seedXs?.[i]??p.c,p.c,p.h,p.w,r.profile==='pseudo'?p.eta:r.profile==='lorentzian'?1:0,peakArea(p,r.profile),ratioNumerator.has(i),ratioDenominator.has(i),numArea,denArea,ratio,r.r2,r.rmse]));download('raman_analysis.csv',new Blob([rows.map(row=>row.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
+$('saveProcessed').onclick=()=>{let data={format:'raman-studio-v1',workflow:'processed',saved:new Date().toISOString(),spectra:spectra.map(s=>({name:s.name,meta:s.meta,x:s.x,raw:s.raw,corrected:s.working,modified:s.modified||[],keep:true,reviewed:!!s.reviewed,approved:!!s.approved,processing:s.processing||null,fit:s.fit||null,preparedHost:!!s.preparedHost,preparedHostBaseline:s.preparedHostBaseline||null}))};download('raman_processed.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};
+$('exportAnalysisCsv').onclick=()=>{let s=current(),r=fitResult;if(!s||!r)return;let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),ratio=num.length&&den.length&&denArea!==0?numArea/denArea:'',rows=[['filename','compound','host_mineral','mol_kg','phase','temperature_C','host_subtracted','host_reference','host_scale','host_background_subtracted','host_background_scale','host_background_range','baseline_mode','fit_profile','fit_baseline','peak','selected_cm-1','fitted_cm-1','height','fwhm_cm-1','eta','area','numerator_selected','denominator_selected','numerator_area_sum','denominator_area_sum','area_ratio','r2','rmse']];r.peaks.forEach((p,i)=>rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.temp,!!s.processing?.host?.enabled,s.processing?.host?.referenceName||'',s.processing?.host?.scale??'',!!s.processing?.host?.backgroundEnabled,s.processing?.host?.backgroundScale??'',s.processing?.host?.backgroundEnabled?((s.processing?.host?.backgroundMin??1500)+'-'+(s.processing?.host?.backgroundMax??2700)):'',$('baselineMethod').value,r.profile,r.baselineMode||'constant',i+1,r.seedXs?.[i]??p.c,p.c,p.h,p.w,r.profile==='pseudo'?p.eta:r.profile==='lorentzian'?1:0,peakArea(p,r.profile),ratioNumerator.has(i),ratioDenominator.has(i),numArea,denArea,ratio,r.r2,r.rmse]));download('raman_analysis.csv',new Blob([rows.map(row=>row.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 
 function renderPlot(){
  let s=current();if(!s){$('plot').innerHTML='<div style="padding:70px;text-align:center;color:#7b8da3">Load and select a spectrum to begin analysis</div>';lastSvg='';return;}let y=activeY(),xmin=$('xMin').value===''?s.x[0]:Number($('xMin').value),xmax=$('xMax').value===''?s.x.at(-1):Number($('xMax').value);if(xmax<xmin)[xmin,xmax]=[xmax,xmin];let idx=s.x.map((x,i)=>i).filter(i=>s.x[i]>=xmin&&s.x[i]<=xmax);if(idx.length<2)return;let vals=idx.map(i=>y[i]),ylo=Math.min(...vals),yhi=Math.max(...vals),pad=(Number($('yPad').value)||8)/100*(yhi-ylo||1),residualSpace=$('showResidual').checked&&fitResult?130:0,w=1240,h=680+residualSpace,left=82,right=1170,top=55,bottom=610,YY=v=>bottom-(v-(ylo-pad))/Math.max(1e-12,(yhi+pad)-(ylo-pad))*(bottom-top),XX=x=>left+(x-xmin)/(xmax-xmin)*(right-left);plotGeometry={xmin,xmax,left,right};let out=['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="background:white"><rect width="100%" height="100%" fill="white"/>'];for(let x=Math.ceil(xmin/500)*500;x<=xmax;x+=500){let xx=XX(x);out.push('<line x1="'+xx+'" y1="'+top+'" x2="'+xx+'" y2="'+bottom+'" stroke="#e9edf3"/><text x="'+xx+'" y="'+(bottom+26)+'" text-anchor="middle" font-size="12" fill="#53667d">'+x+'</text>');}out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');let path=(xs,ys,map)=>xs.map((x,i)=>(i?'L':'M')+XX(x).toFixed(2)+' '+map(ys[i]).toFixed(2)).join(' '),xs=idx.map(i=>s.x[i]);if(preview)out.push('<path d="'+path(xs,idx.map(i=>s.working[i]),YY)+'" stroke="#aab3be" stroke-width="1.2" fill="none"/>');out.push('<path d="'+path(xs,vals,YY)+'" stroke="#315cc6" stroke-width="1.5" fill="none"/>');let visibleSeeds=seeds.filter(c=>c>=xmin&&c<=xmax).sort((a,b)=>a-b),placedSeedLabels=[];

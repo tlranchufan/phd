@@ -71,6 +71,12 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 <div id="hostSubtractFields" class="stack" style="display:none">
 <div class="field"><label>Host reference</label><select id="hostReference"></select></div>
 <div class="grid2"><div class="field"><label>Host scale</label><select id="hostScaleMode"><option value="auto" selected>Auto-fit each band</option><option value="manual">Manual global scale</option></select></div><div class="field"><label>Scale factor</label><input id="hostScale" type="number" min="0" max="100" step="0.01" value="1" disabled></div></div>
+<label class="checkrow"><input id="subtractHostBackground" type="checkbox"> Subtract prepared host background</label>
+<div id="hostBackgroundFields" class="stack" style="display:none">
+<div class="grid2"><div class="field"><label>Background scale min (cm⁻¹)</label><input id="hostBgMin" type="number" step="10" value="1500"></div><div class="field"><label>Background scale max (cm⁻¹)</label><input id="hostBgMax" type="number" step="10" value="2700"></div></div>
+<div class="grid2"><div class="field"><label>Background scale</label><select id="hostBgScaleMode"><option value="auto" selected>Auto-fit in reference range</option><option value="manual">Manual</option></select></div><div class="field"><label>Scale factor</label><input id="hostBgScale" type="number" min="0" max="20" step="0.01" value="1" disabled></div></div>
+<div id="hostBgStatus" class="hint"></div>
+</div>
 <div id="hostStatus" class="hint"></div>
 </div>
 <div class="field"><label>Savitzky–Golay smoothing</label><select id="smooth"><option value="0" selected>None</option><option value="5">5-point</option><option value="7">7-point</option><option value="9">9-point</option></select></div>
@@ -117,7 +123,7 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 </main>
 </div></div>
 
-<script src="./raman-analysis.js?v=20261118-prepared-host"></script>
+<script src="./raman-analysis.js?v=20261118-host-background"></script>
 <footer>Data Processing Tools · Timothy Leong</footer>
 </body>
 </html>
