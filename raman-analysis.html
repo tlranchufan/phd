@@ -50,7 +50,7 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 <aside>
 <div class="panel stack">
 <h2>Load dataset</h2>
-<div class="toolbar"><label class="filebtn">＋ Add WDF / TXT / CSV<input id="upload" type="file" multiple accept=".wdf,.txt,.csv"></label><label class="filebtn">↥ Open compiled dataset<input id="openCompiled" type="file" accept=".json"></label></div>
+<div class="toolbar"><label class="filebtn">＋ Add WDF / TXT / CSV<input id="upload" type="file" multiple accept=".wdf,.txt,.csv"></label><label class="filebtn">↥ Open compiled dataset<input id="openCompiled" type="file" accept=".json"></label><button id="clearDataset" type="button" disabled>Clear loaded spectra</button></div>
 <div id="loadStatus" class="status">No spectra loaded.</div>
 <div class="field"><label>Search spectra</label><input id="search" placeholder="Filename, compound, phase…"></div>
 <div id="spectrumList" class="spectrum-list"></div>
@@ -125,7 +125,7 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 </main>
 </div></div>
 
-<script src="./raman-analysis.js?v=20261118-host-match-target"></script>
+<script src="./raman-analysis.js?v=20261119-clear-dataset"></script>
 <footer>Data Processing Tools · Timothy Leong</footer>
 </body>
 </html>

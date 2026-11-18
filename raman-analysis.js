@@ -1,6 +1,6 @@
 'use strict';
 const $=id=>document.getElementById(id);
-let spectra=[],uid=0,currentId=null,preview=null,fitResult=null,seeds=[],pickMode=false,lastSvg='',plotGeometry=null;const ratioNumerator=new Set(),ratioDenominator=new Set();
+let spectra=[],uid=0,currentId=null,preview=null,fitResult=null,seeds=[],pickMode=false,lastSvg='',plotGeometry=null,datasetGeneration=0;const ratioNumerator=new Set(),ratioDenominator=new Set();
 const COLORS=['#315cc6','#d05a43','#209c93','#895bb8','#bd902c','#d34891','#4e728d','#55a33b'];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const csvVal=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
@@ -25,6 +25,7 @@ function addSpectrum(name,raw,meta,working,extra={}){
 }
 function current(){return spectra.find(s=>s.id===currentId)||null;}
 function renderList(){
+ $('clearDataset').disabled=!spectra.length;
  let q=$('search').value.trim().toLowerCase(),shown=spectra.filter(s=>!q||[s.name,...Object.values(s.meta||{})].join(' ').toLowerCase().includes(q));
  $('spectrumList').innerHTML=shown.length?shown.map(s=>'<div class="spectrum-item '+(s.id===currentId?'active':'')+'" data-spectrum="'+s.id+'">'+esc(s.name)+(s.approved?' <span class="fit-chip">Approved</span>':s.reviewed?' <span class="fit-chip">Reviewed</span>':'')+'</div>').join(''):'<div class="hint" style="padding:10px">No spectra match.</div>';
  let s=current();$('metaSummary').innerHTML=s?['compound','hostMineral','mol','phase','phaseId','temp','condition'].map(k=>s.meta?.[k]?'<span class="fit-chip">'+esc(k)+': '+esc(s.meta[k])+'</span>':'').join(' '):'';
@@ -62,12 +63,33 @@ function chooseSpectrum(id){currentId=Number(id);preview=null;let s=current();re
 $('spectrumList').onclick=e=>{let id=e.target.closest('[data-spectrum]')?.dataset.spectrum;if(id)chooseSpectrum(id);};
 $('search').oninput=renderList;
 
+$('clearDataset').onclick=()=>{
+ if(!spectra.length||!window.confirm('Clear all '+spectra.length+' loaded spectra and reset the processing workspace? Unsaved processing, reviews and fits will be lost. Save the processed dataset first if needed.'))return;
+ datasetGeneration++;
+ spectra=[];uid=0;currentId=null;preview=null;fitResult=null;seeds=[];pickMode=false;lastSvg='';plotGeometry=null;
+ ratioNumerator.clear();ratioDenominator.clear();
+ $('upload').value='';$('openCompiled').value='';$('search').value='';
+ $('xMin').value='';$('xMax').value='';$('yPad').value=8;
+ $('fitMin').value='';$('fitMax').value='';$('fitMode').value='standard';
+ $('autoPeaks').checked=true;$('autoPeakProminence').value=5;$('autoPeakDistance').value=10;
+ $('profile').value='pseudo';$('fitBaseline').value='constant';$('fitIterations').value=120;$('initialWidth').value=12;
+ $('showComponents').checked=true;$('showResidual').checked=true;
+ $('pickPeaks').classList.remove('primary');$('pickPeaks').textContent='Pick centres on plot';$('fitPeaks').disabled=false;
+ $('applyProcessing').disabled=true;$('discardProcessing').disabled=true;
+ $('hostReference').dataset.hostTarget='';
+ syncProcessingControlsFromSpectrum(null);updateFitModeUi(false);
+ $('processingStatus').textContent='';$('loadStatus').textContent='No spectra loaded.';
+ renderList();renderSeeds();renderFit();renderPlot();renderApprovedPreview();
+};
+
 $('upload').onchange=async e=>{
- let good=0,errors=[];for(const f of [...e.target.files]){try{let raw=/\.wdf$/i.test(f.name)?readWdf(await f.arrayBuffer()):readTxt(await f.text());addSpectrum(f.name,raw,metadata(f.name));good++;}catch(err){errors.push(f.name+': '+err.message);}}
+ const generation=datasetGeneration;
+ let good=0,errors=[];for(const f of [...e.target.files]){try{let raw=/\.wdf$/i.test(f.name)?readWdf(await f.arrayBuffer()):readTxt(await f.text());if(generation!==datasetGeneration)return;addSpectrum(f.name,raw,metadata(f.name));good++;}catch(err){errors.push(f.name+': '+err.message);}}
+ if(generation!==datasetGeneration)return;
  $('loadStatus').textContent=good+' imported'+(errors.length?' · '+errors.length+' failed':'')+'.';e.target.value='';renderList();syncRanges();syncProcessingControlsFromSpectrum(current());renderPlot();if(!current()?.processing)refreshProcessingPreview();
 };
 $('openCompiled').onchange=async e=>{
- const f=e.target.files?.[0];if(!f)return;try{let data=JSON.parse(await f.text());if(data.format!=='raman-studio-v1'||!Array.isArray(data.spectra))throw Error('Unsupported compiled Raman dataset');let count=0;for(const a of data.spectra){if(!Array.isArray(a.x)||!Array.isArray(a.raw))continue;addSpectrum(a.name||('Spectrum '+(count+1)),{x:a.x,y:a.raw},a.meta||metadata(a.name||''),Array.isArray(a.corrected)?a.corrected:null,a);count++;}$('loadStatus').textContent='Loaded '+count+' spectra from '+f.name+'.';renderList();syncRanges();syncProcessingControlsFromSpectrum(current());renderPlot();if(!current()?.processing)refreshProcessingPreview();}catch(err){$('loadStatus').textContent='Import failed: '+err.message;}finally{e.target.value='';}
+ const generation=datasetGeneration,f=e.target.files?.[0];if(!f)return;try{let data=JSON.parse(await f.text());if(generation!==datasetGeneration)return;if(data.format!=='raman-studio-v1'||!Array.isArray(data.spectra))throw Error('Unsupported compiled Raman dataset');let count=0;for(const a of data.spectra){if(!Array.isArray(a.x)||!Array.isArray(a.raw))continue;addSpectrum(a.name||('Spectrum '+(count+1)),{x:a.x,y:a.raw},a.meta||metadata(a.name||''),Array.isArray(a.corrected)?a.corrected:null,a);count++;}$('loadStatus').textContent='Loaded '+count+' spectra from '+f.name+'.';renderList();syncRanges();syncProcessingControlsFromSpectrum(current());renderPlot();if(!current()?.processing)refreshProcessingPreview();}catch(err){if(generation===datasetGeneration)$('loadStatus').textContent='Import failed: '+err.message;}finally{if(generation===datasetGeneration)e.target.value='';}
 };
 
 function cosmic(y,x){
@@ -150,7 +172,8 @@ function updateHostUi(){
  $('hostBackgroundFields').style.display=$('subtractHostBackground').checked&&!$('subtractHostBackground').disabled?'grid':'none';
  $('hostBgScale').disabled=$('hostBgScaleMode').value!=='manual';
  if($('hostPrepStatus')){
-  if(selfHost)$('hostPrepStatus').textContent=s?.preparedHost?'Prepared host ✓ · '+(s.processing?.baseline||'baseline corrected'):'Host reference · choose a baseline correction and Apply to prepare it for subtraction.';
+  if(!s)$('hostPrepStatus').textContent='';
+  else if(selfHost)$('hostPrepStatus').textContent=s?.preparedHost?'Prepared host ✓ · '+(s.processing?.baseline||'baseline corrected'):'Host reference · choose a baseline correction and Apply to prepare it for subtraction.';
   else if(!cands.length)$('hostPrepStatus').textContent='No host reference found for sample '+(s?.meta?.sampleId||s?.meta?.sample||filenameSampleKey(s)||'unknown')+'.';
   else if(!ready){let sameTemp=finiteMetaNumber(s,'temp')!==null&&finiteMetaNumber(chosen,'temp')!==null&&Math.abs(finiteMetaNumber(s,'temp')-finiteMetaNumber(chosen,'temp'))<.5,sameRun=runState(s)===runState(chosen);$('hostPrepStatus').textContent='Matched '+chosen.name+(sameTemp&&sameRun?'':' · closest available host condition')+', but it is not prepared yet. Open that host spectrum, baseline-correct it, then Apply.';}
   else {let bands=hostPeakBands(chosen.x,chosen.working);$('hostPrepStatus').textContent='Prepared host: '+chosen.name+' · '+bands.length+' narrow band(s) detected across the full Raman range. Broad features (>110 cm⁻¹ FWHM) are protected.';}
@@ -420,7 +443,9 @@ $('fitPeaks').onclick=()=>{
  if(usable<20){$('fitStatus').textContent='Too few unmasked points remain for fitting.';return;}
  $('fitStatus').textContent='Fitting '+valid.length+' '+(fitMode==='broadOH'?'broad OH':'Raman')+' component'+(valid.length===1?'':'s')+'…';
  $('fitPeaks').disabled=true;
+ const generation=datasetGeneration,targetId=s.id;
  setTimeout(()=>{
+  if(generation!==datasetGeneration||currentId!==targetId)return;
   try{
    fitResult=fitNonlinear(xs,ys,valid,$('profile').value,Math.max(10,Math.min(300,Number($('fitIterations').value)||120)),Math.max(.2,Number($('initialWidth').value)||12),$('fitBaseline').value,fitMode,weights,ranges);
    if(!fitResult||!Number.isFinite(fitResult.rmse)||!fitResult.peaks?.length)throw new Error('Fit did not converge to a usable solution.');
