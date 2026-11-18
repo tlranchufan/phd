@@ -66,6 +66,12 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 
 <div class="panel"><h2>Processing</h2><div class="stack">
 <label class="checkrow"><input id="despike" type="checkbox" checked> Auto-despike</label>
+<label class="checkrow"><input id="subtractHost" type="checkbox"> Subtract host spectrum</label>
+<div id="hostSubtractFields" class="stack" style="display:none">
+<div class="field"><label>Host reference</label><select id="hostReference"></select></div>
+<div class="grid2"><div class="field"><label>Host scale</label><select id="hostScaleMode"><option value="auto" selected>Auto-fit</option><option value="manual">Manual</option></select></div><div class="field"><label>Scale factor</label><input id="hostScale" type="number" min="0" max="100" step="0.01" value="1" disabled></div></div>
+<div id="hostStatus" class="hint"></div>
+</div>
 <div class="field"><label>Savitzky–Golay smoothing</label><select id="smooth"><option value="0" selected>None</option><option value="5">5-point</option><option value="7">7-point</option><option value="9">9-point</option></select></div>
 <div class="field"><label>Baseline correction</label><select id="baselineMethod"><option value="none" selected>None</option><option value="linear">Linear endpoint</option><option value="als">ALS · asymmetric least squares</option><option value="airpls">airPLS · adaptive penalized least squares</option></select></div>
 <div id="lambdaField" class="field" style="display:none"><label>Smoothness λ</label><input id="lambda" type="number" min="1" max="1000000000000" step="any" value="1000000"></div>
@@ -110,7 +116,7 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 </main>
 </div></div>
 
-<script src="./raman-analysis.js?v=20261118-studio"></script>
+<script src="./raman-analysis.js?v=20261118-host-subtract"></script>
 <footer>Data Processing Tools · Timothy Leong</footer>
 </body>
 </html>
