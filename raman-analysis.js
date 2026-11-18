@@ -128,9 +128,9 @@ function updateHostUi(){
   if(selfHost)$('hostPrepStatus').textContent=s?.preparedHost?'Prepared host ✓ · '+(s.processing?.baseline||'baseline corrected'):'Host reference · choose a baseline correction and Apply to prepare it for subtraction.';
   else if(!cands.length)$('hostPrepStatus').textContent='No host reference found for sample '+(s?.meta?.sampleId||s?.meta?.sample||filenameSampleKey(s)||'unknown')+'.';
   else if(!ready)$('hostPrepStatus').textContent='Matched '+chosen.name+', but it is not prepared yet. Open that host spectrum, baseline-correct it, then Apply.';
-  else $('hostPrepStatus').textContent='Prepared host: '+chosen.name+'. Only narrow host bands below 1800 cm⁻¹ will be subtracted.';
+  else {let bands=hostPeakBands(chosen.x,chosen.working);$('hostPrepStatus').textContent='Prepared host: '+chosen.name+' · '+bands.length+' narrow band(s) detected across the full Raman range. Broad features (>110 cm⁻¹ FWHM) are protected.';}
  }
- if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Using prepared host Raman bands; broad high-wavenumber background is preserved.':'';
+ if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Using locally scaled narrow host bands across the full spectrum; broad envelopes are preserved.':'';
 }
 function interpolateSeries(xs,ys,targetX){
  let out=new Array(targetX.length).fill(NaN),j=0;if(!xs?.length||xs.length!==ys?.length)return out;
@@ -140,11 +140,31 @@ function interpolateSeries(xs,ys,targetX){
 function medianArray(a){let v=a.filter(Number.isFinite).slice().sort((x,y)=>x-y);if(!v.length)return 0;let m=Math.floor(v.length/2);return v.length%2?v[m]:(v[m-1]+v[m])/2;}
 function quantileArray(a,q){let v=a.filter(Number.isFinite).slice().sort((x,y)=>x-y);if(!v.length)return 0;let p=Math.max(0,Math.min(1,q))*(v.length-1),i=Math.floor(p),f=p-i;return v[i]+(v[Math.min(i+1,v.length-1)]-v[i])*f;}
 function hostPeakBands(x,y){
- let ids=[];for(let i=2;i<y.length-2;i++){if(x[i]<150||x[i]>1800||y[i]<=0||!(y[i]>y[i-1]&&y[i]>=y[i+1]))continue;ids.push(i);}
- let region=y.filter((v,i)=>x[i]>=150&&x[i]<=1800&&Number.isFinite(v)),noise=Math.max(1e-9,1.4826*medianArray(region.map(v=>Math.abs(v-medianArray(region))))),peakMax=Math.max(...region,1),threshold=Math.max(5*noise,.035*peakMax),cand=[];
- for(const i of ids){let a=i,b=i;while(a>0&&x[i]-x[a]<28)a--;while(b<y.length-1&&x[b]-x[i]<28)b++;let localMin=Math.max(Math.min(...y.slice(a,i+1)),Math.min(...y.slice(i,b+1))),prom=y[i]-localMin;if(prom>=threshold)cand.push({i,prom});}
- cand.sort((a,b)=>b.prom-a.prom);let kept=[];for(const c of cand){if(kept.some(k=>Math.abs(x[k.i]-x[c.i])<18))continue;kept.push(c);if(kept.length>=18)break;}kept.sort((a,b)=>a.i-b.i);
- return kept.map(c=>({center:x[c.i],halfWidth:Math.max(12,Math.min(34,10+18*c.prom/Math.max(peakMax,1)))}));
+ if(!x?.length||x.length!==y?.length)return [];
+ let valid=[];for(let i=1;i<y.length;i++)if(x[i]>=150&&Number.isFinite(y[i])&&Number.isFinite(y[i-1]))valid.push(y[i]-y[i-1]);
+ let dmed=medianArray(valid),noise=Math.max(1e-9,1.4826*medianArray(valid.map(v=>Math.abs(v-dmed)))/Math.SQRT2);
+ let region=y.filter((v,i)=>x[i]>=150&&Number.isFinite(v)),lo=quantileArray(region,.08),hi=quantileArray(region,.995),dynamic=Math.max(1e-9,hi-lo),threshold=Math.max(7*noise,.012*dynamic),cand=[];
+ for(let i=2;i<y.length-2;i++){
+  if(x[i]<150||!Number.isFinite(y[i])||!(y[i]>y[i-1]&&y[i]>=y[i+1]))continue;
+  let left=i,right=i;
+  while(left>0&&x[i]-x[left]<160)left--;
+  while(right<y.length-1&&x[right]-x[i]<160)right++;
+  let leftVals=y.slice(left,i+1).filter(Number.isFinite),rightVals=y.slice(i,right+1).filter(Number.isFinite);if(leftVals.length<4||rightVals.length<4)continue;
+  let localBase=Math.max(Math.min(...leftVals),Math.min(...rightVals)),prom=y[i]-localBase;if(prom<threshold)continue;
+  let half=localBase+prom*.5,l=i,r=i;
+  while(l>left&&y[l]>half)l--;
+  while(r<right&&y[r]>half)r++;
+  if(l===left||r===right)continue;
+  let fwhm=x[r]-x[l];if(!Number.isFinite(fwhm)||fwhm<1.5||fwhm>110)continue;
+  cand.push({i,prom,fwhm});
+ }
+ cand.sort((a,b)=>b.prom-a.prom);let kept=[];
+ for(const p of cand){
+  if(kept.some(k=>Math.abs(x[k.i]-x[p.i])<Math.max(10,.45*Math.max(k.fwhm,p.fwhm))))continue;
+  kept.push(p);if(kept.length>=30)break;
+ }
+ kept.sort((a,b)=>a.i-b.i);
+ return kept.map(p=>({center:x[p.i],fwhm:p.fwhm,prominence:p.prom,halfWidth:Math.max(12,Math.min(90,p.fwhm*1.65+8))}));
 }
 function localDetrendedSignal(x,y,center,halfWidth){
  let idx=[];for(let i=0;i<x.length;i++)if(Math.abs(x[i]-center)<=halfWidth)idx.push(i);if(idx.length<8)return {idx,signal:idx.map(()=>0)};
@@ -161,7 +181,7 @@ function subtractHostSignal(sampleY,s){
   let num=0,den=0;for(let j=0;j<hs.idx.length;j++){let hv=Math.max(0,hs.signal[j]);if(hv<=0)continue;num+=hv*ss.signal[j];den+=hv*hv;}
   let scale=mode==='manual'?manual:(den>1e-12?Math.max(0,Math.min(5,num/den)):0);if(scale<=0)continue;
   for(let j=0;j<hs.idx.length;j++){let i=hs.idx[j],hv=Math.max(0,hs.signal[j]),d=Math.abs(s.x[i]-band.center)/band.halfWidth,taper=.5*(1+Math.cos(Math.PI*Math.min(1,d)));out[i]-=scale*hv*taper;}
-  used.push({center:band.center,scale,halfWidth:band.halfWidth});
+  used.push({center:band.center,scale,halfWidth:band.halfWidth,fwhm:band.fwhm,prominence:band.prominence});
  }
  let scale=used.length?medianArray(used.map(v=>v.scale)):0;if(mode==='auto')$('hostScale').value=scale.toFixed(3);
  return {y:out,host,scale,bands:used};
