@@ -135,10 +135,11 @@ function selectedHostReference(){
  let id=Number($('hostReference').value);return spectra.find(s=>s.id===id)||null;
 }
 function updateHostUi(){
- let s=current(),box=$('subtractHost'),fields=$('hostSubtractFields'),select=$('hostReference'),cands=hostCandidates(s),was=Number(select.value),storedName=s?.processing?.host?.referenceName||'',auto=autoHostReference(s);
+ let s=current(),box=$('subtractHost'),fields=$('hostSubtractFields'),select=$('hostReference'),cands=hostCandidates(s),targetKey=String(s?.id??''),sameTarget=select.dataset.hostTarget===targetKey,was=sameTarget?Number(select.value):NaN,storedName=s?.processing?.host?.referenceName||'',auto=autoHostReference(s);
  select.replaceChildren(...cands.map(v=>new Option(v.name+(v.preparedHost?' · prepared':''),String(v.id))));
- let chosen=cands.find(v=>v.id===was)||cands.find(v=>v.name===storedName)||auto;
+ let chosen=(sameTarget?cands.find(v=>v.id===was):null)||cands.find(v=>v.name===storedName)||auto;
  if(chosen)select.value=String(chosen.id);
+ select.dataset.hostTarget=targetKey;
  let selfHost=isHostReference(s),ready=!!chosen?.preparedHost,bgReady=ready&&Array.isArray(chosen?.preparedHostBaseline)&&chosen.preparedHostBaseline.length===chosen.x.length;
  box.disabled=selfHost||!cands.length||!ready;
  if(box.disabled&&box.checked)box.checked=false;
