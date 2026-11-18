@@ -98,14 +98,34 @@ function filenameSampleKey(s){
  return normSampleKey(m?.[1]||'');
 }
 function sampleKey(s){
- let explicit=normSampleKey(s?.meta?.sampleId||s?.meta?.sample||'');
- return explicit||filenameSampleKey(s);
+ let sid=normSampleKey(s?.meta?.sampleId||'');if(sid)return sid;
+ let compound=normSampleKey(s?.meta?.compound||''),mol=normSampleKey(s?.meta?.mol||''),sample=normSampleKey(s?.meta?.sample||'');
+ if(compound||mol||sample)return [compound,mol,sample].join('|');
+ return filenameSampleKey(s);
+}
+function runState(s){
+ let t=(String(s?.name||'')+' '+String(s?.meta?.condition||'')).toLowerCase();
+ if(/after\s*[-_ ]?\s*run|afterrun/.test(t))return 'after';
+ if(/(^|[^a-z])th(?:[^a-z]|$)/.test(t))return 'th';
+ return 'normal';
+}
+function finiteMetaNumber(s,key){let v=Number(s?.meta?.[key]);return Number.isFinite(v)?v:null;}
+function hostMatchScore(target,cand){
+ let tm=target?.meta||{},cm=cand?.meta||{},score=0,tr=runState(target),cr=runState(cand);
+ score+=tr===cr?5000:-1500;
+ let tt=finiteMetaNumber(target,'temp'),ct=finiteMetaNumber(cand,'temp');
+ if(tt!==null&&ct!==null){let d=Math.abs(tt-ct);score+=d<.5?4000:Math.max(0,1200-d*8);}
+ for(const [key,w] of [['objective',500],['power',400],['seconds',350],['accum',300],['hostMineral',250]]){
+  let a=normSampleKey(tm[key]),b=normSampleKey(cm[key]);if(a&&b&&a===b)score+=w;
+ }
+ return score;
 }
 function hostCandidates(s){
  if(!s)return [];
- let all=spectra.filter(v=>v.id!==s.id&&isHostReference(v)),key=sampleKey(s),compound=normSampleKey(s.meta?.compound),mol=normSampleKey(s.meta?.mol),host=normSampleKey(s.meta?.hostMineral);
- if(key)return all.filter(v=>sampleKey(v)===key).sort((a,b)=>a.name.localeCompare(b.name));
- return all.filter(v=>(!compound||normSampleKey(v.meta?.compound)===compound)&&(!mol||normSampleKey(v.meta?.mol)===mol)&&(!host||normSampleKey(v.meta?.hostMineral)===host)).sort((a,b)=>a.name.localeCompare(b.name));
+ let all=spectra.filter(v=>v.id!==s.id&&isHostReference(v)),key=sampleKey(s),compound=normSampleKey(s.meta?.compound),mol=normSampleKey(s.meta?.mol),host=normSampleKey(s.meta?.hostMineral),filtered;
+ if(key)filtered=all.filter(v=>sampleKey(v)===key);
+ else filtered=all.filter(v=>(!compound||normSampleKey(v.meta?.compound)===compound)&&(!mol||normSampleKey(v.meta?.mol)===mol)&&(!host||normSampleKey(v.meta?.hostMineral)===host));
+ return filtered.sort((a,b)=>hostMatchScore(s,b)-hostMatchScore(s,a)||a.name.localeCompare(b.name));
 }
 function autoHostReference(s){
  let c=hostCandidates(s);
@@ -131,7 +151,7 @@ function updateHostUi(){
  if($('hostPrepStatus')){
   if(selfHost)$('hostPrepStatus').textContent=s?.preparedHost?'Prepared host ✓ · '+(s.processing?.baseline||'baseline corrected'):'Host reference · choose a baseline correction and Apply to prepare it for subtraction.';
   else if(!cands.length)$('hostPrepStatus').textContent='No host reference found for sample '+(s?.meta?.sampleId||s?.meta?.sample||filenameSampleKey(s)||'unknown')+'.';
-  else if(!ready)$('hostPrepStatus').textContent='Matched '+chosen.name+', but it is not prepared yet. Open that host spectrum, baseline-correct it, then Apply.';
+  else if(!ready){let sameTemp=finiteMetaNumber(s,'temp')!==null&&finiteMetaNumber(chosen,'temp')!==null&&Math.abs(finiteMetaNumber(s,'temp')-finiteMetaNumber(chosen,'temp'))<.5,sameRun=runState(s)===runState(chosen);$('hostPrepStatus').textContent='Matched '+chosen.name+(sameTemp&&sameRun?'':' · closest available host condition')+', but it is not prepared yet. Open that host spectrum, baseline-correct it, then Apply.';}
   else {let bands=hostPeakBands(chosen.x,chosen.working);$('hostPrepStatus').textContent='Prepared host: '+chosen.name+' · '+bands.length+' narrow band(s) detected across the full Raman range. Broad features (>110 cm⁻¹ FWHM) are protected.';}
  }
  if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Host peak subtraction: aggressive matched-band removal below 2500 cm⁻¹; conservative OH-safe subtraction above 2500 cm⁻¹.':'';
