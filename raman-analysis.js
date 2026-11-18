@@ -164,7 +164,6 @@ function runProcessing(s){
  let w=Number($('smooth').value)||0;if(w)y=sgSmooth(y,w);
  if(settings.method==='linear')baseline=linearEndpointBaseline(y);
  if(settings.method==='als')baseline=alsBaseline(y,settings.lambda,settings.p,settings.iterations);
- if(settings.method==='airpls')baseline=airPlsBaseline(y,settings.lambda,settings.p,settings.iterations);
  if(settings.method==='airpls')baseline=airPlsBaseline(y,settings.lambda,settings.iterations);
  if(baseline)y=y.map((v,i)=>v-baseline[i]);
  return {y,baseline,spikes,method:settings.method,settings,hostSub};
