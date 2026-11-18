@@ -14,8 +14,8 @@
           <summary class="active">Raman</summary>
           <div class="nav-dropdown">
           <a href="./raman-compiler.html" class="active" aria-current="page">Compiler</a>
+          <a href="./raman-analysis.html">Processing Studio</a>
           <a href="./raman.html">Comparative Plotter</a>
-          <a href="./raman-analysis.html">Analysis</a>
           <a href="./raman-ratios.html">Peak Ratios</a>
           </div>
         </details>
@@ -268,7 +268,7 @@ $('metabody').addEventListener('change',e=>{let el=e.target,s=spectra.find(o=>o.
 $('upload').onchange=async e=>{let good=0,errors=[];for(let f of [...e.target.files]){try{let raw=/\.wdf$/i.test(f.name)?readWdf(await f.arrayBuffer()):readTxt(await f.text());let sorted=raw.x.map((x,i)=>[x,raw.y[i]]).filter(v=>Number.isFinite(v[0])&&Number.isFinite(v[1])).sort((a,b)=>a[0]-b[0]);if(sorted.length<20)throw Error('Too few valid spectral points');let x=sorted.map(v=>v[0]),y=sorted.map(v=>v[1]);spectra.push({id:++uid,name:f.name,meta:metadata(f.name),x,raw:y,corrected:y.slice(),modified:[],keep:true});good++;}catch(err){errors.push(f.name+': '+err.message);}}$('importStatus').textContent=good+' imported'+(errors.length?' · '+errors.length+' failed: '+errors.join(' | '):'')+'.';e.target.value='';renderMeta();};
 $('clear').onclick=()=>{if(spectra.length&&!confirm('Clear all imported spectra and plot selections?'))return;spectra=[];selected=[];processingPreview.clear();detectedPeaks.clear();areaResults=[];$('importStatus').textContent='Session cleared.';renderMeta();};
 function download(name,blob){let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200);}
-const csvVal=s=>'"'+String(s??'').replace(/"/g,'""')+'"';$('compile').onclick=()=>{let data={format:'raman-studio-v1',saved:new Date().toISOString(),spectra:spectra.filter(s=>s.keep).map(({id,...s})=>s)};download('raman_compiled.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};$('metadataCsv').onclick=()=>{let rows=[['filename',...fields,'points','cosmic_corrected_points'],...spectra.filter(s=>s.keep).map(s=>[s.name,...fields.map(k=>s.meta[k]),s.x.length,s.modified.length])];download('raman_metadata.csv',new Blob([rows.map(r=>r.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
+const csvVal=s=>'"'+String(s??'').replace(/"/g,'""')+'"';$('compile').onclick=()=>{let data={format:'raman-studio-v1',workflow:'compiled',saved:new Date().toISOString(),spectra:spectra.filter(s=>s.keep).map(({id,...s})=>({...s,reviewed:s.reviewed===true,approved:s.approved===true}))};download('raman_compiled.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};$('metadataCsv').onclick=()=>{let rows=[['filename',...fields,'points','cosmic_corrected_points'],...spectra.filter(s=>s.keep).map(s=>[s.name,...fields.map(k=>s.meta[k]),s.x.length,s.modified.length])];download('raman_metadata.csv',new Blob([rows.map(r=>r.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 $('opencompiled').onchange=async e=>{
  const file=e.target.files?.[0];
  if(!file)return;

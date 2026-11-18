@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Raman Analysis</title>
+<title>Raman Processing Studio</title>
 <link rel="stylesheet" href="./styles.css?v=20261117-raman-menu">
 <style>
 :root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#233247;background:#f5f7fb}
@@ -19,7 +19,7 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 .plotbox{min-height:650px;border:1px solid #e1e8f0;border-radius:10px;background:#fff;overflow:hidden}.plotbox svg{display:block;width:100%;height:auto}
 .spectrum-list{max-height:300px;overflow:auto;border:1px solid #e7edf4;border-radius:9px}.spectrum-item{padding:8px 9px;border-bottom:1px solid #edf1f6;font-size:12px;cursor:pointer}.spectrum-item:last-child{border-bottom:0}.spectrum-item.active{background:#edf4ff;color:#174eaf;font-weight:600}
 .seed-list{display:flex;gap:6px;flex-wrap:wrap}.seed{display:inline-flex;align-items:center;gap:5px;border:1px solid #cad4e1;border-radius:999px;padding:4px 7px;font-size:12px;background:#fff}.seed button{border:0;padding:0 2px;background:transparent;color:#8a3b45}
-.fit-summary{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#53677e}.ratio-cell{text-align:center}.ratio-cell input{margin:0}.scroll{overflow:auto;max-height:350px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:7px;border-bottom:1px solid #e8edf4;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#f4f7fc;font-size:11px;text-transform:uppercase;color:#52677e}.fit-chip{display:inline-block;padding:3px 7px;border-radius:999px;background:#eef3f8;font-size:11px;color:#516579;margin:2px 2px 0 0}
+.fit-summary{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#53677e}.approved-preview{min-height:300px}.ratio-cell{text-align:center}.ratio-cell input{margin:0}.scroll{overflow:auto;max-height:350px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:7px;border-bottom:1px solid #e8edf4;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#f4f7fc;font-size:11px;text-transform:uppercase;color:#52677e}.fit-chip{display:inline-block;padding:3px 7px;border-radius:999px;background:#eef3f8;font-size:11px;color:#516579;margin:2px 2px 0 0}
 @media(max-width:980px){.analysis-layout{grid-template-columns:1fr}.shell{padding:12px}.plotbox{min-height:520px}}
 </style>
 </head>
@@ -36,25 +36,32 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
           <summary class="active">Raman</summary>
           <div class="nav-dropdown">
           <a href="./raman-compiler.html">Compiler</a>
+          <a href="./raman-analysis.html" class="active" aria-current="page">Processing Studio</a>
           <a href="./raman.html">Comparative Plotter</a>
-          <a href="./raman-analysis.html" class="active" aria-current="page">Analysis</a>
           <a href="./raman-ratios.html">Peak Ratios</a>
           </div>
         </details>
     </div>
   </div>
 </nav>
-<header class="hero"><div><p class="eyebrow">Data Processing Tools</p><h1>Raman Analysis</h1></div></header>
+<header class="hero"><div><p class="eyebrow">Data Processing Tools</p><h1>Raman Processing Studio</h1></div></header>
 
 <div class="shell"><div class="analysis-layout">
 <aside>
 <div class="panel stack">
-<h2>Load spectrum</h2>
+<h2>Load dataset</h2>
 <div class="toolbar"><label class="filebtn">＋ Add WDF / TXT / CSV<input id="upload" type="file" multiple accept=".wdf,.txt,.csv"></label><label class="filebtn">↥ Open compiled dataset<input id="openCompiled" type="file" accept=".json"></label></div>
 <div id="loadStatus" class="status">No spectra loaded.</div>
 <div class="field"><label>Search spectra</label><input id="search" placeholder="Filename, compound, phase…"></div>
 <div id="spectrumList" class="spectrum-list"></div>
 <div id="metaSummary" class="hint"></div>
+<div class="toolbar" style="margin-top:10px">
+<label class="checkrow"><input id="reviewed" type="checkbox"> Reviewed</label>
+<label class="checkrow"><input id="approved" type="checkbox"> Approved</label>
+<button id="nextUnreviewed" type="button">Next unreviewed</button>
+<button id="saveProcessed" type="button" class="primary">Save processed dataset</button>
+</div>
+<div id="reviewStatus" class="hint"></div>
 </div>
 
 <div class="panel"><h2>Processing</h2><div class="stack">
@@ -96,10 +103,14 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 <div class="scroll"><table><thead><tr><th>#</th><th>Selected cm⁻¹</th><th>Fitted cm⁻¹</th><th>Height</th><th>FWHM cm⁻¹</th><th>η</th><th>Area</th><th>N</th><th>D</th></tr></thead><tbody id="fitTable"></tbody></table></div>
 <div id="ratioSummary" class="status" style="margin-top:12px">Select numerator (N) and denominator (D) peaks.</div>
 </div>
+<div class="panel">
+<h2>Approved comparison preview</h2>
+<div id="approvedPlot" class="plotbox approved-preview"></div>
+</div>
 </main>
 </div></div>
 
-<script src="./raman-analysis.js?v=20261117b"></script>
+<script src="./raman-analysis.js?v=20261118-studio"></script>
 <footer>Data Processing Tools · Timothy Leong</footer>
 </body>
 </html>

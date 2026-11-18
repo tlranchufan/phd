@@ -14,8 +14,8 @@
           <summary class="active">Raman</summary>
           <div class="nav-dropdown">
           <a href="./raman-compiler.html">Compiler</a>
+          <a href="./raman-analysis.html">Processing Studio</a>
           <a href="./raman.html" class="active" aria-current="page">Comparative Plotter</a>
-          <a href="./raman-analysis.html">Analysis</a>
           <a href="./raman-ratios.html">Peak Ratios</a>
           </div>
         </details>
@@ -23,15 +23,15 @@
   </div>
 </nav><header class="hero"><div><p class="eyebrow">Data Processing Tools</p><h1>Raman Comparative Plotter</h1></div></header><div class="shell"><div class="raman-local-header"><span class="pill" id="counter">0 spectra in session</span></div>
 <section class="section" id="compiler" style="display:none"><div class="panel"><h2>Import & compile</h2><div class="toolbar"><label class="filebtn">＋ Add WDF / TXT / CSV <input id="upload" type="file" multiple accept=".wdf,.txt,.csv"></label><label class="filebtn">↥ Open compiled dataset<input id="opencompiled" type="file" accept=".json,.gz"></label><button id="compile" class="primary">Save compiled dataset (.json)</button><button id="metadataCsv">Export metadata CSV</button><button id="clear" class="danger right">Clear session</button></div><div id="importStatus" class="status">No spectra imported.</div></div><div class="panel"><div class="toolbar" style="justify-content:space-between"><h2 style="margin:0">Review metadata</h2></div><div id="duplicateSummary" class="status" style="margin-top:8px"></div><div class="scroll" style="margin-top:12px"><table id="metaTable"><thead><tr><th>Keep</th><th>Original filename</th><th>Compound</th><th>Host Mineral</th><th>mol/kg</th><th>Sample</th><th>Phase</th><th>Phase ID</th><th>Temp °C</th><th>Condition</th><th>Objective</th><th>Power mW</th><th>Seconds</th><th>Accum.</th><th>Points</th><th>Spike pts</th><th>Action</th></tr></thead><tbody id="metabody"></tbody></table></div></div></section>
-<section class="section active" id="plotter"><div class="panel"><div class="toolbar"><button id="openCompiledPlotterButton" class="primary" type="button">↥ Open compiled dataset</button><span id="plotterLoadStatus" class="status">No compiled dataset loaded.</span></div></div><div class="layout"><div><div class="panel stack"><h2>Find spectra</h2><div class="field"><label>Compound</label><select id="fCompound"></select></div><div class="grid2"><div class="field"><label>Phase</label><select id="fPhase"></select></div><div class="field"><label>mol/kg</label><select id="fMol"></select></div><div class="field"><label>Temperature °C</label><select id="fTemp"></select></div><div class="field"><label>Condition</label><select id="fCondition"></select></div></div><div id="matches" class="spectraList"></div></div><div class="panel stack"><h2>Selected & stacking order</h2><div id="selectedList" class="spectraList"></div><button id="removeAll">Remove all from plot</button></div></div><div><div class="panel"><div class="toolbar"><h2 style="margin:0">Comparative spectrum plot</h2><button class="right" id="saveSvg">Export SVG</button><button id="savePng">Export PNG</button><button id="savePlotCsv">Export plotted CSV</button></div><div class="plotbox" id="plot" style="margin-top:15px"></div></div><div class="panel"><h2>Plot settings</h2>
+<section class="section active" id="plotter"><div class="panel"><div class="toolbar"><button id="openCompiledPlotterButton" class="primary" type="button">↥ Open compiled dataset</button><span id="plotterLoadStatus" class="status">No compiled dataset loaded.</span></div></div><div class="layout"><div><div class="panel stack"><h2>Find spectra</h2><div class="field"><label>Compound</label><select id="fCompound"></select></div><div class="grid2"><div class="field"><label>Phase</label><select id="fPhase"></select></div><div class="field"><label>mol/kg</label><select id="fMol"></select></div><div class="field"><label>Temperature °C</label><select id="fTemp"></select></div><div class="field"><label>Condition</label><select id="fCondition"></select></div></div><label class="checkrow"><input id="approvedOnly" type="checkbox" checked> Approved only</label><div id="approvalFilterStatus" class="hint"></div><div id="matches" class="spectraList"></div></div><div class="panel stack"><h2>Selected & stacking order</h2><div id="selectedList" class="spectraList"></div><button id="removeAll">Remove all from plot</button></div></div><div><div class="panel"><div class="toolbar"><h2 style="margin:0">Comparative spectrum plot</h2><button class="right" id="saveSvg">Export SVG</button><button id="savePng">Export PNG</button><button id="savePlotCsv">Export plotted CSV</button></div><div class="plotbox" id="plot" style="margin-top:15px"></div></div><div class="panel"><h2>Plot settings</h2>
 <details open><summary>Intensity &amp; stacking</summary><div class="grid3">
 <div class="field"><label>Intensity</label><select id="intensity"><option value="normalised">Normalised (0–1)</option><option value="raw">Raw counts</option></select></div>
 <div class="field"><label>Display mode</label><select id="displayMode"><option value="stacked" selected>Stacked spectra</option><option value="ridgeline">Ridgeline</option><option value="heatmap">Heatmap</option></select><small class="muted">Ridgeline uses normalised intensity; heatmap compares all selected spectra on a common Raman-shift grid.</small></div>
 <div class="field"><label>Offset</label><input id="offset" type="number" value="0.45" min="0" step="0.1"></div>
 <div class="field"><label for="yscale">Vertical zoom: <output id="yscaleValue">1.00×</output></label><input id="yscale" type="range" value="1" min="0.5" max="4" step="0.05"><small class="muted">Zooms the Y-axis without altering spectrum intensities</small></div>
-<div class="field"><label class="checkrow"><input id="baseline" type="checkbox"> Display-only linear endpoint baseline</label><small class="muted">Visual only; does not modify the working spectrum.</small></div><div class="field"><label class="checkrow"><input id="dragSpectra" type="checkbox" checked> Drag spectra to offset</label><small class="muted">Hold Shift while dragging for fine adjustment</small></div><div class="field"><button id="resetDragOffsets" type="button">Reset dragged offsets</button></div><div class="field"><button id="undoManualSpike" type="button" disabled>Undo last cosmic-ray correction</button><small class="muted">Shift + right-click a plotted spike to interpolate it; right-click a trace to add/remove a wavenumber arrow</small></div>
+<div class="field" style="display:none"><label class="checkrow"><input id="baseline" type="checkbox"> Display-only linear endpoint baseline</label></div><div class="field"><label class="checkrow"><input id="dragSpectra" type="checkbox" checked> Drag spectra to offset</label><small class="muted">Hold Shift while dragging for fine adjustment</small></div><div class="field"><button id="resetDragOffsets" type="button">Reset dragged offsets</button></div><div class="field" style="display:none"><button id="undoManualSpike" type="button" disabled>Undo last cosmic-ray correction</button></div>
 </div></details>
-<details><summary>Processing preview</summary>
+<details style="display:none"><summary>Processing preview</summary>
 <div class="grid3">
 <label class="checkrow"><input id="procDespike" type="checkbox" checked> Auto-despike (single + multi-point)</label>
 <div class="field"><label>Savitzky–Golay smoothing</label><select id="procSmooth"><option value="0" selected>None</option><option value="5">5-point</option><option value="7">7-point</option><option value="9">9-point</option></select></div>
@@ -43,7 +43,7 @@
 <div class="analysis-actions"><button id="previewProcessing" type="button">Preview selected</button><button id="applyProcessing" type="button" disabled>Apply preview</button><button id="discardProcessing" type="button" disabled>Discard preview</button><button id="resetWorking" type="button">Reset selected to raw</button><span id="processingStatus" class="analysis-status"></span></div>
 <div class="analysis-note"><span class="preview-key">When preview is active, the current working spectrum is shown faintly behind the proposed processed spectrum.</span> Raw arrays are never overwritten. Apply operates on all selected spectra as a batch.</div>
 </details>
-<details><summary>Peak analysis</summary>
+<details style="display:none"><summary>Peak analysis</summary>
 <div class="grid3">
 <div class="field"><label>Search preset</label><select id="peakPreset"><option value="custom" selected>Custom</option><option value="phosphate">Phosphate · 850–1100 cm⁻¹</option><option value="sulfate">Sulfate · 900–1250 cm⁻¹</option><option value="carbonate">Carbonate · 950–1150 cm⁻¹</option><option value="oh">OH · 2800–3800 cm⁻¹</option></select></div>
 <div class="field"><label>Search minimum (cm⁻¹)</label><input id="peakMin" type="number" step="any" placeholder="Visible minimum"></div>
@@ -297,26 +297,36 @@ $('opencompiled').onchange=async e=>{
   uid+=imported.length;
   spectra.push(...imported);
   renderMeta();
-  show('Loaded '+imported.length+' spectra from '+file.name+' ('+spectra.length+' total).');
+  show('Loaded '+imported.length+' spectra from '+file.name+' ('+spectra.length+' total).'+(data.workflow==='processed'?' Processed dataset.':''));
  }catch(err){
   show('Import failed: '+err.message);
   console.error('Raman dataset import failed',err);
  }finally{e.target.value='';}
 };
 const RAMAN_FILTERS=[['fCompound','compound'],['fPhase','phase'],['fMol','mol'],['fTemp','temp'],['fCondition','condition']];
+function approvalStateAvailable(){return spectra.some(s=>typeof s.approved==='boolean');}
+function approvalEligible(s){return !$('approvedOnly').checked||!approvalStateAvailable()||s.approved===true;}
+function updateApprovalFilterStatus(){
+ if(!$('approvalFilterStatus'))return;
+ if(!spectra.length){$('approvalFilterStatus').textContent='';return;}
+ if(!approvalStateAvailable()){$('approvalFilterStatus').textContent=$('approvedOnly').checked?'Legacy dataset · approval state unavailable, showing all spectra.':'';return;}
+ const approved=spectra.filter(s=>s.approved===true).length;
+ $('approvalFilterStatus').textContent=$('approvedOnly').checked?(approved+' approved of '+spectra.length+' spectra'):'Showing approved and unapproved spectra';
+}
 function updateRamanFilters(){
   // Each dropdown offers only values possible under the other active filters.
   // Iterate until selections are valid, so changing Compound also updates Temperature.
   for(let pass=0;pass<2;pass++){
     for(const [id,key] of RAMAN_FILTERS){
       const old=$(id).value;
-      const matches=spectra.filter(s=>s.keep&&RAMAN_FILTERS.every(([otherId,otherKey])=>otherId===id||!$(otherId).value||String(s.meta[otherKey]??'')===$(otherId).value));
+      const matches=spectra.filter(s=>s.keep&&approvalEligible(s)&&RAMAN_FILTERS.every(([otherId,otherKey])=>otherId===id||!$(otherId).value||String(s.meta[otherKey]??'')===$(otherId).value));
       const values=[...new Set(matches.map(s=>String(s.meta[key]??'')).filter(Boolean))]
         .sort((a,b)=>key==='mol'||key==='temp'?Number(a)-Number(b):a.localeCompare(b));
       $(id).replaceChildren(new Option('All',''),...values.map(v=>new Option(v,v)));
       $(id).value=values.includes(old)?old:'';
     }
   }
+  updateApprovalFilterStatus();
   renderMatches();
 }
 function renderFilters(){updateRamanFilters();renderSelected();}
@@ -362,7 +372,7 @@ function plotLabel(s){const m=s.meta;return [
  $('label_temp').checked&&m.temp&&m.temp+'°C',
  $('label_condition').checked&&m.condition&&m.condition!=='No comment'&&m.condition
 ].filter(Boolean).join(' · ');}
-function renderMatches(){let filters=[['fCompound','compound'],['fPhase','phase'],['fMol','mol'],['fTemp','temp'],['fCondition','condition']];let a=spectra.filter(s=>s.keep&&filters.every(([id,key])=>!$(id).value||s.meta[key]===$(id).value));$('matches').innerHTML=a.length?a.map(s=>'<div class="item"><button data-add="'+s.id+'" '+(selected.includes(s.id)?'disabled':'')+'>＋</button><span class="name" title="'+esc(s.name)+'">'+esc(label(s))+'<br><small>'+esc(s.name)+'</small></span></div>').join(''):'<p class="hint">No spectra match these filters.</p>';}
+function renderMatches(){let filters=[['fCompound','compound'],['fPhase','phase'],['fMol','mol'],['fTemp','temp'],['fCondition','condition']];let a=spectra.filter(s=>s.keep&&approvalEligible(s)&&filters.every(([id,key])=>!$(id).value||s.meta[key]===$(id).value));$('matches').innerHTML=a.length?a.map(s=>'<div class="item"><button data-add="'+s.id+'" '+(selected.includes(s.id)?'disabled':'')+'>＋</button><span class="name" title="'+esc(s.name)+'">'+esc(label(s))+'<br><small>'+esc(s.name)+'</small></span></div>').join(''):'<p class="hint">No spectra match these filters.</p>';}
 $('matches').onclick=e=>{let id=e.target.dataset.add;if(id){selected.push(Number(id));renderSelected();renderMatches();renderPlot();}};
 function renderSelected(){$('selectedList').innerHTML=selected.length?selected.map((id,i)=>{let s=spectra.find(v=>v.id===id);return s?'<div class="item"><span class="swatch" style="background:'+COLORS[i%COLORS.length]+'"></span><span class="name">'+esc(label(s))+'</span><button data-up="'+id+'" '+(!i?'disabled':'')+' title="Move up">↑</button><button data-down="'+id+'" '+(i===selected.length-1?'disabled':'')+' title="Move down">↓</button><button data-del="'+id+'" title="Remove">×</button></div>':'';}).join(''):'<p class="hint">Add spectra from the filtered list above.</p>';}
 $('selectedList').onclick=e=>{let id=Number(e.target.dataset.up||e.target.dataset.down||e.target.dataset.del);if(!id)return;let i=selected.indexOf(id);if(e.target.dataset.del){selected.splice(i,1);}else{let j=i+(e.target.dataset.up?-1:1);if(j>=0&&j<selected.length)[selected[i],selected[j]]=[selected[j],selected[i]];}renderSelected();renderMatches();renderPlot();};$('removeAll').onclick=()=>{selected=[];renderSelected();renderMatches();renderPlot();};
@@ -725,7 +735,7 @@ for(let id of ['intensity','displayMode','offset','xmin','xmax','axisfont','tick
  $('yscale').value='1';
  $('yPosition').value='0';
  renderPlot();
-});for(let id of ['fCompound','fPhase','fMol','fTemp','fCondition'])$(id).addEventListener('change',updateRamanFilters);
+});for(let id of ['fCompound','fPhase','fMol','fTemp','fCondition'])$(id).addEventListener('change',updateRamanFilters);$('approvedOnly').addEventListener('change',updateRamanFilters);
 $('saveSvg').onclick=()=>{if(lastSvg)download('raman_plot.svg',new Blob([lastSvg],{type:'image/svg+xml'}));};$('savePng').onclick=()=>{if(!lastSvg)return;let blob=new Blob([lastSvg],{type:'image/svg+xml;charset=utf-8'}),url=URL.createObjectURL(blob),im=new Image;im.onload=()=>{let c=document.createElement('canvas');c.width=2000;c.height=Math.round(2000*im.height/im.width);let ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(im,0,0,c.width,c.height);c.toBlob(b=>download('raman_plot.png',b),'image/png');URL.revokeObjectURL(url);};im.src=url;};
 $('savePlotCsv').onclick=()=>{let {series}=plotData(),rows=[['filename','raman_shift_cm-1','displayed_intensity','raw_intensity','corrected_intensity']];for(let s of series)for(let i of s.indices)rows.push([s.s.name,s.x[i],s.y[i],s.s.raw[i],s.s.corrected[i]]);download('raman_plot_data.csv',new Blob([rows.map(r=>r.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 

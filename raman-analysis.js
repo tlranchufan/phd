@@ -18,18 +18,47 @@ function readWdf(ab){
  let pos=512,X=null,Y=null;while(pos+16<=ab.byteLength){let tag=String.fromCharCode(...new Uint8Array(ab,pos,4)),size=Number(d.getBigUint64(pos+8,true)),start=pos+16;if(size<16||pos+size>ab.byteLength)throw Error('Invalid WDF block length');if(tag==='DATA')Y=Array.from({length:n},(_,i)=>d.getFloat32(start+i*4,true));if(tag==='XLST')X=Array.from({length:n},(_,i)=>d.getFloat32(start+8+i*4,true));pos+=size;}if(!X||!Y)throw Error('Missing WDF DATA or XLST block');return {x:X,y:Y};
 }
 function readTxt(text){let x=[],y=[];for(const line of text.split(/\r?\n/)){let tok=line.trim().replace(/[,;\t]+/g,' ').split(/\s+/);if(tok.length<2)continue;let a=Number(tok[0]),b=Number(tok[1]);if(Number.isFinite(a)&&Number.isFinite(b)){x.push(a);y.push(b);}}if(x.length<20)throw Error('Expected at least 20 numeric x/y rows');return {x,y};}
-function addSpectrum(name,raw,meta,working){
+function addSpectrum(name,raw,meta,working,extra={}){
  let sorted=raw.x.map((x,i)=>[x,raw.y[i]]).filter(v=>Number.isFinite(v[0])&&Number.isFinite(v[1])).sort((a,b)=>a[0]-b[0]);if(sorted.length<20)throw Error('Too few valid spectral points');
  let x=sorted.map(v=>v[0]),y=sorted.map(v=>v[1]),w=working&&working.length===y.length?working.slice():y.slice();
- spectra.push({id:++uid,name,meta:meta||metadata(name),x,raw:y,working:w});if(currentId===null)currentId=uid;
+ spectra.push({id:++uid,name,meta:meta||metadata(name),x,raw:y,working:w,modified:Array.isArray(extra.modified)?extra.modified.slice():[],reviewed:extra.reviewed===true,approved:extra.approved===true,processing:extra.processing||null,fit:extra.fit||null});if(currentId===null)currentId=uid;
 }
 function current(){return spectra.find(s=>s.id===currentId)||null;}
 function renderList(){
  let q=$('search').value.trim().toLowerCase(),shown=spectra.filter(s=>!q||[s.name,...Object.values(s.meta||{})].join(' ').toLowerCase().includes(q));
- $('spectrumList').innerHTML=shown.length?shown.map(s=>'<div class="spectrum-item '+(s.id===currentId?'active':'')+'" data-spectrum="'+s.id+'">'+esc(s.name)+'</div>').join(''):'<div class="hint" style="padding:10px">No spectra match.</div>';
+ $('spectrumList').innerHTML=shown.length?shown.map(s=>'<div class="spectrum-item '+(s.id===currentId?'active':'')+'" data-spectrum="'+s.id+'">'+esc(s.name)+(s.approved?' <span class="fit-chip">Approved</span>':s.reviewed?' <span class="fit-chip">Reviewed</span>':'')+'</div>').join(''):'<div class="hint" style="padding:10px">No spectra match.</div>';
  let s=current();$('metaSummary').innerHTML=s?['compound','hostMineral','mol','phase','phaseId','temp','condition'].map(k=>s.meta?.[k]?'<span class="fit-chip">'+esc(k)+': '+esc(s.meta[k])+'</span>':'').join(' '):'';
+ renderReviewUi();
 }
-function chooseSpectrum(id){currentId=Number(id);preview=null;fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();pickMode=false;$('pickPeaks').classList.remove('primary');$('pickPeaks').textContent='Pick centres on plot';renderList();syncRanges();renderSeeds();renderFit();renderPlot();refreshProcessingPreview();}
+function renderReviewUi(){
+ let s=current(),reviewed=spectra.filter(v=>v.reviewed).length,approved=spectra.filter(v=>v.approved).length;
+ if($('reviewed'))$('reviewed').checked=!!s?.reviewed;
+ if($('approved'))$('approved').checked=!!s?.approved;
+ if($('reviewStatus'))$('reviewStatus').textContent=spectra.length?(reviewed+' / '+spectra.length+' reviewed · '+approved+' approved'):'';
+}
+function invalidateReview(s){
+ if(!s)return;s.reviewed=false;s.approved=false;s.fit=null;renderReviewUi();renderList();renderApprovedPreview();
+}
+function restoreStoredFit(s){
+ fitResult=s?.fit?JSON.parse(JSON.stringify(s.fit)):null;seeds=fitResult?.seedXs?.slice()||[];ratioNumerator.clear();ratioDenominator.clear();
+ for(const i of fitResult?.ratio?.numerator||[])ratioNumerator.add(i);
+ for(const i of fitResult?.ratio?.denominator||[])ratioDenominator.add(i);
+}
+function storeCurrentFit(){
+ let s=current();if(!s||!fitResult)return;
+ s.fit=JSON.parse(JSON.stringify(fitResult));
+ s.fit.ratio={numerator:[...ratioNumerator],denominator:[...ratioDenominator]};
+}
+function renderApprovedPreview(){
+ let host=$('approvedPlot');if(!host)return;let ss=spectra.filter(s=>s.approved);
+ if(!ss.length){host.innerHTML='<div style="padding:55px;text-align:center;color:#7b8da3">No approved spectra yet</div>';return;}
+ let xmin=Math.max(...ss.map(s=>s.x[0])),xmax=Math.min(...ss.map(s=>s.x.at(-1)));if(!(xmax>xmin)){host.innerHTML='<div style="padding:55px;text-align:center;color:#7b8da3">Approved spectra do not share an overlapping Raman-shift range</div>';return;}
+ let w=1180,left=92,right=1090,top=35,row=44,h=Math.max(300,top+ss.length*row+65),XX=x=>left+(x-xmin)/(xmax-xmin)*(right-left),out=['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="background:white"><rect width="100%" height="100%" fill="white"/>'];
+ for(let x=Math.ceil(xmin/500)*500;x<=xmax;x+=500){let xx=XX(x);out.push('<line x1="'+xx+'" y1="'+top+'" x2="'+xx+'" y2="'+(h-55)+'" stroke="#edf1f5"/><text x="'+xx+'" y="'+(h-28)+'" text-anchor="middle" font-size="11" fill="#53667d">'+x+'</text>');}
+ ss.forEach((s,ri)=>{let ids=s.x.map((x,i)=>i).filter(i=>x>=xmin&&x<=xmax),vals=ids.map(i=>s.working[i]),lo=Math.min(...vals),hi=Math.max(...vals),span=hi-lo||1,base=top+ri*row+28,path=ids.map((i,j)=>(j?'L':'M')+XX(s.x[i]).toFixed(2)+' '+(base-(s.working[i]-lo)/span*28).toFixed(2)).join(' ');out.push('<path d="'+path+'" stroke="'+COLORS[ri%COLORS.length]+'" stroke-width="1.25" fill="none"/><text x="'+(left-10)+'" y="'+(base-8)+'" text-anchor="end" font-size="11" fill="#43546b">'+esc(s.name)+'</text>');});
+ out.push('<text x="'+((left+right)/2)+'" y="'+(h-8)+'" text-anchor="middle" font-size="14">Raman shift (cm⁻¹)</text></svg>');host.innerHTML=out.join('');
+}
+function chooseSpectrum(id){currentId=Number(id);preview=null;restoreStoredFit(current());pickMode=false;$('pickPeaks').classList.remove('primary');$('pickPeaks').textContent='Pick centres on plot';renderList();syncRanges();renderSeeds();renderFit();renderPlot();renderApprovedPreview();refreshProcessingPreview();}
 $('spectrumList').onclick=e=>{let id=e.target.closest('[data-spectrum]')?.dataset.spectrum;if(id)chooseSpectrum(id);};
 $('search').oninput=renderList;
 
@@ -38,7 +67,7 @@ $('upload').onchange=async e=>{
  $('loadStatus').textContent=good+' imported'+(errors.length?' · '+errors.length+' failed':'')+'.';e.target.value='';renderList();syncRanges();renderPlot();refreshProcessingPreview();
 };
 $('openCompiled').onchange=async e=>{
- const f=e.target.files?.[0];if(!f)return;try{let data=JSON.parse(await f.text());if(data.format!=='raman-studio-v1'||!Array.isArray(data.spectra))throw Error('Unsupported compiled Raman dataset');let count=0;for(const a of data.spectra){if(!Array.isArray(a.x)||!Array.isArray(a.raw))continue;addSpectrum(a.name||('Spectrum '+(count+1)),{x:a.x,y:a.raw},a.meta||metadata(a.name||''),Array.isArray(a.corrected)?a.corrected:null);count++;}$('loadStatus').textContent='Loaded '+count+' spectra from '+f.name+'.';renderList();syncRanges();renderPlot();refreshProcessingPreview();}catch(err){$('loadStatus').textContent='Import failed: '+err.message;}finally{e.target.value='';}
+ const f=e.target.files?.[0];if(!f)return;try{let data=JSON.parse(await f.text());if(data.format!=='raman-studio-v1'||!Array.isArray(data.spectra))throw Error('Unsupported compiled Raman dataset');let count=0;for(const a of data.spectra){if(!Array.isArray(a.x)||!Array.isArray(a.raw))continue;addSpectrum(a.name||('Spectrum '+(count+1)),{x:a.x,y:a.raw},a.meta||metadata(a.name||''),Array.isArray(a.corrected)?a.corrected:null,a);count++;}$('loadStatus').textContent='Loaded '+count+' spectra from '+f.name+'.';renderList();syncRanges();renderPlot();refreshProcessingPreview();}catch(err){$('loadStatus').textContent='Import failed: '+err.message;}finally{e.target.value='';}
 };
 
 function cosmic(y,x){
@@ -94,9 +123,9 @@ $('baselineMethod').onchange=()=>{updateBaselineUi();refreshProcessingPreview();
 for(const id of ['despike','smooth','lambda','asymmetry','iterations'])$(id).addEventListener('input',refreshProcessingPreview);
 updateBaselineUi();
 $('previewProcessing').onclick=refreshProcessingPreview;
-$('applyProcessing').onclick=()=>{let s=current();if(!s||!preview)return;s.working=preview.y.slice();preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='Applied to working spectrum. Raw data retained.';fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();};
+$('applyProcessing').onclick=()=>{let s=current();if(!s||!preview)return;s.working=preview.y.slice();s.modified=preview.spikes.slice();s.processing={despike:$('despike').checked,smoothing:Number($('smooth').value)||0,baseline:preview.method,lambda:Number($('lambda').value)||1e6,p:Number($('asymmetry').value)||.001,iterations:Number($('iterations').value)||12,appliedAt:new Date().toISOString()};preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='Applied to working spectrum. Raw data retained.';fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
 $('discardProcessing').onclick=()=>{preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='Preview discarded.';renderPlot();};
-$('resetRaw').onclick=()=>{let s=current();if(!s)return;s.working=s.raw.slice();preview=null;fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();renderSeeds();renderFit();renderPlot();};
+$('resetRaw').onclick=()=>{let s=current();if(!s)return;s.working=s.raw.slice();s.modified=[];s.processing=null;preview=null;fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
 function activeY(){let s=current();return s?(preview?.y||s.working):[];}
 
 function syncRanges(){let s=current();if(!s)return;if($('fitMin').value==='')$('fitMin').value=Math.round(s.x[0]);if($('fitMax').value==='')$('fitMax').value=Math.round(s.x.at(-1));}
@@ -133,7 +162,7 @@ function fitNonlinear(xs,ys,seedXs,profile,maxIterations,initialWidth){
  for(let iter=0;iter<maxIterations;iter++){iterations=iter+1;let m=params.length,n=xs.length,J=Array.from({length:n},()=>new Array(m)),res=ys.map((v,i)=>v-fit[i]);for(let j=0;j<m;j++){let step=Math.max(1e-6,Math.abs(params[j])*1e-5),p2=params.slice();p2[j]+=step;p2=clamp(p2,count,profile,xmin,xmax,yr);let f2=model(xs,p2,count,profile),actual=p2[j]-params[j]||step;for(let i=0;i<n;i++)J[i][j]=(f2[i]-fit[i])/actual;}let A=Array.from({length:m},()=>new Array(m).fill(0)),g=new Array(m).fill(0);for(let i=0;i<n;i++)for(let a=0;a<m;a++){g[a]+=J[i][a]*res[i];for(let b=0;b<=a;b++)A[a][b]+=J[i][a]*J[i][b];}for(let a=0;a<m;a++){for(let b=0;b<a;b++)A[b][a]=A[a][b];A[a][a]+=damping*(A[a][a]+1e-9);}let delta=solveLinear(A,g);if(!delta){damping*=10;continue;}let cand=clamp(params.map((v,i)=>v+delta[i]),count,profile,xmin,xmax,yr),fit2=model(xs,cand,count,profile),sse2=ys.reduce((s,v,i)=>s+Math.pow(v-fit2[i],2),0);if(sse2<sse){let rel=(sse-sse2)/Math.max(sse,1e-18);params=cand;fit=fit2;sse=sse2;damping=Math.max(1e-9,damping/3);if(rel<1e-9)break;}else damping=Math.min(1e12,damping*5);}
  let mean=ys.reduce((a,b)=>a+b,0)/ys.length,sst=ys.reduce((s,v)=>s+Math.pow(v-mean,2),0),u=unpack(params,count,profile);return {offset:u.offset,peaks:u.peaks,seedXs:seedXs.slice(),fit,residual:ys.map((v,i)=>v-fit[i]),sse,rmse:Math.sqrt(sse/ys.length),r2:sst>0?1-sse/sst:1,iterations,profile,xs};
 }
-$('fitPeaks').onclick=()=>{let s=current();if(!s){$('fitStatus').textContent='Load a spectrum first.';return;}if($('autoPeaks').checked)autoSelectPeaks();if(!seeds.length){$('fitStatus').textContent='No peaks selected. Adjust auto settings or use manual selection.';return;}let lo=Number($('fitMin').value),hi=Number($('fitMax').value);if(!Number.isFinite(lo)||!Number.isFinite(hi)||lo===hi)return;if(hi<lo)[lo,hi]=[hi,lo];let y=activeY(),idx=s.x.map((x,i)=>[x,i]).filter(v=>v[0]>=lo&&v[0]<=hi),valid=seeds.filter(v=>v>=lo&&v<=hi);if(idx.length<20||!valid.length){$('fitStatus').textContent='Fit range/centres are invalid.';return;}fitResult=fitNonlinear(idx.map(v=>v[0]),idx.map(v=>y[v[1]]),valid,$('profile').value,Math.max(10,Math.min(300,Number($('fitIterations').value)||120)),Math.max(.2,Number($('initialWidth').value)||12));ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();};
+$('fitPeaks').onclick=()=>{let s=current();if(!s){$('fitStatus').textContent='Load a spectrum first.';return;}if($('autoPeaks').checked)autoSelectPeaks();if(!seeds.length){$('fitStatus').textContent='No peaks selected. Adjust auto settings or use manual selection.';return;}let lo=Number($('fitMin').value),hi=Number($('fitMax').value);if(!Number.isFinite(lo)||!Number.isFinite(hi)||lo===hi)return;if(hi<lo)[lo,hi]=[hi,lo];let y=activeY(),idx=s.x.map((x,i)=>[x,i]).filter(v=>v[0]>=lo&&v[0]<=hi),valid=seeds.filter(v=>v>=lo&&v<=hi);if(idx.length<20||!valid.length){$('fitStatus').textContent='Fit range/centres are invalid.';return;}fitResult=fitNonlinear(idx.map(v=>v[0]),idx.map(v=>y[v[1]]),valid,$('profile').value,Math.max(10,Math.min(300,Number($('fitIterations').value)||120)),Math.max(.2,Number($('initialWidth').value)||12));ratioNumerator.clear();ratioDenominator.clear();let fitted=current();if(fitted){fitted.reviewed=false;fitted.approved=false;storeCurrentFit();}renderReviewUi();renderList();renderApprovedPreview();renderFit();renderPlot();};
 function renderRatio(){
  let r=fitResult;if(!r){$('ratioSummary').textContent='Select numerator (N) and denominator (D) peaks.';return;}
  let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((s,i)=>s+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((s,i)=>s+peakArea(r.peaks[i],r.profile),0);
@@ -147,10 +176,14 @@ function renderFit(){
  $('fitTable').innerHTML=r.peaks.map((p,i)=>'<tr><td>'+(i+1)+'</td><td>'+(r.seedXs?.[i]??p.c).toFixed(3)+'</td><td>'+p.c.toFixed(3)+'</td><td>'+p.h.toPrecision(6)+'</td><td>'+p.w.toFixed(3)+'</td><td>'+(r.profile==='pseudo'?p.eta.toFixed(3):r.profile==='lorentzian'?'1.000':'0.000')+'</td><td>'+peakArea(p,r.profile).toPrecision(7)+'</td><td class="ratio-cell"><input type="checkbox" data-ratio="n" data-peak="'+i+'" '+(ratioNumerator.has(i)?'checked':'')+'></td><td class="ratio-cell"><input type="checkbox" data-ratio="d" data-peak="'+i+'" '+(ratioDenominator.has(i)?'checked':'')+'></td></tr>').join('');
  renderRatio();
 }
-$('fitTable').onchange=e=>{let kind=e.target.dataset.ratio,i=Number(e.target.dataset.peak);if(!kind||!Number.isInteger(i))return;let target=kind==='n'?ratioNumerator:ratioDenominator,other=kind==='n'?ratioDenominator:ratioNumerator;if(e.target.checked){target.add(i);other.delete(i);}else target.delete(i);renderFit();};
+$('fitTable').onchange=e=>{let kind=e.target.dataset.ratio,i=Number(e.target.dataset.peak);if(!kind||!Number.isInteger(i))return;let target=kind==='n'?ratioNumerator:ratioDenominator,other=kind==='n'?ratioDenominator:ratioNumerator;if(e.target.checked){target.add(i);other.delete(i);}else target.delete(i);storeCurrentFit();renderFit();};
 $('profile').onchange=()=>{fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();};
 
 function download(name,blob){let u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200);}
+$('reviewed').onchange=()=>{let s=current();if(!s)return;s.reviewed=$('reviewed').checked;if(!s.reviewed)s.approved=false;renderList();renderReviewUi();renderApprovedPreview();};
+$('approved').onchange=()=>{let s=current();if(!s)return;s.approved=$('approved').checked;if(s.approved)s.reviewed=true;renderList();renderReviewUi();renderApprovedPreview();};
+$('nextUnreviewed').onclick=()=>{if(!spectra.length)return;let start=Math.max(0,spectra.findIndex(s=>s.id===currentId));for(let n=1;n<=spectra.length;n++){let s=spectra[(start+n)%spectra.length];if(!s.reviewed){chooseSpectrum(s.id);return;}}$('reviewStatus').textContent='All spectra are reviewed.';};
+$('saveProcessed').onclick=()=>{let data={format:'raman-studio-v1',workflow:'processed',saved:new Date().toISOString(),spectra:spectra.map(s=>({name:s.name,meta:s.meta,x:s.x,raw:s.raw,corrected:s.working,modified:s.modified||[],keep:true,reviewed:!!s.reviewed,approved:!!s.approved,processing:s.processing||null,fit:s.fit||null}))};download('raman_processed.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};
 $('exportAnalysisCsv').onclick=()=>{let s=current(),r=fitResult;if(!s||!r)return;let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),ratio=num.length&&den.length&&denArea!==0?numArea/denArea:'',rows=[['filename','compound','host_mineral','mol_kg','phase','temperature_C','baseline_mode','fit_profile','peak','selected_cm-1','fitted_cm-1','height','fwhm_cm-1','eta','area','numerator_selected','denominator_selected','numerator_area_sum','denominator_area_sum','area_ratio','r2','rmse']];r.peaks.forEach((p,i)=>rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.temp,$('baselineMethod').value,r.profile,i+1,r.seedXs?.[i]??p.c,p.c,p.h,p.w,r.profile==='pseudo'?p.eta:r.profile==='lorentzian'?1:0,peakArea(p,r.profile),ratioNumerator.has(i),ratioDenominator.has(i),numArea,denArea,ratio,r.r2,r.rmse]));download('raman_analysis.csv',new Blob([rows.map(row=>row.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 
 function renderPlot(){
@@ -180,4 +213,4 @@ $('autoRange').onclick=()=>{$('xMin').value='';$('xMax').value='';renderPlot();}
 $('exportSvg').onclick=()=>{if(lastSvg)download('raman_analysis.svg',new Blob([lastSvg],{type:'image/svg+xml'}));};
 $('exportPng').onclick=()=>{if(!lastSvg)return;let blob=new Blob([lastSvg],{type:'image/svg+xml;charset=utf-8'}),url=URL.createObjectURL(blob),im=new Image;im.onload=()=>{let c=document.createElement('canvas');c.width=2200;c.height=Math.round(2200*im.height/im.width);let ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(im,0,0,c.width,c.height);c.toBlob(b=>download('raman_analysis.png',b),'image/png');URL.revokeObjectURL(url);};im.src=url;};
 
-renderList();renderSeeds();renderFit();renderPlot();
+renderList();renderSeeds();renderFit();renderPlot();renderApprovedPreview();
