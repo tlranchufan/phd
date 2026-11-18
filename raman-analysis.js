@@ -130,7 +130,7 @@ function updateHostUi(){
   else if(!ready)$('hostPrepStatus').textContent='Matched '+chosen.name+', but it is not prepared yet. Open that host spectrum, baseline-correct it, then Apply.';
   else {let bands=hostPeakBands(chosen.x,chosen.working);$('hostPrepStatus').textContent='Prepared host: '+chosen.name+' · '+bands.length+' narrow band(s) detected across the full Raman range. Broad features (>110 cm⁻¹ FWHM) are protected.';}
  }
- if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Using locally scaled narrow host bands across the full spectrum; broad envelopes are preserved.':'';
+ if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Using conservative local host-band subtraction: quadratic local detrending, shape matching and anti-overshoot caps.':'';
 }
 function interpolateSeries(xs,ys,targetX){
  let out=new Array(targetX.length).fill(NaN),j=0;if(!xs?.length||xs.length!==ys?.length)return out;
@@ -167,21 +167,33 @@ function hostPeakBands(x,y){
  return kept.map(p=>({center:x[p.i],fwhm:p.fwhm,prominence:p.prom,halfWidth:Math.max(12,Math.min(90,p.fwhm*1.65+8))}));
 }
 function localDetrendedSignal(x,y,center,halfWidth){
- let idx=[];for(let i=0;i<x.length;i++)if(Math.abs(x[i]-center)<=halfWidth)idx.push(i);if(idx.length<8)return {idx,signal:idx.map(()=>0)};
- let edge=Math.max(2,Math.floor(idx.length*.18)),fitIdx=idx.slice(0,edge).concat(idx.slice(-edge)),sx=0,sy=0,sxx=0,sxy=0,n=fitIdx.length;
- for(const i of fitIdx){sx+=x[i];sy+=y[i];sxx+=x[i]*x[i];sxy+=x[i]*y[i];}
- let den=n*sxx-sx*sx,m=den?(n*sxy-sx*sy)/den:0,b=(sy-m*sx)/Math.max(n,1);
- return {idx,signal:idx.map(i=>y[i]-(m*x[i]+b))};
+ let idx=[];for(let i=0;i<x.length;i++)if(Math.abs(x[i]-center)<=halfWidth)idx.push(i);if(idx.length<8)return {idx,signal:idx.map(()=>0),baseline:idx.map(()=>0)};
+ let edge=Math.max(3,Math.floor(idx.length*.22)),fitIdx=idx.slice(0,edge).concat(idx.slice(-edge)),scale=Math.max(1e-9,halfWidth),A=[[0,0,0],[0,0,0],[0,0,0]],b=[0,0,0];
+ for(const i of fitIdx){let q=(x[i]-center)/scale,v=[1,q,q*q];for(let r=0;r<3;r++){b[r]+=v[r]*y[i];for(let k=0;k<3;k++)A[r][k]+=v[r]*v[k];}}
+ let coeff=solveLinear(A,b)||[medianArray(fitIdx.map(i=>y[i])),0,0],baseline=idx.map(i=>{let q=(x[i]-center)/scale;return coeff[0]+coeff[1]*q+coeff[2]*q*q;});
+ return {idx,baseline,signal:idx.map((i,j)=>y[i]-baseline[j])};
 }
 function subtractHostSignal(sampleY,s){
  let host=selectedHostReference();if(!$('subtractHost').checked||$('subtractHost').disabled||!host?.preparedHost)return {y:sampleY.slice(),host:null,scale:null,bands:[]};
  let template=interpolateSeries(host.x,host.working,s.x).map(v=>Number.isFinite(v)?v:0),bands=hostPeakBands(s.x,template),out=sampleY.slice(),mode=$('hostScaleMode').value,manual=Math.max(0,Number($('hostScale').value)||0),used=[];
  for(const band of bands){
   let hs=localDetrendedSignal(s.x,template,band.center,band.halfWidth),ss=localDetrendedSignal(s.x,sampleY,band.center,band.halfWidth);if(hs.idx.length<8||ss.idx.length!==hs.idx.length)continue;
-  let num=0,den=0;for(let j=0;j<hs.idx.length;j++){let hv=Math.max(0,hs.signal[j]);if(hv<=0)continue;num+=hv*ss.signal[j];den+=hv*hv;}
-  let scale=mode==='manual'?manual:(den>1e-12?Math.max(0,Math.min(5,num/den)):0);if(scale<=0)continue;
-  for(let j=0;j<hs.idx.length;j++){let i=hs.idx[j],hv=Math.max(0,hs.signal[j]),d=Math.abs(s.x[i]-band.center)/band.halfWidth,taper=.5*(1+Math.cos(Math.PI*Math.min(1,d)));out[i]-=scale*hv*taper;}
-  used.push({center:band.center,scale,halfWidth:band.halfWidth,fwhm:band.fwhm,prominence:band.prominence});
+  let num=0,den=0,ss2=0,hostPeak=0,samplePeak=0,centerJ=0,centerDist=Infinity;
+  for(let j=0;j<hs.idx.length;j++){
+   let hv=Math.max(0,hs.signal[j]),sv=ss.signal[j],dist=Math.abs(s.x[hs.idx[j]]-band.center);if(dist<centerDist){centerDist=dist;centerJ=j;}
+   hostPeak=Math.max(hostPeak,hv);samplePeak=Math.max(samplePeak,sv);
+   if(hv<=0)continue;num+=hv*sv;den+=hv*hv;ss2+=sv*sv;
+  }
+  if(hostPeak<=1e-12||den<=1e-12)continue;
+  let corr=ss2>1e-12?num/Math.sqrt(den*ss2):0,centerHost=Math.max(0,hs.signal[centerJ]),centerSample=Math.max(0,ss.signal[centerJ]);
+  if(mode==='auto'&&(corr<.58||centerHost<=1e-12||centerSample<=0))continue;
+  let rawScale=mode==='manual'?manual:Math.max(0,num/den),centerCap=centerHost>1e-12?.88*centerSample/centerHost:0,peakCap=.88*Math.max(0,samplePeak)/hostPeak,scale=mode==='manual'?manual:Math.min(rawScale,centerCap,peakCap,2.5);
+  if(scale<=0)continue;
+  for(let j=0;j<hs.idx.length;j++){
+   let i=hs.idx[j],hv=Math.max(0,hs.signal[j]),d=Math.abs(s.x[i]-band.center)/band.halfWidth,taper=.5*(1+Math.cos(Math.PI*Math.min(1,d))),requested=scale*hv*taper,localHeadroom=Math.max(0,ss.signal[j])*.92;
+   out[i]-=Math.min(requested,localHeadroom);
+  }
+  used.push({center:band.center,scale,correlation:corr,halfWidth:band.halfWidth,fwhm:band.fwhm,prominence:band.prominence});
  }
  let scale=used.length?medianArray(used.map(v=>v.scale)):0;if(mode==='auto')$('hostScale').value=scale.toFixed(3);
  return {y:out,host,scale,bands:used};
