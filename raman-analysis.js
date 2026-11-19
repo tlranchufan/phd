@@ -169,9 +169,13 @@ function plotPointerCoords(e){
  const rect=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;
  if(!rect.width||!rect.height)return null;
  const xx=(e.clientX-rect.left)*vb.width/rect.width,yy=(e.clientY-rect.top)*vb.height/rect.height;
- if(xx<g.left||xx>g.right||yy<g.top||yy>g.bottom)return null;
- return {x:g.xmin+(xx-g.left)/(g.right-g.left)*(g.xmax-g.xmin),
-  y:g.ymax-(yy-g.top)/(g.bottom-g.top)*(g.ymax-g.ymin)};
+ // Accept a small margin beyond the axes, then clamp to exact chart boundaries.
+ // This makes end anchors draggable without creating off-spectrum positions.
+ const margin=18;
+ if(xx<g.left-margin||xx>g.right+margin||yy<g.top-margin||yy>g.bottom+margin)return null;
+ const px=Math.max(g.left,Math.min(g.right,xx)),py=Math.max(g.top,Math.min(g.bottom,yy));
+ return {x:g.xmin+(px-g.left)/(g.right-g.left)*(g.xmax-g.xmin),
+  y:g.ymax-(py-g.top)/(g.bottom-g.top)*(g.ymax-g.ymin)};
 }
 $('editBaseline').onclick=()=>{
  if(!current()){$('processingStatus').textContent='Load a spectrum before drawing a baseline.';return;}
@@ -183,6 +187,21 @@ $('editBaseline').onclick=()=>{
 $('clearBaselinePoints').onclick=()=>{
  let s=current();if(!s)return;
  s.manualBaselinePoints=[];refreshProcessingPreview();
+};
+function extendManualBaselineToEdges(s){
+ if(!s?.x?.length)return false;
+ let points=cleanManualPoints(s.manualBaselinePoints);
+ if(points.length<2)return false;
+ // Keep the user-selected heights instead of sampling noisy first/last pixels.
+ points[0].x=s.x[0];
+ points[points.length-1].x=s.x.at(-1);
+ s.manualBaselinePoints=points;
+ return true;
+}
+$('extendBaselineEdges').onclick=()=>{
+ const s=current();
+ if(!s||!extendManualBaselineToEdges(s))return;
+ refreshProcessingPreview();
 };
 $('plot').addEventListener('pointerdown',e=>{
  if(!manualDrawMode||!current()||e.button!==0)return;
@@ -738,7 +757,9 @@ $('saveProcessed').onclick=()=>{let data={format:'raman-studio-v1',workflow:'pro
 $('exportAnalysisCsv').onclick=()=>{let s=current(),r=fitResult;if(!s||!r)return;let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),ratio=num.length&&den.length&&denArea!==0?numArea/denArea:'',rows=[['filename','compound','host_mineral','mol_kg','phase','temperature_C','host_subtracted','host_reference','host_scale','host_background_subtracted','host_background_scale','host_background_range','baseline_mode','fit_mode','fit_profile','fit_baseline','peak','selected_cm-1','fitted_cm-1','height','fwhm_cm-1','eta','area','numerator_selected','denominator_selected','numerator_area_sum','denominator_area_sum','area_ratio','r2','rmse']];r.peaks.forEach((p,i)=>rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.temp,!!s.processing?.host?.enabled,s.processing?.host?.referenceName||'',s.processing?.host?.scale??'',!!s.processing?.host?.backgroundEnabled,s.processing?.host?.backgroundScale??'',s.processing?.host?.backgroundEnabled?((s.processing?.host?.backgroundMin??1500)+'-'+(s.processing?.host?.backgroundMax??2700)):'',$('baselineMethod').value,r.fitMode||'standard',r.profile,r.baselineMode||'constant',i+1,r.seedXs?.[i]??p.c,p.c,p.h,p.w,r.profile==='pseudo'?p.eta:r.profile==='lorentzian'?1:0,peakArea(p,r.profile),ratioNumerator.has(i),ratioDenominator.has(i),numArea,denArea,ratio,r.r2,r.rmse]));let reg=fittedRegionAreas(r),b=reg.bounds||{},fields=['region_num_min_cm-1','region_num_max_cm-1','region_den_min_cm-1','region_den_max_cm-1','region_numerator_area','region_denominator_area','region_area_ratio','region_integration_note'];rows[0].push(...fields,'manual_baseline_points');for(const row of rows.slice(1))row.push(b.nMin??'',b.nMax??'',b.dMin??'',b.dMax??'',reg.error?'':reg.numerator,reg.error?'':reg.denominator,reg.error?'':reg.ratio,reg.error||'',JSON.stringify(s.processing?.baseline==='manual'?s.processing.manualPoints||[]:[]));download('raman_analysis.csv',new Blob([rows.map(row=>row.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 
 function renderPlot(){
- let s=current();if(!s){$('plot').innerHTML='<div style="padding:70px;text-align:center;color:#7b8da3">Load and select a spectrum to begin analysis</div>';lastSvg='';return;}let y=activeY(),xmin=$('xMin').value===''?s.x[0]:Number($('xMin').value),xmax=$('xMax').value===''?s.x.at(-1):Number($('xMax').value);if(xmax<xmin)[xmin,xmax]=[xmax,xmin];let idx=s.x.map((x,i)=>i).filter(i=>s.x[i]>=xmin&&s.x[i]<=xmax);if(idx.length<2)return;let vals=idx.map(i=>y[i]),manualGuide=$('baselineMethod').value==='manual'&&preview?.beforeBaseline?idx.map(i=>preview.beforeBaseline[i]):null,ylo=Math.min(...vals,...(manualGuide||[])),yhi=Math.max(...vals,...(manualGuide||[])),pad=(Number($('yPad').value)||8)/100*(yhi-ylo||1),residualSpace=$('showResidual').checked&&fitResult?130:0,w=1240,h=680+residualSpace,left=82,right=1170,top=55,bottom=610,YY=v=>bottom-(v-(ylo-pad))/Math.max(1e-12,(yhi+pad)-(ylo-pad))*(bottom-top),XX=x=>left+(x-xmin)/(xmax-xmin)*(right-left);plotGeometry={xmin,xmax,left,right,top,bottom,ymin:ylo-pad,ymax:yhi+pad};let out=['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="background:white"><rect width="100%" height="100%" fill="white"/>'];for(let x=Math.ceil(xmin/500)*500;x<=xmax;x+=500){let xx=XX(x);out.push('<line x1="'+xx+'" y1="'+top+'" x2="'+xx+'" y2="'+bottom+'" stroke="#e9edf3"/><text x="'+xx+'" y="'+(bottom+26)+'" text-anchor="middle" font-size="12" fill="#53667d">'+x+'</text>');}out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');let path=(xs,ys,map)=>xs.map((x,i)=>(i?'L':'M')+XX(x).toFixed(2)+' '+map(ys[i]).toFixed(2)).join(' '),xs=idx.map(i=>s.x[i]);if(fitResult?.fitMode==='broadOH'&&fitResult.maskedRanges?.length){for(const r of fitResult.maskedRanges){let a=Math.max(xmin,r.lo),b=Math.min(xmax,r.hi);if(b>a)out.push('<rect x="'+XX(a)+'" y="'+top+'" width="'+Math.max(0,XX(b)-XX(a))+'" height="'+(bottom-top)+'" fill="#eef1f5" fill-opacity=".55"/>');}}if(preview)out.push('<path d="'+path(xs,manualGuide||idx.map(i=>s.working[i]),YY)+'" stroke="#aab3be" stroke-width="1.2" fill="none"/>');out.push('<path d="'+path(xs,vals,YY)+'" stroke="#315cc6" stroke-width="1.5" fill="none"/>');if($('baselineMethod').value==='manual'){
+ let s=current();
+ $('extendBaselineEdges').disabled=!s||$('baselineMethod').value!=='manual'||(s.manualBaselinePoints?.length||0)<2;
+ if(!s){$('plot').innerHTML='<div style="padding:70px;text-align:center;color:#7b8da3">Load and select a spectrum to begin analysis</div>';lastSvg='';return;}let y=activeY(),xmin=$('xMin').value===''?s.x[0]:Number($('xMin').value),xmax=$('xMax').value===''?s.x.at(-1):Number($('xMax').value);if(xmax<xmin)[xmin,xmax]=[xmax,xmin];let idx=s.x.map((x,i)=>i).filter(i=>s.x[i]>=xmin&&s.x[i]<=xmax);if(idx.length<2)return;let vals=idx.map(i=>y[i]),manualGuide=$('baselineMethod').value==='manual'&&preview?.beforeBaseline?idx.map(i=>preview.beforeBaseline[i]):null,ylo=Math.min(...vals,...(manualGuide||[])),yhi=Math.max(...vals,...(manualGuide||[])),pad=(Number($('yPad').value)||8)/100*(yhi-ylo||1),residualSpace=$('showResidual').checked&&fitResult?130:0,w=1240,h=680+residualSpace,left=82,right=1170,top=55,bottom=610,YY=v=>bottom-(v-(ylo-pad))/Math.max(1e-12,(yhi+pad)-(ylo-pad))*(bottom-top),XX=x=>left+(x-xmin)/(xmax-xmin)*(right-left);plotGeometry={xmin,xmax,left,right,top,bottom,ymin:ylo-pad,ymax:yhi+pad};let out=['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="background:white"><rect width="100%" height="100%" fill="white"/>'];for(let x=Math.ceil(xmin/500)*500;x<=xmax;x+=500){let xx=XX(x);out.push('<line x1="'+xx+'" y1="'+top+'" x2="'+xx+'" y2="'+bottom+'" stroke="#e9edf3"/><text x="'+xx+'" y="'+(bottom+26)+'" text-anchor="middle" font-size="12" fill="#53667d">'+x+'</text>');}out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');let path=(xs,ys,map)=>xs.map((x,i)=>(i?'L':'M')+XX(x).toFixed(2)+' '+map(ys[i]).toFixed(2)).join(' '),xs=idx.map(i=>s.x[i]);if(fitResult?.fitMode==='broadOH'&&fitResult.maskedRanges?.length){for(const r of fitResult.maskedRanges){let a=Math.max(xmin,r.lo),b=Math.min(xmax,r.hi);if(b>a)out.push('<rect x="'+XX(a)+'" y="'+top+'" width="'+Math.max(0,XX(b)-XX(a))+'" height="'+(bottom-top)+'" fill="#eef1f5" fill-opacity=".55"/>');}}if(preview)out.push('<path d="'+path(xs,manualGuide||idx.map(i=>s.working[i]),YY)+'" stroke="#aab3be" stroke-width="1.2" fill="none"/>');out.push('<path d="'+path(xs,vals,YY)+'" stroke="#315cc6" stroke-width="1.5" fill="none"/>');if($('baselineMethod').value==='manual'&&(manualDrawMode||preview?.method==='manual')){
  out.push('<path class="manual-baseline-curve" d="'+manualOverlayPath(s)+'" stroke="#ad4c91" stroke-width="2.4" stroke-dasharray="7 3" fill="none" pointer-events="none"/>');
  (s.manualBaselinePoints||[]).forEach((p,i)=>{if(p.x<xmin||p.x>xmax)return;out.push('<circle data-baseline-index="'+i+'" cx="'+XX(p.x)+'" cy="'+YY(p.y)+'" r="'+(manualDrawMode?7:5)+'" fill="#fff" stroke="#ad4c91" stroke-width="2.5"/>');});
 }
