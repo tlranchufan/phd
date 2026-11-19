@@ -74,6 +74,7 @@ $('clearDataset').onclick=()=>{
  $('autoPeaks').checked=true;$('autoPeakProminence').value=5;$('autoPeakDistance').value=10;
  $('profile').value='pseudo';$('fitBaseline').value='constant';$('fitIterations').value=120;$('initialWidth').value=12;
  $('showComponents').checked=true;$('showResidual').checked=true;
+ $('regionNumMin').value=2800;$('regionNumMax').value=3300;$('regionDenMin').value=3300;$('regionDenMax').value=3800;
  $('pickPeaks').classList.remove('primary');$('pickPeaks').textContent='Pick centres on plot';$('fitPeaks').disabled=false;
  $('applyProcessing').disabled=true;$('discardProcessing').disabled=true;
  $('hostReference').dataset.hostTarget='';
@@ -89,7 +90,7 @@ $('upload').onchange=async e=>{
  $('loadStatus').textContent=good+' imported'+(errors.length?' · '+errors.length+' failed':'')+'.';e.target.value='';renderList();syncRanges();syncProcessingControlsFromSpectrum(current());renderPlot();if(!current()?.processing)refreshProcessingPreview();
 };
 $('openCompiled').onchange=async e=>{
- const generation=datasetGeneration,f=e.target.files?.[0];if(!f)return;try{let data=JSON.parse(await f.text());if(generation!==datasetGeneration)return;if(data.format!=='raman-studio-v1'||!Array.isArray(data.spectra))throw Error('Unsupported compiled Raman dataset');let count=0;for(const a of data.spectra){if(!Array.isArray(a.x)||!Array.isArray(a.raw))continue;addSpectrum(a.name||('Spectrum '+(count+1)),{x:a.x,y:a.raw},a.meta||metadata(a.name||''),Array.isArray(a.corrected)?a.corrected:null,a);count++;}$('loadStatus').textContent='Loaded '+count+' spectra from '+f.name+'.';renderList();syncRanges();syncProcessingControlsFromSpectrum(current());renderPlot();if(!current()?.processing)refreshProcessingPreview();}catch(err){if(generation===datasetGeneration)$('loadStatus').textContent='Import failed: '+err.message;}finally{if(generation===datasetGeneration)e.target.value='';}
+ const generation=datasetGeneration,f=e.target.files?.[0];if(!f)return;try{let data=JSON.parse(await f.text());if(generation!==datasetGeneration)return;if(Array.isArray(data.analysisRegions)&&data.analysisRegions.length===4&&data.analysisRegions.every(Number.isFinite)){['regionNumMin','regionNumMax','regionDenMin','regionDenMax'].forEach((id,i)=>$(id).value=String(data.analysisRegions[i]));renderRegionIntegration();}if(data.format!=='raman-studio-v1'||!Array.isArray(data.spectra))throw Error('Unsupported compiled Raman dataset');let count=0;for(const a of data.spectra){if(!Array.isArray(a.x)||!Array.isArray(a.raw))continue;addSpectrum(a.name||('Spectrum '+(count+1)),{x:a.x,y:a.raw},a.meta||metadata(a.name||''),Array.isArray(a.corrected)?a.corrected:null,a);count++;}$('loadStatus').textContent='Loaded '+count+' spectra from '+f.name+'.';renderList();syncRanges();syncProcessingControlsFromSpectrum(current());renderPlot();if(!current()?.processing)refreshProcessingPreview();}catch(err){if(generation===datasetGeneration)$('loadStatus').textContent='Import failed: '+err.message;}finally{if(generation===datasetGeneration)e.target.value='';}
 };
 
 function cosmic(y,x){
@@ -353,7 +354,7 @@ function updateFitModeUi(resetFit=true){
  let broad=$('fitMode').value==='broadOH',s=current();$('broadOhHint').style.display=broad?'block':'none';
  if(broad){
   $('autoPeaks').checked=false;$('autoPeaks').disabled=true;$('autoPeakProminence').disabled=true;$('autoPeakDistance').disabled=true;$('profile').value='gaussian';$('fitBaseline').value='linear';$('initialWidth').value=220;$('fitIterations').value=Math.max(200,Number($('fitIterations').value)||200);
-  if(s){$('fitMin').value=Math.max(2800,Math.ceil(s.x[0]));$('fitMax').value=Math.min(3750,Math.floor(s.x.at(-1)));}
+  if(s){$('fitMin').value=Math.max(2800,Math.ceil(s.x[0]));$('fitMax').value=Math.min(3800,Math.floor(s.x.at(-1)));}
  }else{
   $('autoPeaks').disabled=false;$('autoPeakProminence').disabled=false;$('autoPeakDistance').disabled=false;
  }
@@ -463,11 +464,52 @@ function renderRatio(){
  let nLabel=num.map(i=>r.peaks[i].c.toFixed(1)).join(' + '),dLabel=den.map(i=>r.peaks[i].c.toFixed(1)).join(' + '),ratio=denArea!==0?numArea/denArea:null;
  $('ratioSummary').textContent=ratio===null?'Denominator area is zero.':'Area ratio ('+nLabel+') / ('+dLabel+') = '+ratio.toPrecision(7);
 }
+// Integrate the sum of fitted components, not the fitted baseline or raw intensities.
+function regionBounds(){
+ const ids=['regionNumMin','regionNumMax','regionDenMin','regionDenMax'],v=ids.map(id=>$(id).value.trim());
+ if(v.some(s=>s===''))return null;
+ const n=v.map(Number);
+ return n.every(Number.isFinite)?{nMin:n[0],nMax:n[1],dMin:n[2],dMax:n[3]}:null;
+}
+function integrateFitComponents(r,lo,hi){
+ const steps=Math.max(1,Math.ceil((hi-lo)*2)),dx=(hi-lo)/steps;
+ const height=x=>r.peaks.reduce((sum,p)=>sum+peakValue(x,p,r.profile),0);
+ let total=(height(lo)+height(hi))*.5;
+ for(let i=1;i<steps;i++)total+=height(lo+i*dx);
+ return total*dx;
+}
+function fittedRegionAreas(r){
+ const bounds=regionBounds();
+ if(!bounds||!(bounds.nMin<bounds.nMax&&bounds.dMin<bounds.dMax))
+  return {bounds,error:'Enter two valid integration ranges with increasing limits.'};
+ if(!r?.peaks?.length||!r?.xs?.length)
+  return {bounds,error:'Fit peaks to calculate integrated areas.'};
+ const fitLo=r.xs[0],fitHi=r.xs.at(-1);
+ // Allow a small tolerance for the first/last sampled point not falling exactly on a whole-number limit.
+ if(Math.min(bounds.nMin,bounds.dMin)<fitLo-2||Math.max(bounds.nMax,bounds.dMax)>fitHi+2)
+  return {bounds,error:'Integration regions exceed the fitted range ('+fitLo.toFixed(1)+'–'+fitHi.toFixed(1)+' cm⁻¹). Extend the fit and refit; no extrapolated ratio was calculated.'};
+ const numerator=integrateFitComponents(r,bounds.nMin,bounds.nMax),
+       denominator=integrateFitComponents(r,bounds.dMin,bounds.dMax);
+ if(!Number.isFinite(numerator)||!Number.isFinite(denominator)||denominator<=0)
+  return {bounds,error:'Cannot calculate a finite ratio: check the fit and denominator area.'};
+ return {bounds,numerator,denominator,ratio:numerator/denominator,error:null};
+}
+function renderRegionIntegration(){
+ const result=fittedRegionAreas(fitResult),el=$('regionSummary');
+ if(result.error){el.textContent=result.error;return;}
+ const b=result.bounds;
+ el.textContent='A'+b.nMin+'–'+b.nMax+' = '+result.numerator.toPrecision(7)
+  +' · A'+b.dMin+'–'+b.dMax+' = '+result.denominator.toPrecision(7)
+  +' · Ratio = '+result.ratio.toPrecision(7);
+}
+for(const id of ['regionNumMin','regionNumMax','regionDenMin','regionDenMax'])
+ $(id).addEventListener('input',renderRegionIntegration);
+
 function renderFit(){
- let r=fitResult;if(!r){$('fitTable').innerHTML='';$('fitSummary').innerHTML='';$('fitStatus').textContent='No fit calculated.';renderRatio();return;}
+ let r=fitResult;if(!r){$('fitTable').innerHTML='';$('fitSummary').innerHTML='';$('fitStatus').textContent='No fit calculated.';renderRatio();renderRegionIntegration();return;}
  $('fitStatus').textContent='Fit complete · '+r.iterations+' iteration(s)'+(r.maskedRanges?.length?' · '+r.maskedRanges.length+' host-band window(s) excluded':'')+'.';$('fitSummary').innerHTML='<span>Mode <strong>'+esc(r.fitMode==='broadOH'?'Broad OH':'Standard')+'</strong></span><span>R² <strong>'+r.r2.toFixed(5)+'</strong></span><span>RMSE <strong>'+r.rmse.toPrecision(5)+'</strong></span><span>Fit baseline <strong>'+esc(r.baselineMode||'constant')+'</strong></span><span>Offset <strong>'+r.offset.toPrecision(5)+'</strong></span>'+(r.maskedRanges?.length?'<span>Host windows excluded <strong>'+r.maskedRanges.length+'</strong></span>':'');
  $('fitTable').innerHTML=r.peaks.map((p,i)=>'<tr><td>'+(i+1)+'</td><td>'+(r.seedXs?.[i]??p.c).toFixed(3)+'</td><td>'+p.c.toFixed(3)+'</td><td>'+p.h.toPrecision(6)+'</td><td>'+p.w.toFixed(3)+'</td><td>'+(r.profile==='pseudo'?p.eta.toFixed(3):r.profile==='lorentzian'?'1.000':'0.000')+'</td><td>'+peakArea(p,r.profile).toPrecision(7)+'</td><td class="ratio-cell"><input type="checkbox" data-ratio="n" data-peak="'+i+'" '+(ratioNumerator.has(i)?'checked':'')+'></td><td class="ratio-cell"><input type="checkbox" data-ratio="d" data-peak="'+i+'" '+(ratioDenominator.has(i)?'checked':'')+'></td></tr>').join('');
- renderRatio();
+ renderRatio();renderRegionIntegration();
 }
 $('fitTable').onchange=e=>{let kind=e.target.dataset.ratio,i=Number(e.target.dataset.peak);if(!kind||!Number.isInteger(i))return;let target=kind==='n'?ratioNumerator:ratioDenominator,other=kind==='n'?ratioDenominator:ratioNumerator;if(e.target.checked){target.add(i);other.delete(i);}else target.delete(i);storeCurrentFit();renderFit();};
 for(const id of ['profile','fitBaseline'])$(id).onchange=()=>{fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();};
@@ -476,8 +518,8 @@ function download(name,blob){let u=URL.createObjectURL(blob),a=document.createEl
 $('reviewed').onchange=()=>{let s=current();if(!s)return;s.reviewed=$('reviewed').checked;if(!s.reviewed)s.approved=false;renderList();renderReviewUi();renderApprovedPreview();};
 $('approved').onchange=()=>{let s=current();if(!s)return;s.approved=$('approved').checked;if(s.approved)s.reviewed=true;renderList();renderReviewUi();renderApprovedPreview();};
 $('nextUnreviewed').onclick=()=>{if(!spectra.length)return;let start=Math.max(0,spectra.findIndex(s=>s.id===currentId));for(let n=1;n<=spectra.length;n++){let s=spectra[(start+n)%spectra.length];if(!s.reviewed){chooseSpectrum(s.id);return;}}$('reviewStatus').textContent='All spectra are reviewed.';};
-$('saveProcessed').onclick=()=>{let data={format:'raman-studio-v1',workflow:'processed',saved:new Date().toISOString(),spectra:spectra.map(s=>({name:s.name,meta:s.meta,x:s.x,raw:s.raw,corrected:s.working,modified:s.modified||[],keep:true,reviewed:!!s.reviewed,approved:!!s.approved,processing:s.processing||null,fit:s.fit||null,preparedHost:!!s.preparedHost,preparedHostBaseline:s.preparedHostBaseline||null}))};download('raman_processed.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};
-$('exportAnalysisCsv').onclick=()=>{let s=current(),r=fitResult;if(!s||!r)return;let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),ratio=num.length&&den.length&&denArea!==0?numArea/denArea:'',rows=[['filename','compound','host_mineral','mol_kg','phase','temperature_C','host_subtracted','host_reference','host_scale','host_background_subtracted','host_background_scale','host_background_range','baseline_mode','fit_mode','fit_profile','fit_baseline','peak','selected_cm-1','fitted_cm-1','height','fwhm_cm-1','eta','area','numerator_selected','denominator_selected','numerator_area_sum','denominator_area_sum','area_ratio','r2','rmse']];r.peaks.forEach((p,i)=>rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.temp,!!s.processing?.host?.enabled,s.processing?.host?.referenceName||'',s.processing?.host?.scale??'',!!s.processing?.host?.backgroundEnabled,s.processing?.host?.backgroundScale??'',s.processing?.host?.backgroundEnabled?((s.processing?.host?.backgroundMin??1500)+'-'+(s.processing?.host?.backgroundMax??2700)):'',$('baselineMethod').value,r.fitMode||'standard',r.profile,r.baselineMode||'constant',i+1,r.seedXs?.[i]??p.c,p.c,p.h,p.w,r.profile==='pseudo'?p.eta:r.profile==='lorentzian'?1:0,peakArea(p,r.profile),ratioNumerator.has(i),ratioDenominator.has(i),numArea,denArea,ratio,r.r2,r.rmse]));download('raman_analysis.csv',new Blob([rows.map(row=>row.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
+$('saveProcessed').onclick=()=>{let data={format:'raman-studio-v1',workflow:'processed',saved:new Date().toISOString(),analysisRegions:(()=>{let b=regionBounds();return b?[b.nMin,b.nMax,b.dMin,b.dMax]:null;})(),spectra:spectra.map(s=>({name:s.name,meta:s.meta,x:s.x,raw:s.raw,corrected:s.working,modified:s.modified||[],keep:true,reviewed:!!s.reviewed,approved:!!s.approved,processing:s.processing||null,fit:s.fit||null,preparedHost:!!s.preparedHost,preparedHostBaseline:s.preparedHostBaseline||null}))};download('raman_processed.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};
+$('exportAnalysisCsv').onclick=()=>{let s=current(),r=fitResult;if(!s||!r)return;let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),ratio=num.length&&den.length&&denArea!==0?numArea/denArea:'',rows=[['filename','compound','host_mineral','mol_kg','phase','temperature_C','host_subtracted','host_reference','host_scale','host_background_subtracted','host_background_scale','host_background_range','baseline_mode','fit_mode','fit_profile','fit_baseline','peak','selected_cm-1','fitted_cm-1','height','fwhm_cm-1','eta','area','numerator_selected','denominator_selected','numerator_area_sum','denominator_area_sum','area_ratio','r2','rmse']];r.peaks.forEach((p,i)=>rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.temp,!!s.processing?.host?.enabled,s.processing?.host?.referenceName||'',s.processing?.host?.scale??'',!!s.processing?.host?.backgroundEnabled,s.processing?.host?.backgroundScale??'',s.processing?.host?.backgroundEnabled?((s.processing?.host?.backgroundMin??1500)+'-'+(s.processing?.host?.backgroundMax??2700)):'',$('baselineMethod').value,r.fitMode||'standard',r.profile,r.baselineMode||'constant',i+1,r.seedXs?.[i]??p.c,p.c,p.h,p.w,r.profile==='pseudo'?p.eta:r.profile==='lorentzian'?1:0,peakArea(p,r.profile),ratioNumerator.has(i),ratioDenominator.has(i),numArea,denArea,ratio,r.r2,r.rmse]));let reg=fittedRegionAreas(r),b=reg.bounds||{},fields=['region_num_min_cm-1','region_num_max_cm-1','region_den_min_cm-1','region_den_max_cm-1','region_numerator_area','region_denominator_area','region_area_ratio','region_integration_note'];rows[0].push(...fields);for(const row of rows.slice(1))row.push(b.nMin??'',b.nMax??'',b.dMin??'',b.dMax??'',reg.error?'':reg.numerator,reg.error?'':reg.denominator,reg.error?'':reg.ratio,reg.error||'');download('raman_analysis.csv',new Blob([rows.map(row=>row.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 
 function renderPlot(){
  let s=current();if(!s){$('plot').innerHTML='<div style="padding:70px;text-align:center;color:#7b8da3">Load and select a spectrum to begin analysis</div>';lastSvg='';return;}let y=activeY(),xmin=$('xMin').value===''?s.x[0]:Number($('xMin').value),xmax=$('xMax').value===''?s.x.at(-1):Number($('xMax').value);if(xmax<xmin)[xmin,xmax]=[xmax,xmin];let idx=s.x.map((x,i)=>i).filter(i=>s.x[i]>=xmin&&s.x[i]<=xmax);if(idx.length<2)return;let vals=idx.map(i=>y[i]),ylo=Math.min(...vals),yhi=Math.max(...vals),pad=(Number($('yPad').value)||8)/100*(yhi-ylo||1),residualSpace=$('showResidual').checked&&fitResult?130:0,w=1240,h=680+residualSpace,left=82,right=1170,top=55,bottom=610,YY=v=>bottom-(v-(ylo-pad))/Math.max(1e-12,(yhi+pad)-(ylo-pad))*(bottom-top),XX=x=>left+(x-xmin)/(xmax-xmin)*(right-left);plotGeometry={xmin,xmax,left,right};let out=['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="background:white"><rect width="100%" height="100%" fill="white"/>'];for(let x=Math.ceil(xmin/500)*500;x<=xmax;x+=500){let xx=XX(x);out.push('<line x1="'+xx+'" y1="'+top+'" x2="'+xx+'" y2="'+bottom+'" stroke="#e9edf3"/><text x="'+xx+'" y="'+(bottom+26)+'" text-anchor="middle" font-size="12" fill="#53667d">'+x+'</text>');}out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');let path=(xs,ys,map)=>xs.map((x,i)=>(i?'L':'M')+XX(x).toFixed(2)+' '+map(ys[i]).toFixed(2)).join(' '),xs=idx.map(i=>s.x[i]);if(fitResult?.fitMode==='broadOH'&&fitResult.maskedRanges?.length){for(const r of fitResult.maskedRanges){let a=Math.max(xmin,r.lo),b=Math.min(xmax,r.hi);if(b>a)out.push('<rect x="'+XX(a)+'" y="'+top+'" width="'+Math.max(0,XX(b)-XX(a))+'" height="'+(bottom-top)+'" fill="#eef1f5" fill-opacity=".55"/>');}}if(preview)out.push('<path d="'+path(xs,idx.map(i=>s.working[i]),YY)+'" stroke="#aab3be" stroke-width="1.2" fill="none"/>');out.push('<path d="'+path(xs,vals,YY)+'" stroke="#315cc6" stroke-width="1.5" fill="none"/>');let visibleSeeds=seeds.filter(c=>c>=xmin&&c<=xmax).sort((a,b)=>a-b),placedSeedLabels=[];

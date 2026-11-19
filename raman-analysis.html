@@ -117,6 +117,11 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 <div id="fitSummary" class="fit-summary" style="margin:10px 0"></div>
 <div class="scroll"><table><thead><tr><th>#</th><th>Selected cm⁻¹</th><th>Fitted cm⁻¹</th><th>Height</th><th>FWHM cm⁻¹</th><th>η</th><th>Area</th><th>N</th><th>D</th></tr></thead><tbody id="fitTable"></tbody></table></div>
 <div id="ratioSummary" class="status" style="margin-top:12px">Select numerator (N) and denominator (D) peaks.</div>
+<div class="grid2" style="margin-top:12px">
+  <div class="field"><label>Numerator integration (cm⁻¹)</label><div class="grid2"><input id="regionNumMin" type="number" step="any" value="2800" aria-label="Numerator minimum"><input id="regionNumMax" type="number" step="any" value="3300" aria-label="Numerator maximum"></div></div>
+  <div class="field"><label>Denominator integration (cm⁻¹)</label><div class="grid2"><input id="regionDenMin" type="number" step="any" value="3300" aria-label="Denominator minimum"><input id="regionDenMax" type="number" step="any" value="3800" aria-label="Denominator maximum"></div></div>
+</div>
+<div id="regionSummary" class="status" style="margin-top:10px">Fit peaks to calculate integrated areas.</div>
 </div>
 <div class="panel">
 <h2>Approved comparison preview</h2>
@@ -125,7 +130,7 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 </main>
 </div></div>
 
-<script src="./raman-analysis.js?v=20261119-clear-dataset"></script>
+<script src="./raman-analysis.js?v=20261119-oh-region-integration"></script>
 <footer>Data Processing Tools · Timothy Leong</footer>
 </body>
 </html>
