@@ -80,7 +80,8 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 <div id="hostStatus" class="hint"></div>
 </div>
 <div class="field"><label>Savitzky–Golay smoothing</label><select id="smooth"><option value="0" selected>None</option><option value="5">5-point</option><option value="7">7-point</option><option value="9">9-point</option></select></div>
-<div class="field"><label>Baseline correction</label><select id="baselineMethod"><option value="none" selected>None</option><option value="linear">Linear endpoint</option><option value="als">ALS · asymmetric least squares</option><option value="airpls">airPLS · adaptive penalized least squares</option><option value="manual">Manual drawing</option></select></div>
+<div class="field"><label>Baseline correction</label><select id="baselineMethod"><option value="none" selected>None</option><option value="linear">Linear endpoint</option><option value="als">ALS · asymmetric least squares</option><option value="airpls">airPLS · adaptive penalized least squares</option><option value="manual">Manual drawing</option><option value="already">Already corrected</option></select></div>
+<div id="alreadyBaselineHint" class="hint" style="display:none">Use a spectrum that was baseline-corrected before import. No additional baseline is subtracted; Apply marks a host reference as prepared for automatic host-peak subtraction. The removed background curve is not available for separate background subtraction.</div>
 <div id="manualBaselineTools" class="stack" style="display:none">
 <div class="toolbar"><button id="editBaseline" type="button">Draw on spectrum</button><button id="clearBaselinePoints" type="button">Clear points</button></div>
 <div class="hint">Click/tap to place anchors on the background, drag to adjust, or right-click an anchor to remove it. Zoom with X minimum/maximum for precision. Only the interval between the first and last anchors is subtracted; avoid positioning anchors on OH peaks. Preview before applying.</div>
@@ -134,7 +135,7 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 </main>
 </div></div>
 
-<script src="./raman-analysis.js?v=20261119-joint-host-subtraction"></script>
+<script src="./raman-analysis.js?v=20261119-already-corrected-host"></script>
 <footer>Data Processing Tools · Timothy Leong</footer>
 </body>
 </html>
