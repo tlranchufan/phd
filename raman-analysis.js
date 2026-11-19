@@ -177,7 +177,7 @@ function updateHostUi(){
   else if(selfHost)$('hostPrepStatus').textContent=s?.preparedHost?'Prepared host ✓ · '+(s.processing?.baseline||'baseline corrected'):'Host reference · choose a baseline correction and Apply to prepare it for subtraction.';
   else if(!cands.length)$('hostPrepStatus').textContent='No host reference found for sample '+(s?.meta?.sampleId||s?.meta?.sample||filenameSampleKey(s)||'unknown')+'.';
   else if(!ready){let sameTemp=finiteMetaNumber(s,'temp')!==null&&finiteMetaNumber(chosen,'temp')!==null&&Math.abs(finiteMetaNumber(s,'temp')-finiteMetaNumber(chosen,'temp'))<.5,sameRun=runState(s)===runState(chosen);$('hostPrepStatus').textContent='Matched '+chosen.name+(sameTemp&&sameRun?'':' · closest available host condition')+', but it is not prepared yet. Open that host spectrum, baseline-correct it, then Apply.';}
-  else {let bands=hostPeakBands(chosen.x,chosen.working);$('hostPrepStatus').textContent='Prepared host: '+chosen.name+' · '+bands.length+' narrow band(s) detected across the full Raman range. Broad features (>110 cm⁻¹ FWHM) are protected.';}
+  else {let bands=hostPeakBands(chosen.x,chosen.working),tt=finiteMetaNumber(s,'temp'),ht=finiteMetaNumber(chosen,'temp'),mismatch=tt!==null&&ht!==null&&Math.abs(tt-ht)>30;$('hostPrepStatus').textContent='Prepared host: '+chosen.name+' · '+bands.length+' narrow band(s) detected across the full Raman range. Broad features (>110 cm⁻¹ FWHM) are protected.'+(mismatch?' Caution: host '+ht+' °C vs sample '+tt+' °C; their broad background shapes may differ.':'');}
  }
  if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Host peak subtraction: aggressive matched-band removal below 2500 cm⁻¹; conservative OH-safe subtraction above 2500 cm⁻¹.':'';
  if($('hostBgStatus')){
@@ -278,10 +278,33 @@ function fitHostBackgroundScale(sampleY,s,host){
  }
  return {scale,lo,hi,intercept:ymed,hmed,hostBaseline:interp,referencePoints:idx.length};
 }
+// Do not apply a low-frequency host continuum when its extrapolated shape
+// would cause large negative residuals outside the OH integration range.
+function hostBackgroundExtrapolationWarning(sampleY,s,host,fit,scale){
+ if(!(scale>0)||fit.referencePoints<20)return '';
+ const interp=fit.hostBaseline,hmed=Number.isFinite(fit.hmed)?fit.hmed:medianArray(interp.filter(Number.isFinite));
+ let anchor=[],upper=[];
+ for(let i=0;i<s.x.length;i++){
+  if(!Number.isFinite(interp[i])||!Number.isFinite(sampleY[i]))continue;
+  const x=s.x[i],v=sampleY[i]-scale*(interp[i]-hmed);
+  if(x>=fit.lo&&x<=fit.hi)anchor.push(v);
+  if(x>=3900&&x<=4150)upper.push(v);
+ }
+ if(anchor.length<20||upper.length<20)return '';
+ const reference=medianArray(anchor),end=medianArray(upper);
+ if(end>=-Math.max(100,.25*Math.abs(reference))||end-reference>=-.7*Math.max(150,Math.abs(reference)))return '';
+ const sampleTemp=finiteMetaNumber(s,'temp'),hostTemp=finiteMetaNumber(host,'temp'),
+  mismatch=sampleTemp!==null&&hostTemp!==null&&Math.abs(sampleTemp-hostTemp)>30;
+ return 'Host background auto-fit skipped: extrapolation produces a strongly negative 3900–4150 cm⁻¹ residual ('+Math.round(end)+' a.u.).'
+  +(mismatch?' The '+hostTemp+' °C reference and '+sampleTemp+' °C sample have different background shapes.':'')
+  +' Use a sample-specific baseline or a temperature-matched host. Manual scaling remains available.';
+}
 function subtractHostBackground(sampleY,s){
  let host=selectedHostReference();if(!$('subtractHostBackground').checked||$('subtractHostBackground').disabled||!host?.preparedHostBaseline)return {y:sampleY.slice(),host:null,scale:null,lo:null,hi:null};
  let fit=fitHostBackgroundScale(sampleY,s,host),mode=$('hostBgScaleMode').value,scale=mode==='manual'?Math.max(0,Number($('hostBgScale').value)||0):fit.scale;
  if(mode==='auto')$('hostBgScale').value=Number.isFinite(scale)?scale.toFixed(3):'0';
+ const warning=mode==='auto'?hostBackgroundExtrapolationWarning(sampleY,s,host,fit,scale):'';
+ if(warning)return {y:sampleY.slice(),host:null,scale:null,lo:fit.lo,hi:fit.hi,warning};
  let interp=fit.hostBaseline,hmed=Number.isFinite(fit.hmed)?fit.hmed:medianArray(interp.filter(Number.isFinite)),y=sampleY.map((v,i)=>Number.isFinite(interp[i])?v-scale*(interp[i]-hmed):v);
  return {y,host,scale,lo:fit.lo,hi:fit.hi,referencePoints:fit.referencePoints};
 }
@@ -321,6 +344,7 @@ function refreshProcessingPreview(){
  let parts=[];if($('despike').checked)parts.push('auto-despike'+(preview.spikes.length?' · '+preview.spikes.length+' spike point(s) corrected':''));
  if(preview.hostSub?.host)parts.push('prepared host peaks '+preview.hostSub.host.name+' · '+preview.hostSub.bands.length+' band(s) · median × '+preview.hostSub.scale.toFixed(3));
  if(preview.hostBg?.host)parts.push('host background × '+preview.hostBg.scale.toFixed(3)+' from '+Math.round(preview.hostBg.lo)+'–'+Math.round(preview.hostBg.hi)+' cm⁻¹');
+ if(preview.hostBg?.warning)parts.push(preview.hostBg.warning);
  if(Number($('smooth').value))parts.push($('smooth').value+'-point smoothing');
  if(preview.method!=='none')parts.push(preview.method+' baseline');
  $('processingStatus').textContent='Previewing '+parts.join(' · ')+'.';
@@ -331,7 +355,7 @@ for(const id of ['despike','smooth','lambda','asymmetry','iterations','subtractH
 for(const id of ['hostScaleMode','hostReference','subtractHost','subtractHostBackground','hostBgScaleMode'])$(id).addEventListener('change',()=>{updateHostUi();refreshProcessingPreview();});
 updateBaselineUi();updateHostUi();
 $('previewProcessing').onclick=refreshProcessingPreview;
-$('applyProcessing').onclick=()=>{let s=current();if(!s||!preview)return;if(isHostReference(s)&&preview.method==='none'){$('processingStatus').textContent='Choose and preview a baseline correction before preparing a host reference.';return;}s.working=preview.y.slice();s.modified=preview.spikes.slice();s.preparedHost=isHostReference(s)&&preview.method!=='none';s.preparedHostBaseline=s.preparedHost&&Array.isArray(preview.baseline)?preview.baseline.slice():s.preparedHostBaseline;s.processing={despike:$('despike').checked,smoothing:Number($('smooth').value)||0,baseline:preview.method,lambda:Number($('lambda').value)||1e6,p:Number($('asymmetry').value)||.001,iterations:Number($('iterations').value)||12,host:{enabled:!!preview.hostSub?.host,referenceName:preview.hostSub?.host?.name||preview.hostBg?.host?.name||'',referenceSampleId:preview.hostSub?.host?.meta?.sampleId||preview.hostSub?.host?.meta?.sample||preview.hostBg?.host?.meta?.sampleId||preview.hostBg?.host?.meta?.sample||'',scaleMode:$('hostScaleMode').value,scale:preview.hostSub?.scale??null,bands:preview.hostSub?.bands||[],backgroundEnabled:!!preview.hostBg?.host,backgroundScaleMode:$('hostBgScaleMode').value,backgroundScale:preview.hostBg?.scale??null,backgroundMin:Number($('hostBgMin').value)||1500,backgroundMax:Number($('hostBgMax').value)||2700},appliedAt:new Date().toISOString()};preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent=s.preparedHost?'Prepared host reference saved. Raw data retained.':'Applied to working spectrum. Raw data retained.';updateHostUi();fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
+$('applyProcessing').onclick=()=>{let s=current();if(!s||!preview)return;if(isHostReference(s)&&preview.method==='none'){$('processingStatus').textContent='Choose and preview a baseline correction before preparing a host reference.';return;}s.working=preview.y.slice();s.modified=preview.spikes.slice();s.preparedHost=isHostReference(s)&&preview.method!=='none';s.preparedHostBaseline=s.preparedHost&&Array.isArray(preview.baseline)?preview.baseline.slice():s.preparedHostBaseline;s.processing={despike:$('despike').checked,smoothing:Number($('smooth').value)||0,baseline:preview.method,lambda:Number($('lambda').value)||1e6,p:Number($('asymmetry').value)||.001,iterations:Number($('iterations').value)||12,host:{enabled:!!preview.hostSub?.host,referenceName:preview.hostSub?.host?.name||preview.hostBg?.host?.name||'',referenceSampleId:preview.hostSub?.host?.meta?.sampleId||preview.hostSub?.host?.meta?.sample||preview.hostBg?.host?.meta?.sampleId||preview.hostBg?.host?.meta?.sample||'',scaleMode:$('hostScaleMode').value,scale:preview.hostSub?.scale??null,bands:preview.hostSub?.bands||[],backgroundEnabled:!!preview.hostBg?.host,backgroundWarning:preview.hostBg?.warning||'',backgroundScaleMode:$('hostBgScaleMode').value,backgroundScale:preview.hostBg?.scale??null,backgroundMin:Number($('hostBgMin').value)||1500,backgroundMax:Number($('hostBgMax').value)||2700},appliedAt:new Date().toISOString()};preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent=s.preparedHost?'Prepared host reference saved. Raw data retained.':'Applied to working spectrum. Raw data retained.';updateHostUi();fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
 $('discardProcessing').onclick=()=>{preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='Preview discarded.';renderPlot();};
 $('resetRaw').onclick=()=>{let s=current();if(!s)return;s.working=s.raw.slice();s.modified=[];s.processing=null;s.preparedHost=false;s.preparedHostBaseline=null;preview=null;fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
 function activeY(){let s=current();return s?(preview?.y||s.working):[];}
@@ -353,8 +377,13 @@ $('autoPeaks').onchange=updatePeakSelectionUi;updatePeakSelectionUi();
 function updateFitModeUi(resetFit=true){
  let broad=$('fitMode').value==='broadOH',s=current();$('broadOhHint').style.display=broad?'block':'none';
  if(broad){
-  $('autoPeaks').checked=false;$('autoPeaks').disabled=true;$('autoPeakProminence').disabled=true;$('autoPeakDistance').disabled=true;$('profile').value='gaussian';$('fitBaseline').value='linear';$('initialWidth').value=220;$('fitIterations').value=Math.max(200,Number($('fitIterations').value)||200);
-  if(s){$('fitMin').value=Math.max(2800,Math.ceil(s.x[0]));$('fitMax').value=Math.min(3800,Math.floor(s.x.at(-1)));}
+  $('autoPeaks').checked=false;$('autoPeaks').disabled=true;$('autoPeakProminence').disabled=true;$('autoPeakDistance').disabled=true;
+  // Set defaults only on entering Broad OH mode, not every time Fit peaks is clicked.
+  if(resetFit){$('profile').value='gaussian';$('fitBaseline').value='linear';$('initialWidth').value=220;$('fitIterations').value=Math.max(200,Number($('fitIterations').value)||200);}
+  if(s){
+   if(resetFit||$('fitMin').value==='')$('fitMin').value=Math.max(2800,Math.ceil(s.x[0]));
+   if(resetFit||$('fitMax').value==='')$('fitMax').value=Math.min(3800,Math.floor(s.x.at(-1)));
+  }
  }else{
   $('autoPeaks').disabled=false;$('autoPeakProminence').disabled=false;$('autoPeakDistance').disabled=false;
  }
