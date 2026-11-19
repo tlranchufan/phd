@@ -251,6 +251,11 @@ for(const id of ['ratioName','ratioNumMode','ratioDenMode','ratioNumRegion','rat
  });
 }
 $('fitMode').addEventListener('change',()=>{let r=activeRegion();if(r)r._pending=true;regionUi();});
+const oldClearDataset=$('clearDataset').onclick;
+$('clearDataset').onclick=()=>{
+ oldClearDataset();
+ if(!spectra.length){visibleSpectrum=null;activeRatio=null;regionUi();ratioUi();}
+};
 const oldFitClick=$('fitPeaks').onclick;
 $('fitPeaks').onclick=()=>{if(!current())return;
  $('fitRegion').disabled=true;$('addFitRegion').disabled=true;oldFitClick();
