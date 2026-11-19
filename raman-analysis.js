@@ -1,6 +1,6 @@
 'use strict';
 const $=id=>document.getElementById(id);
-let spectra=[],uid=0,currentId=null,preview=null,fitResult=null,seeds=[],pickMode=false,lastSvg='',plotGeometry=null,datasetGeneration=0;const ratioNumerator=new Set(),ratioDenominator=new Set();
+let spectra=[],uid=0,currentId=null,preview=null,fitResult=null,seeds=[],pickMode=false,lastSvg='',plotGeometry=null,datasetGeneration=0,manualDrawMode=false,manualDragIndex=null;const ratioNumerator=new Set(),ratioDenominator=new Set();
 const COLORS=['#315cc6','#d05a43','#209c93','#895bb8','#bd902c','#d34891','#4e728d','#55a33b'];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const csvVal=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
@@ -21,7 +21,7 @@ function readTxt(text){let x=[],y=[];for(const line of text.split(/\r?\n/)){let 
 function addSpectrum(name,raw,meta,working,extra={}){
  let sorted=raw.x.map((x,i)=>[x,raw.y[i]]).filter(v=>Number.isFinite(v[0])&&Number.isFinite(v[1])).sort((a,b)=>a[0]-b[0]);if(sorted.length<20)throw Error('Too few valid spectral points');
  let x=sorted.map(v=>v[0]),y=sorted.map(v=>v[1]),w=working&&working.length===y.length?working.slice():y.slice();
- spectra.push({id:++uid,name,meta:meta||metadata(name),x,raw:y,working:w,modified:Array.isArray(extra.modified)?extra.modified.slice():[],reviewed:extra.reviewed===true,approved:extra.approved===true,processing:extra.processing||null,fit:extra.fit||null,preparedHost:extra.preparedHost===true,preparedHostBaseline:Array.isArray(extra.preparedHostBaseline)?extra.preparedHostBaseline.slice():null});if(currentId===null)currentId=uid;
+ spectra.push({id:++uid,name,meta:meta||metadata(name),x,raw:y,working:w,modified:Array.isArray(extra.modified)?extra.modified.slice():[],reviewed:extra.reviewed===true,approved:extra.approved===true,processing:extra.processing||null,fit:extra.fit||null,preparedHost:extra.preparedHost===true,preparedHostBaseline:Array.isArray(extra.preparedHostBaseline)?extra.preparedHostBaseline.slice():null,manualBaselinePoints:cleanManualPoints(extra.manualBaselinePoints||extra.processing?.manualPoints||[])});if(currentId===null)currentId=uid;
 }
 function current(){return spectra.find(s=>s.id===currentId)||null;}
 function renderList(){
@@ -59,14 +59,14 @@ function renderApprovedPreview(){
  ss.forEach((s,ri)=>{let ids=s.x.map((x,i)=>i).filter(i=>s.x[i]>=xmin&&s.x[i]<=xmax),vals=ids.map(i=>s.working[i]),lo=Math.min(...vals),hi=Math.max(...vals),span=hi-lo||1,base=top+ri*row+28,path=ids.map((i,j)=>(j?'L':'M')+XX(s.x[i]).toFixed(2)+' '+(base-(s.working[i]-lo)/span*28).toFixed(2)).join(' ');out.push('<path d="'+path+'" stroke="'+COLORS[ri%COLORS.length]+'" stroke-width="1.25" fill="none"/><text x="'+(left-10)+'" y="'+(base-8)+'" text-anchor="end" font-size="11" fill="#43546b">'+esc(s.name)+'</text>');});
  out.push('<text x="'+((left+right)/2)+'" y="'+(h-8)+'" text-anchor="middle" font-size="14">Raman shift (cm⁻¹)</text></svg>');host.innerHTML=out.join('');
 }
-function chooseSpectrum(id){currentId=Number(id);preview=null;let s=current();restoreStoredFit(s);syncProcessingControlsFromSpectrum(s);pickMode=false;$('pickPeaks').classList.remove('primary');$('pickPeaks').textContent='Pick centres on plot';renderList();syncRanges();renderSeeds();renderFit();renderPlot();renderApprovedPreview();if(!s?.processing)refreshProcessingPreview();}
+function chooseSpectrum(id){manualDrawMode=false;manualDragIndex=null;currentId=Number(id);preview=null;let s=current();restoreStoredFit(s);syncProcessingControlsFromSpectrum(s);pickMode=false;$('pickPeaks').classList.remove('primary');$('pickPeaks').textContent='Pick centres on plot';renderList();syncRanges();renderSeeds();renderFit();renderPlot();renderApprovedPreview();if(!s?.processing)refreshProcessingPreview();}
 $('spectrumList').onclick=e=>{let id=e.target.closest('[data-spectrum]')?.dataset.spectrum;if(id)chooseSpectrum(id);};
 $('search').oninput=renderList;
 
 $('clearDataset').onclick=()=>{
  if(!spectra.length||!window.confirm('Clear all '+spectra.length+' loaded spectra and reset the processing workspace? Unsaved processing, reviews and fits will be lost. Save the processed dataset first if needed.'))return;
  datasetGeneration++;
- spectra=[];uid=0;currentId=null;preview=null;fitResult=null;seeds=[];pickMode=false;lastSvg='';plotGeometry=null;
+ spectra=[];uid=0;currentId=null;preview=null;fitResult=null;seeds=[];pickMode=false;manualDrawMode=false;manualDragIndex=null;lastSvg='';plotGeometry=null;
  ratioNumerator.clear();ratioDenominator.clear();
  $('upload').value='';$('openCompiled').value='';$('search').value='';
  $('xMin').value='';$('xMax').value='';$('yPad').value=8;
@@ -101,6 +101,126 @@ function cosmic(y,x){
  let corrected=y.slice(),modified=[];for(let i=0;i<n;i++){if(!flagged[i])continue;let start=i;while(i+1<n&&flagged[i+1])i++;let end=i;if(start<1||end>=n-1)continue;let x0=x?.[start-1]??start-1,x1=x?.[end+1]??end+1;for(let j=start;j<=end;j++){let xj=x?.[j]??j;corrected[j]=y[start-1]+(y[end+1]-y[start-1])*(xj-x0)/(x1-x0);modified.push(j);}}return {corrected,modified};
 }
 function sgSmooth(y,w){const c={5:[-3,12,17,12,-3].map(v=>v/35),7:[-2,3,6,7,6,3,-2].map(v=>v/21),9:[-21,14,39,54,59,54,39,14,-21].map(v=>v/231)}[w];if(!c||y.length<w)return y.slice();let h=Math.floor(w/2),out=y.slice();for(let i=h;i<y.length-h;i++){let v=0;for(let j=-h;j<=h;j++)v+=y[i+j]*c[j+h];out[i]=v;}return out;}
+// A shape-preserving piecewise cubic curve avoids overshoot between manual anchors.
+function cleanManualPoints(points){
+ if(!Array.isArray(points))return [];
+ const sorted=points.map(p=>({x:Number(p?.x),y:Number(p?.y)})).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).sort((a,b)=>a.x-b.x);
+ return sorted.filter((p,i)=>!i||p.x-sorted[i-1].x>1e-6).slice(0,40);
+}
+function manualBaselineFunction(points){
+ const p=cleanManualPoints(points),n=p.length;
+ if(n<2)return null;
+ const h=[],d=[];
+ for(let i=0;i<n-1;i++){h.push(p[i+1].x-p[i].x);d.push((p[i+1].y-p[i].y)/h[i]);}
+ const m=new Array(n);
+ m[0]=d[0];m[n-1]=d[n-2];
+ for(let i=1;i<n-1;i++){
+  if(d[i-1]*d[i]<=0)m[i]=0;
+  else{let w1=2*h[i]+h[i-1],w2=h[i]+2*h[i-1];m[i]=(w1+w2)/(w1/d[i-1]+w2/d[i]);}
+ }
+ return x=>{
+  if(x<p[0].x||x>p[n-1].x)return null; // No unconstrained extrapolation.
+  if(x===p[n-1].x)return p[n-1].y;
+  let lo=0,hi=n-1;
+  while(lo+1<hi){let mid=(lo+hi)>>1;if(p[mid].x<=x)lo=mid;else hi=mid;}
+  let t=(x-p[lo].x)/h[lo],t2=t*t,t3=t2*t;
+  return (2*t3-3*t2+1)*p[lo].y+(t3-2*t2+t)*h[lo]*m[lo]+(-2*t3+3*t2)*p[lo+1].y+(t3-t2)*h[lo]*m[lo+1];
+ };
+}
+function manualBaselineSeries(xs,points){
+ const at=manualBaselineFunction(points);
+ return at?xs.map(x=>at(x)??0):null;
+}
+function manualOverlayPath(s){
+ if(!s||!plotGeometry)return '';
+ const at=manualBaselineFunction(s.manualBaselinePoints);
+ if(!at)return '';
+ const p=cleanManualPoints(s.manualBaselinePoints),g=plotGeometry,lo=Math.max(g.xmin,p[0].x),hi=Math.min(g.xmax,p.at(-1).x);
+ if(hi<=lo)return '';
+ const XX=x=>g.left+(x-g.xmin)/(g.xmax-g.xmin)*(g.right-g.left),
+  YY=y=>g.bottom-(y-g.ymin)/(g.ymax-g.ymin)*(g.bottom-g.top);
+ const count=Math.min(700,Math.max(2,Math.ceil((hi-lo)/2)));
+ return Array.from({length:count+1},(_,i)=>{let x=lo+(hi-lo)*i/count;return (i?'L':'M')+XX(x).toFixed(2)+' '+YY(at(x)).toFixed(2);}).join(' ');
+}
+function updateManualOverlayOnly(){
+ const s=current(),svg=$('plot').querySelector('svg'),g=plotGeometry;
+ if(!s||!svg||!g)return;
+ const path=svg.querySelector('.manual-baseline-curve');
+ if(path)path.setAttribute('d',manualOverlayPath(s));
+ const XX=x=>g.left+(x-g.xmin)/(g.xmax-g.xmin)*(g.right-g.left),
+  YY=y=>g.bottom-(y-g.ymin)/(g.ymax-g.ymin)*(g.bottom-g.top);
+ for(const circle of svg.querySelectorAll('[data-baseline-index]')){
+  const p=s.manualBaselinePoints[Number(circle.dataset.baselineIndex)];
+  if(p){circle.setAttribute('cx',XX(p.x));circle.setAttribute('cy',YY(p.y));}
+ }
+}
+function updateManualModeUi(){
+ const manual=$('baselineMethod').value==='manual',btn=$('editBaseline');
+ if(!manual)manualDrawMode=false;
+ $('manualBaselineTools').style.display=manual?'grid':'none';
+ btn.textContent=manualDrawMode?'Finish drawing':'Draw on spectrum';
+ btn.classList.toggle('primary',manualDrawMode);
+ $('plot').style.touchAction=manualDrawMode?'none':'';
+ $('plot').style.cursor=manualDrawMode?'crosshair':'';
+}
+function plotPointerCoords(e){
+ const svg=$('plot').querySelector('svg'),g=plotGeometry;
+ if(!svg||!g)return null;
+ const rect=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;
+ if(!rect.width||!rect.height)return null;
+ const xx=(e.clientX-rect.left)*vb.width/rect.width,yy=(e.clientY-rect.top)*vb.height/rect.height;
+ if(xx<g.left||xx>g.right||yy<g.top||yy>g.bottom)return null;
+ return {x:g.xmin+(xx-g.left)/(g.right-g.left)*(g.xmax-g.xmin),
+  y:g.ymax-(yy-g.top)/(g.bottom-g.top)*(g.ymax-g.ymin)};
+}
+$('editBaseline').onclick=()=>{
+ if(!current()){$('processingStatus').textContent='Load a spectrum before drawing a baseline.';return;}
+ if($('baselineMethod').value!=='manual'){$('baselineMethod').value='manual';updateBaselineUi();refreshProcessingPreview();}
+ manualDrawMode=!manualDrawMode;pickMode=false;
+ $('pickPeaks').classList.remove('primary');$('pickPeaks').textContent='Pick centres on plot';
+ updateManualModeUi();renderPlot();
+};
+$('clearBaselinePoints').onclick=()=>{
+ let s=current();if(!s)return;
+ s.manualBaselinePoints=[];refreshProcessingPreview();
+};
+$('plot').addEventListener('pointerdown',e=>{
+ if(!manualDrawMode||!current()||e.button!==0)return;
+ let coords=plotPointerCoords(e);if(!coords)return;
+ const s=current(),points=s.manualBaselinePoints;
+ let pointIndex=Number(e.target.closest('[data-baseline-index]')?.dataset.baselineIndex);
+ if(!e.target.closest('[data-baseline-index]')||!Number.isInteger(pointIndex)||pointIndex<0||pointIndex>=points.length){
+  if(points.length>=40){$('processingStatus').textContent='Maximum 40 manual baseline anchors.';return;}
+  pointIndex=points.findIndex(p=>Math.abs(p.x-coords.x)<3);
+  if(pointIndex<0){pointIndex=points.findIndex(p=>p.x>coords.x);if(pointIndex<0)pointIndex=points.length;points.splice(pointIndex,0,coords);}
+ }
+ manualDragIndex=pointIndex;
+ e.preventDefault();renderPlot();
+});
+document.addEventListener('pointermove',e=>{
+ if(manualDragIndex===null||!manualDrawMode||!current())return;
+ const coords=plotPointerCoords(e);if(!coords)return;
+ const p=current().manualBaselinePoints,i=manualDragIndex,g=plotGeometry;
+ p[i]={x:Math.max(i? p[i-1].x+2:g.xmin,Math.min(i<p.length-1?p[i+1].x-2:g.xmax,coords.x)),y:coords.y};
+ updateManualOverlayOnly();
+});
+function finishManualDrag(){
+ if(manualDragIndex===null)return;
+ manualDragIndex=null;
+ refreshProcessingPreview();
+}
+document.addEventListener('pointerup',finishManualDrag);
+document.addEventListener('pointercancel',finishManualDrag);
+$('plot').addEventListener('contextmenu',e=>{
+ if(!manualDrawMode||!current())return;
+ const pts=current().manualBaselinePoints,c=plotPointerCoords(e);
+ if(!c)return;
+ e.preventDefault();
+ const k=pts.findIndex(p=>Math.abs(p.x-c.x)<Math.max(8,(plotGeometry.xmax-plotGeometry.xmin)*.01)&&
+  Math.abs(p.y-c.y)<(plotGeometry.ymax-plotGeometry.ymin)*.05);
+ if(k>=0){pts.splice(k,1);refreshProcessingPreview();}
+});
+
 function linearEndpointBaseline(y){if(y.length<2)return y.map(()=>0);let a=y[0],b=y.at(-1),n=y.length-1;return y.map((_,i)=>a+(b-a)*i/n);}
 function whittakerBaseline(y,weights,lambda){
  const n=y.length;if(n<3)return y.slice();let lam=Math.max(1e-12,Number(lambda)||1),diag=weights.map(w=>Math.max(1e-12,Number(w)||0)),sub1=new Array(n).fill(0),sub2=new Array(n).fill(0);
@@ -319,6 +439,7 @@ function updateBaselineUi(){
  $('lambdaField').style.display=(m==='als'||m==='airpls')?'grid':'none';
  $('pField').style.display=m==='als'?'grid':'none';
  $('iterationsField').style.display=(m==='als'||m==='airpls')?'grid':'none';
+ updateManualModeUi();
 }
 function runProcessing(s){
  let y=s.raw.slice(),spikes=[],settings={method:$('baselineMethod').value,lambda:Math.max(1,Number($('lambda').value)||1e6),p:Math.max(1e-6,Math.min(.49,Number($('asymmetry').value)||.001)),iterations:Math.max(1,Math.min(50,Number($('iterations').value)||12))},baseline=null;
@@ -329,8 +450,14 @@ function runProcessing(s){
  if(settings.method==='linear')baseline=linearEndpointBaseline(y);
  if(settings.method==='als')baseline=alsBaseline(y,settings.lambda,settings.p,settings.iterations);
  if(settings.method==='airpls')baseline=airPlsBaseline(y,settings.lambda,settings.iterations);
+ const beforeBaseline=y.slice();
+ let error='';
+ if(settings.method==='manual'){
+  baseline=manualBaselineSeries(s.x,s.manualBaselinePoints);
+  if(!baseline)error='Place at least two manual baseline points on the spectrum before applying.';
+ }
  if(baseline)y=y.map((v,i)=>v-baseline[i]);
- return {y,baseline,spikes,method:settings.method,settings,hostSub,hostBg};
+ return {y,baseline,beforeBaseline,spikes,error,method:settings.method,settings,hostSub,hostBg};
 }
 function processingActive(){
  return $('despike').checked||($('subtractHost').checked&&!$('subtractHost').disabled)||($('subtractHostBackground').checked&&!$('subtractHostBackground').disabled)||Number($('smooth').value)!==0||$('baselineMethod').value!=='none';
@@ -340,14 +467,14 @@ function refreshProcessingPreview(){
  if(!processingActive()){
   preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='';renderPlot();return;
  }
- preview=runProcessing(s);$('applyProcessing').disabled=false;$('discardProcessing').disabled=false;
+ preview=runProcessing(s);$('applyProcessing').disabled=!!preview.error;$('discardProcessing').disabled=false;
  let parts=[];if($('despike').checked)parts.push('auto-despike'+(preview.spikes.length?' · '+preview.spikes.length+' spike point(s) corrected':''));
  if(preview.hostSub?.host)parts.push('prepared host peaks '+preview.hostSub.host.name+' · '+preview.hostSub.bands.length+' band(s) · median × '+preview.hostSub.scale.toFixed(3));
  if(preview.hostBg?.host)parts.push('host background × '+preview.hostBg.scale.toFixed(3)+' from '+Math.round(preview.hostBg.lo)+'–'+Math.round(preview.hostBg.hi)+' cm⁻¹');
  if(preview.hostBg?.warning)parts.push(preview.hostBg.warning);
  if(Number($('smooth').value))parts.push($('smooth').value+'-point smoothing');
  if(preview.method!=='none')parts.push(preview.method+' baseline');
- $('processingStatus').textContent='Previewing '+parts.join(' · ')+'.';
+ $('processingStatus').textContent=preview.error?preview.error:'Previewing '+parts.join(' · ')+'.'+(preview.method==='manual'?' Manual baseline applied only between outermost anchors.':'');
  fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderFit();renderPlot();
 }
 $('baselineMethod').onchange=()=>{updateBaselineUi();refreshProcessingPreview();};
@@ -355,9 +482,9 @@ for(const id of ['despike','smooth','lambda','asymmetry','iterations','subtractH
 for(const id of ['hostScaleMode','hostReference','subtractHost','subtractHostBackground','hostBgScaleMode'])$(id).addEventListener('change',()=>{updateHostUi();refreshProcessingPreview();});
 updateBaselineUi();updateHostUi();
 $('previewProcessing').onclick=refreshProcessingPreview;
-$('applyProcessing').onclick=()=>{let s=current();if(!s||!preview)return;if(isHostReference(s)&&preview.method==='none'){$('processingStatus').textContent='Choose and preview a baseline correction before preparing a host reference.';return;}s.working=preview.y.slice();s.modified=preview.spikes.slice();s.preparedHost=isHostReference(s)&&preview.method!=='none';s.preparedHostBaseline=s.preparedHost&&Array.isArray(preview.baseline)?preview.baseline.slice():s.preparedHostBaseline;s.processing={despike:$('despike').checked,smoothing:Number($('smooth').value)||0,baseline:preview.method,lambda:Number($('lambda').value)||1e6,p:Number($('asymmetry').value)||.001,iterations:Number($('iterations').value)||12,host:{enabled:!!preview.hostSub?.host,referenceName:preview.hostSub?.host?.name||preview.hostBg?.host?.name||'',referenceSampleId:preview.hostSub?.host?.meta?.sampleId||preview.hostSub?.host?.meta?.sample||preview.hostBg?.host?.meta?.sampleId||preview.hostBg?.host?.meta?.sample||'',scaleMode:$('hostScaleMode').value,scale:preview.hostSub?.scale??null,bands:preview.hostSub?.bands||[],backgroundEnabled:!!preview.hostBg?.host,backgroundWarning:preview.hostBg?.warning||'',backgroundScaleMode:$('hostBgScaleMode').value,backgroundScale:preview.hostBg?.scale??null,backgroundMin:Number($('hostBgMin').value)||1500,backgroundMax:Number($('hostBgMax').value)||2700},appliedAt:new Date().toISOString()};preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent=s.preparedHost?'Prepared host reference saved. Raw data retained.':'Applied to working spectrum. Raw data retained.';updateHostUi();fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
-$('discardProcessing').onclick=()=>{preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='Preview discarded.';renderPlot();};
-$('resetRaw').onclick=()=>{let s=current();if(!s)return;s.working=s.raw.slice();s.modified=[];s.processing=null;s.preparedHost=false;s.preparedHostBaseline=null;preview=null;fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
+$('applyProcessing').onclick=()=>{let s=current();if(!s||!preview||preview.error)return;if(isHostReference(s)&&preview.method==='none'){$('processingStatus').textContent='Choose and preview a baseline correction before preparing a host reference.';return;}s.working=preview.y.slice();s.modified=preview.spikes.slice();s.preparedHost=isHostReference(s)&&preview.method!=='none';s.preparedHostBaseline=s.preparedHost&&Array.isArray(preview.baseline)?preview.baseline.slice():s.preparedHostBaseline;s.processing={manualPoints:s.manualBaselinePoints.map(p=>({...p})),despike:$('despike').checked,smoothing:Number($('smooth').value)||0,baseline:preview.method,lambda:Number($('lambda').value)||1e6,p:Number($('asymmetry').value)||.001,iterations:Number($('iterations').value)||12,host:{enabled:!!preview.hostSub?.host,referenceName:preview.hostSub?.host?.name||preview.hostBg?.host?.name||'',referenceSampleId:preview.hostSub?.host?.meta?.sampleId||preview.hostSub?.host?.meta?.sample||preview.hostBg?.host?.meta?.sampleId||preview.hostBg?.host?.meta?.sample||'',scaleMode:$('hostScaleMode').value,scale:preview.hostSub?.scale??null,bands:preview.hostSub?.bands||[],backgroundEnabled:!!preview.hostBg?.host,backgroundWarning:preview.hostBg?.warning||'',backgroundScaleMode:$('hostBgScaleMode').value,backgroundScale:preview.hostBg?.scale??null,backgroundMin:Number($('hostBgMin').value)||1500,backgroundMax:Number($('hostBgMax').value)||2700},appliedAt:new Date().toISOString()};preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent=s.preparedHost?'Prepared host reference saved. Raw data retained.':'Applied to working spectrum. Raw data retained.';manualDrawMode=false;updateManualModeUi();updateHostUi();fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
+$('discardProcessing').onclick=()=>{let s=current();if(s)s.manualBaselinePoints=cleanManualPoints(s.processing?.manualPoints||[]);manualDrawMode=false;updateManualModeUi();preview=null;$('applyProcessing').disabled=true;$('discardProcessing').disabled=true;$('processingStatus').textContent='Preview discarded.';renderPlot();};
+$('resetRaw').onclick=()=>{let s=current();if(!s)return;s.working=s.raw.slice();s.modified=[];s.manualBaselinePoints=[];manualDrawMode=false;$('baselineMethod').value='none';updateBaselineUi();s.processing=null;s.preparedHost=false;s.preparedHostBaseline=null;preview=null;fitResult=null;seeds=[];ratioNumerator.clear();ratioDenominator.clear();invalidateReview(s);renderSeeds();renderFit();renderPlot();};
 function activeY(){let s=current();return s?(preview?.y||s.working):[];}
 
 function syncRanges(){let s=current();if(!s)return;if($('fitMin').value==='')$('fitMin').value=Math.round(s.x[0]);if($('fitMax').value==='')$('fitMax').value=Math.round(s.x.at(-1));}
@@ -393,7 +520,7 @@ function updateFitModeUi(resetFit=true){
 $('fitMode').addEventListener('change',()=>updateFitModeUi(true));
 function renderSeeds(){$('seedList').innerHTML=seeds.length?seeds.map((x,i)=>'<span class="seed">'+(i+1)+': '+x.toFixed(1)+'<button data-seed="'+i+'">×</button></span>').join(''):'<span class="hint">No peak centres selected.</span>';}
 $('seedList').onclick=e=>{if(e.target.dataset.seed!==undefined){seeds.splice(Number(e.target.dataset.seed),1);fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderSeeds();renderFit();renderPlot();}};
-$('pickPeaks').onclick=()=>{pickMode=!pickMode;$('pickPeaks').classList.toggle('primary',pickMode);$('pickPeaks').textContent=pickMode?'Picking centres…':'Pick centres on plot';};
+$('pickPeaks').onclick=()=>{if(!pickMode&&manualDrawMode){manualDrawMode=false;updateManualModeUi();renderPlot();}pickMode=!pickMode;$('pickPeaks').classList.toggle('primary',pickMode);$('pickPeaks').textContent=pickMode?'Picking centres…':'Pick centres on plot';};
 $('clearSeeds').onclick=()=>{seeds=[];fitResult=null;ratioNumerator.clear();ratioDenominator.clear();renderSeeds();renderFit();renderPlot();};
 
 function gaussian(x,c,h,w){let q=(x-c)/Math.max(w,1e-9);return h*Math.exp(-4*Math.LN2*q*q);}
@@ -547,11 +674,15 @@ function download(name,blob){let u=URL.createObjectURL(blob),a=document.createEl
 $('reviewed').onchange=()=>{let s=current();if(!s)return;s.reviewed=$('reviewed').checked;if(!s.reviewed)s.approved=false;renderList();renderReviewUi();renderApprovedPreview();};
 $('approved').onchange=()=>{let s=current();if(!s)return;s.approved=$('approved').checked;if(s.approved)s.reviewed=true;renderList();renderReviewUi();renderApprovedPreview();};
 $('nextUnreviewed').onclick=()=>{if(!spectra.length)return;let start=Math.max(0,spectra.findIndex(s=>s.id===currentId));for(let n=1;n<=spectra.length;n++){let s=spectra[(start+n)%spectra.length];if(!s.reviewed){chooseSpectrum(s.id);return;}}$('reviewStatus').textContent='All spectra are reviewed.';};
-$('saveProcessed').onclick=()=>{let data={format:'raman-studio-v1',workflow:'processed',saved:new Date().toISOString(),analysisRegions:(()=>{let b=regionBounds();return b?[b.nMin,b.nMax,b.dMin,b.dMax]:null;})(),spectra:spectra.map(s=>({name:s.name,meta:s.meta,x:s.x,raw:s.raw,corrected:s.working,modified:s.modified||[],keep:true,reviewed:!!s.reviewed,approved:!!s.approved,processing:s.processing||null,fit:s.fit||null,preparedHost:!!s.preparedHost,preparedHostBaseline:s.preparedHostBaseline||null}))};download('raman_processed.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};
-$('exportAnalysisCsv').onclick=()=>{let s=current(),r=fitResult;if(!s||!r)return;let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),ratio=num.length&&den.length&&denArea!==0?numArea/denArea:'',rows=[['filename','compound','host_mineral','mol_kg','phase','temperature_C','host_subtracted','host_reference','host_scale','host_background_subtracted','host_background_scale','host_background_range','baseline_mode','fit_mode','fit_profile','fit_baseline','peak','selected_cm-1','fitted_cm-1','height','fwhm_cm-1','eta','area','numerator_selected','denominator_selected','numerator_area_sum','denominator_area_sum','area_ratio','r2','rmse']];r.peaks.forEach((p,i)=>rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.temp,!!s.processing?.host?.enabled,s.processing?.host?.referenceName||'',s.processing?.host?.scale??'',!!s.processing?.host?.backgroundEnabled,s.processing?.host?.backgroundScale??'',s.processing?.host?.backgroundEnabled?((s.processing?.host?.backgroundMin??1500)+'-'+(s.processing?.host?.backgroundMax??2700)):'',$('baselineMethod').value,r.fitMode||'standard',r.profile,r.baselineMode||'constant',i+1,r.seedXs?.[i]??p.c,p.c,p.h,p.w,r.profile==='pseudo'?p.eta:r.profile==='lorentzian'?1:0,peakArea(p,r.profile),ratioNumerator.has(i),ratioDenominator.has(i),numArea,denArea,ratio,r.r2,r.rmse]));let reg=fittedRegionAreas(r),b=reg.bounds||{},fields=['region_num_min_cm-1','region_num_max_cm-1','region_den_min_cm-1','region_den_max_cm-1','region_numerator_area','region_denominator_area','region_area_ratio','region_integration_note'];rows[0].push(...fields);for(const row of rows.slice(1))row.push(b.nMin??'',b.nMax??'',b.dMin??'',b.dMax??'',reg.error?'':reg.numerator,reg.error?'':reg.denominator,reg.error?'':reg.ratio,reg.error||'');download('raman_analysis.csv',new Blob([rows.map(row=>row.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
+$('saveProcessed').onclick=()=>{let data={format:'raman-studio-v1',workflow:'processed',saved:new Date().toISOString(),analysisRegions:(()=>{let b=regionBounds();return b?[b.nMin,b.nMax,b.dMin,b.dMax]:null;})(),spectra:spectra.map(s=>({name:s.name,meta:s.meta,x:s.x,raw:s.raw,corrected:s.working,modified:s.modified||[],keep:true,reviewed:!!s.reviewed,approved:!!s.approved,processing:s.processing||null,fit:s.fit||null,preparedHost:!!s.preparedHost,preparedHostBaseline:s.preparedHostBaseline||null,manualBaselinePoints:cleanManualPoints(s.manualBaselinePoints)}))};download('raman_processed.json',new Blob([JSON.stringify(data)],{type:'application/json'}));};
+$('exportAnalysisCsv').onclick=()=>{let s=current(),r=fitResult;if(!s||!r)return;let num=[...ratioNumerator].filter(i=>r.peaks[i]),den=[...ratioDenominator].filter(i=>r.peaks[i]),numArea=num.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),denArea=den.reduce((sum,i)=>sum+peakArea(r.peaks[i],r.profile),0),ratio=num.length&&den.length&&denArea!==0?numArea/denArea:'',rows=[['filename','compound','host_mineral','mol_kg','phase','temperature_C','host_subtracted','host_reference','host_scale','host_background_subtracted','host_background_scale','host_background_range','baseline_mode','fit_mode','fit_profile','fit_baseline','peak','selected_cm-1','fitted_cm-1','height','fwhm_cm-1','eta','area','numerator_selected','denominator_selected','numerator_area_sum','denominator_area_sum','area_ratio','r2','rmse']];r.peaks.forEach((p,i)=>rows.push([s.name,s.meta.compound,s.meta.hostMineral,s.meta.mol,s.meta.phase,s.meta.temp,!!s.processing?.host?.enabled,s.processing?.host?.referenceName||'',s.processing?.host?.scale??'',!!s.processing?.host?.backgroundEnabled,s.processing?.host?.backgroundScale??'',s.processing?.host?.backgroundEnabled?((s.processing?.host?.backgroundMin??1500)+'-'+(s.processing?.host?.backgroundMax??2700)):'',$('baselineMethod').value,r.fitMode||'standard',r.profile,r.baselineMode||'constant',i+1,r.seedXs?.[i]??p.c,p.c,p.h,p.w,r.profile==='pseudo'?p.eta:r.profile==='lorentzian'?1:0,peakArea(p,r.profile),ratioNumerator.has(i),ratioDenominator.has(i),numArea,denArea,ratio,r.r2,r.rmse]));let reg=fittedRegionAreas(r),b=reg.bounds||{},fields=['region_num_min_cm-1','region_num_max_cm-1','region_den_min_cm-1','region_den_max_cm-1','region_numerator_area','region_denominator_area','region_area_ratio','region_integration_note'];rows[0].push(...fields,'manual_baseline_points');for(const row of rows.slice(1))row.push(b.nMin??'',b.nMax??'',b.dMin??'',b.dMax??'',reg.error?'':reg.numerator,reg.error?'':reg.denominator,reg.error?'':reg.ratio,reg.error||'',JSON.stringify(s.processing?.baseline==='manual'?s.processing.manualPoints||[]:[]));download('raman_analysis.csv',new Blob([rows.map(row=>row.map(csvVal).join(',')).join('\n')],{type:'text/csv'}));};
 
 function renderPlot(){
- let s=current();if(!s){$('plot').innerHTML='<div style="padding:70px;text-align:center;color:#7b8da3">Load and select a spectrum to begin analysis</div>';lastSvg='';return;}let y=activeY(),xmin=$('xMin').value===''?s.x[0]:Number($('xMin').value),xmax=$('xMax').value===''?s.x.at(-1):Number($('xMax').value);if(xmax<xmin)[xmin,xmax]=[xmax,xmin];let idx=s.x.map((x,i)=>i).filter(i=>s.x[i]>=xmin&&s.x[i]<=xmax);if(idx.length<2)return;let vals=idx.map(i=>y[i]),ylo=Math.min(...vals),yhi=Math.max(...vals),pad=(Number($('yPad').value)||8)/100*(yhi-ylo||1),residualSpace=$('showResidual').checked&&fitResult?130:0,w=1240,h=680+residualSpace,left=82,right=1170,top=55,bottom=610,YY=v=>bottom-(v-(ylo-pad))/Math.max(1e-12,(yhi+pad)-(ylo-pad))*(bottom-top),XX=x=>left+(x-xmin)/(xmax-xmin)*(right-left);plotGeometry={xmin,xmax,left,right};let out=['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="background:white"><rect width="100%" height="100%" fill="white"/>'];for(let x=Math.ceil(xmin/500)*500;x<=xmax;x+=500){let xx=XX(x);out.push('<line x1="'+xx+'" y1="'+top+'" x2="'+xx+'" y2="'+bottom+'" stroke="#e9edf3"/><text x="'+xx+'" y="'+(bottom+26)+'" text-anchor="middle" font-size="12" fill="#53667d">'+x+'</text>');}out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');let path=(xs,ys,map)=>xs.map((x,i)=>(i?'L':'M')+XX(x).toFixed(2)+' '+map(ys[i]).toFixed(2)).join(' '),xs=idx.map(i=>s.x[i]);if(fitResult?.fitMode==='broadOH'&&fitResult.maskedRanges?.length){for(const r of fitResult.maskedRanges){let a=Math.max(xmin,r.lo),b=Math.min(xmax,r.hi);if(b>a)out.push('<rect x="'+XX(a)+'" y="'+top+'" width="'+Math.max(0,XX(b)-XX(a))+'" height="'+(bottom-top)+'" fill="#eef1f5" fill-opacity=".55"/>');}}if(preview)out.push('<path d="'+path(xs,idx.map(i=>s.working[i]),YY)+'" stroke="#aab3be" stroke-width="1.2" fill="none"/>');out.push('<path d="'+path(xs,vals,YY)+'" stroke="#315cc6" stroke-width="1.5" fill="none"/>');let visibleSeeds=seeds.filter(c=>c>=xmin&&c<=xmax).sort((a,b)=>a-b),placedSeedLabels=[];
+ let s=current();if(!s){$('plot').innerHTML='<div style="padding:70px;text-align:center;color:#7b8da3">Load and select a spectrum to begin analysis</div>';lastSvg='';return;}let y=activeY(),xmin=$('xMin').value===''?s.x[0]:Number($('xMin').value),xmax=$('xMax').value===''?s.x.at(-1):Number($('xMax').value);if(xmax<xmin)[xmin,xmax]=[xmax,xmin];let idx=s.x.map((x,i)=>i).filter(i=>s.x[i]>=xmin&&s.x[i]<=xmax);if(idx.length<2)return;let vals=idx.map(i=>y[i]),manualGuide=$('baselineMethod').value==='manual'&&preview?.beforeBaseline?idx.map(i=>preview.beforeBaseline[i]):null,ylo=Math.min(...vals,...(manualGuide||[])),yhi=Math.max(...vals,...(manualGuide||[])),pad=(Number($('yPad').value)||8)/100*(yhi-ylo||1),residualSpace=$('showResidual').checked&&fitResult?130:0,w=1240,h=680+residualSpace,left=82,right=1170,top=55,bottom=610,YY=v=>bottom-(v-(ylo-pad))/Math.max(1e-12,(yhi+pad)-(ylo-pad))*(bottom-top),XX=x=>left+(x-xmin)/(xmax-xmin)*(right-left);plotGeometry={xmin,xmax,left,right,top,bottom,ymin:ylo-pad,ymax:yhi+pad};let out=['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="background:white"><rect width="100%" height="100%" fill="white"/>'];for(let x=Math.ceil(xmin/500)*500;x<=xmax;x+=500){let xx=XX(x);out.push('<line x1="'+xx+'" y1="'+top+'" x2="'+xx+'" y2="'+bottom+'" stroke="#e9edf3"/><text x="'+xx+'" y="'+(bottom+26)+'" text-anchor="middle" font-size="12" fill="#53667d">'+x+'</text>');}out.push('<line x1="'+left+'" y1="'+top+'" x2="'+left+'" y2="'+bottom+'" stroke="#718399"/><line x1="'+left+'" y1="'+bottom+'" x2="'+right+'" y2="'+bottom+'" stroke="#718399"/>');let path=(xs,ys,map)=>xs.map((x,i)=>(i?'L':'M')+XX(x).toFixed(2)+' '+map(ys[i]).toFixed(2)).join(' '),xs=idx.map(i=>s.x[i]);if(fitResult?.fitMode==='broadOH'&&fitResult.maskedRanges?.length){for(const r of fitResult.maskedRanges){let a=Math.max(xmin,r.lo),b=Math.min(xmax,r.hi);if(b>a)out.push('<rect x="'+XX(a)+'" y="'+top+'" width="'+Math.max(0,XX(b)-XX(a))+'" height="'+(bottom-top)+'" fill="#eef1f5" fill-opacity=".55"/>');}}if(preview)out.push('<path d="'+path(xs,manualGuide||idx.map(i=>s.working[i]),YY)+'" stroke="#aab3be" stroke-width="1.2" fill="none"/>');out.push('<path d="'+path(xs,vals,YY)+'" stroke="#315cc6" stroke-width="1.5" fill="none"/>');if($('baselineMethod').value==='manual'){
+ out.push('<path class="manual-baseline-curve" d="'+manualOverlayPath(s)+'" stroke="#ad4c91" stroke-width="2.4" stroke-dasharray="7 3" fill="none" pointer-events="none"/>');
+ (s.manualBaselinePoints||[]).forEach((p,i)=>{if(p.x<xmin||p.x>xmax)return;out.push('<circle data-baseline-index="'+i+'" cx="'+XX(p.x)+'" cy="'+YY(p.y)+'" r="'+(manualDrawMode?7:5)+'" fill="#fff" stroke="#ad4c91" stroke-width="2.5"/>');});
+}
+let visibleSeeds=seeds.filter(c=>c>=xmin&&c<=xmax).sort((a,b)=>a-b),placedSeedLabels=[];
 for(let si=0;si<visibleSeeds.length;si++){
  const c=visibleSeeds[si],xx=XX(c);
  let nearest=idx[0],dist=Infinity;
