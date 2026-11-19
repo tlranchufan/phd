@@ -318,7 +318,7 @@ function updateHostUi(){
   else if(!ready){let sameTemp=finiteMetaNumber(s,'temp')!==null&&finiteMetaNumber(chosen,'temp')!==null&&Math.abs(finiteMetaNumber(s,'temp')-finiteMetaNumber(chosen,'temp'))<.5,sameRun=runState(s)===runState(chosen);$('hostPrepStatus').textContent='Matched '+chosen.name+(sameTemp&&sameRun?'':' · closest available host condition')+', but it is not prepared yet. Open that host spectrum, choose a baseline correction (or Already corrected), then Apply.';}
   else {let bands=hostPeakBands(chosen.x,chosen.working),tt=finiteMetaNumber(s,'temp'),ht=finiteMetaNumber(chosen,'temp'),mismatch=tt!==null&&ht!==null&&Math.abs(tt-ht)>30;$('hostPrepStatus').textContent='Prepared host: '+chosen.name+' · '+bands.length+' narrow band(s) detected across the full Raman range. Broad features (>110 cm⁻¹ FWHM) are protected.'+(mismatch?' Caution: host '+ht+' °C vs sample '+tt+' °C; their broad background shapes may differ.':'');}
  }
- if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Host peak subtraction: overlap-aware joint fitting of narrow bands below 2500 cm⁻¹; conservative OH-safe subtraction above 2500 cm⁻¹.':'';
+ if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Host peak subtraction: overlap-aware automatic fitting of narrow corundum bands, including jointly modelled ~3850 cm⁻¹ host features where the matching data support it.':'';
  if($('hostBgStatus')){
   if(selfHost)$('hostBgStatus').textContent='';
   else if(chosen&&!bgReady)$('hostBgStatus').textContent='Prepared host peaks are available. Separate host-background subtraction requires a saved baseline curve; none is available for this host.';
@@ -423,12 +423,78 @@ function subtractOverlappingHostGroups(x,sampleY,template,bands,mode,manual){
  }
  return {y:out,used};
 }
+// Combine the reproducible, overlapping corundum features around 3850 cm⁻¹
+// into one non-overlapping reference contribution. Fluid envelope remains in the sample.
+function dominantUpperHostGroups(bands){
+ const broad=bands.filter(b=>b.center>=3000&&b.fwhm>=25),
+       maximum=Math.max(0,...broad.map(b=>b.prominence));
+ const candidates=bands.filter(b=>b.center>=3700&&b.center<=3950&&b.fwhm>=25&&b.prominence>=Math.max(100,.22*maximum))
+   .sort((a,b)=>a.center-b.center);
+ let groups=[];
+ for(const band of candidates){
+  const last=groups.at(-1);
+  if(last&&band.center-last.bands.at(-1).center<=85)last.bands.push(band);
+  else groups.push({bands:[band]});
+ }
+ return groups.map(g=>({
+  ...g,
+  lo:Math.min(...g.bands.map(b=>b.center-b.halfWidth)),
+  hi:Math.max(...g.bands.map(b=>b.center+b.halfWidth))
+ }));
+}
+function subtractJointUpperHost(x,sampleY,currentY,template,bands,lowerUsed,upperUsed,mode,manual){
+ let out=currentY.slice(),used=[],applied=[];
+ const lower=[],sorted=lowerUsed.filter(b=>b.center<2000&&b.correlation>.7&&b.scale>0).sort((a,b)=>a.center-b.center);
+ for(const b of sorted)if(lower.every(other=>Math.abs(b.center-other.center)>45))lower.push(b);
+ if(mode==='auto'&&lower.length<2)return {y:out,used,applied};
+ const lowScale=lower.length?medianArray(lower.map(b=>b.scale)):0,
+   highScales=upperUsed.filter(b=>b.center>=3500&&b.center<=3690&&b.fwhm>=25&&b.correlation>.8&&b.scale>0).map(b=>b.scale),
+   upperScale=highScales.length?medianArray(highScales):0,
+   prior=lowScale>0&&upperScale>0?.7*lowScale+.3*Math.max(.7*lowScale,Math.min(1.5*lowScale,upperScale)):lowScale,
+   hostSmooth=sgSmooth(template,9);
+ for(const g of dominantUpperHostGroups(bands)){
+  let hs=detrendHostGroup(x,hostSmooth,g.lo,g.hi),ss=detrendHostGroup(x,sampleY,g.lo,g.hi);
+  if(hs.idx.length<8||hs.idx.length!==ss.idx.length)continue;
+  let h=hs.signal.map(v=>Math.max(0,v)),maximum=Math.max(0,...h);
+  if(!(maximum>1e-12))continue;
+  let num=0,den=0,ss2=0,core=0,caps=[],diffs=[];
+  for(let j=1;j<ss.signal.length;j++)diffs.push(ss.signal[j]-ss.signal[j-1]);
+  let dmed=medianArray(diffs),noise=Math.max(1,1.4826*medianArray(diffs.map(v=>Math.abs(v-dmed)))/Math.SQRT2);
+  for(let j=0;j<h.length;j++){
+   if(h[j]>.2*maximum){num+=h[j]*ss.signal[j];den+=h[j]*h[j];ss2+=ss.signal[j]*ss.signal[j];core++;}
+   if(h[j]>.3*maximum)caps.push((ss.signal[j]+Math.max(4,noise))/h[j]);
+  }
+  if(core<5||den<=1e-12||!caps.length)continue;
+  const corr=ss2>1e-12?num/Math.sqrt(den*ss2):0;
+  if(mode==='auto'&&corr<.55)continue;
+  const cap=Math.max(0,quantileArray(caps,.05)*1.03),
+    scale=Math.min(mode==='manual'?manual:prior,cap,2.5);
+  if(!(scale>0))continue;
+  let edge=Math.min(9,(g.hi-g.lo)*.15);
+  for(let j=0;j<hs.idx.length;j++){
+   const i=hs.idx[j],dist=Math.min(x[i]-g.lo,g.hi-x[i]),
+     taper=edge>0&&dist<edge?.5-.5*Math.cos(Math.PI*Math.max(0,dist)/edge):1;
+   out[i]-=scale*h[j]*taper;
+  }
+  applied.push({lo:g.lo,hi:g.hi});
+  for(const b of g.bands)used.push({...b,scale,correlation:corr,regime:'OH-joint',grouped:true,groupSize:g.bands.length});
+ }
+ return {y:out,used,applied};
+}
 function subtractHostSignal(sampleY,s){
- let host=selectedHostReference();if(!$('subtractHost').checked||$('subtractHost').disabled||!host?.preparedHost)return {y:sampleY.slice(),host:null,scale:null,bands:[]};
- let template=interpolateSeries(host.x,host.working,s.x).map(v=>Number.isFinite(v)?v:0),bands=hostPeakBands(s.x,template),mode=$('hostScaleMode').value,manual=Math.max(0,Number($('hostScale').value)||0),
- grouped=subtractOverlappingHostGroups(s.x,sampleY,template,bands,mode,manual),out=grouped.y,used=grouped.used;
+ const host=selectedHostReference();
+ if(!$('subtractHost').checked||$('subtractHost').disabled||!host?.preparedHost)
+  return {y:sampleY.slice(),host:null,scale:null,bands:[]};
+ const template=interpolateSeries(host.x,host.working,s.x).map(v=>Number.isFinite(v)?v:0),
+       bands=hostPeakBands(s.x,template),mode=$('hostScaleMode').value,
+       manual=Math.max(0,Number($('hostScale').value)||0),
+       grouped=subtractOverlappingHostGroups(s.x,sampleY,template,bands,mode,manual);
+ let out=grouped.y,used=grouped.used;
+ // Preserve the previous conservative OH fit wherever there is no reliable
+ // joint 3850 cm⁻¹ reference match, including temperature-mismatched hosts.
+ function processLegacy(include){
  for(const band of bands){
-  if(band.center<2500)continue; // Narrow lower-frequency bands have already been jointly subtracted.
+  if(band.center<2500||!include(band))continue; // Lower bands are handled by the existing joint fit.
   let hs=localDetrendedSignal(s.x,template,band.center,band.halfWidth),ss=localDetrendedSignal(s.x,sampleY,band.center,band.halfWidth);if(hs.idx.length<8||ss.idx.length!==hs.idx.length)continue;
   let num=0,den=0,ss2=0,hostPeak=0,samplePeak=0,centerJ=0,centerDist=Infinity;
   for(let j=0;j<hs.idx.length;j++){
@@ -455,7 +521,18 @@ function subtractHostSignal(sampleY,s){
   }
   used.push({center:band.center,scale,correlation:corr,regime:aggressive?'aggressive':'OH-safe',halfWidth:band.halfWidth,fwhm:band.fwhm,prominence:band.prominence});
  }
- let scale=used.length?medianArray(used.map(v=>v.scale)):0;if(mode==='auto')$('hostScale').value=scale.toFixed(3);
+ }
+ processLegacy(b=>b.center<=3700);
+ const st=finiteMetaNumber(s,'temp'),ht=finiteMetaNumber(host,'temp'),
+       sameTemperature=st!==null&&ht!==null&&Math.abs(st-ht)<=30,
+       isCorundum=/corundum/i.test(String(host.meta?.hostMineral||host.meta?.phase||''));
+ let upper={y:out,used:[],applied:[]};
+ if(isCorundum&&sameTemperature)
+  upper=subtractJointUpperHost(s.x,sampleY,out,template,bands,grouped.used,used,mode,manual);
+ out=upper.y;used.push(...upper.used);
+ processLegacy(b=>b.center>3700&&!upper.applied.some(g=>b.center>=g.lo&&b.center<=g.hi));
+ const scale=used.length?medianArray(used.map(v=>v.scale)):0;
+ if(mode==='auto')$('hostScale').value=scale.toFixed(3);
  return {y:out,host,scale,bands:used};
 }
 function fitHostBackgroundScale(sampleY,s,host){
