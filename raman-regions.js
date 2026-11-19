@@ -83,7 +83,9 @@ function ratioRead(){
   activeRatio[side+'Min']=Number($('region'+tag+'Min').value);
   activeRatio[side+'Max']=Number($('region'+tag+'Max').value);
  }
- activeRatio.nPeaks=[...ratioNumerator];activeRatio.dPeaks=[...ratioDenominator];
+ // Peak selections are changed explicitly by the fit-table handler.
+ // Do not copy transiently cleared checkbox sets back over a saved ratio
+ // when another region is fitted or a processing preview is refreshed.
 }
 function ratioStash(){const s=current();if(s&&activeRatio){ratioRead();s._ratioDraft=clone(activeRatio);}}
 function ratioUi(){
@@ -143,6 +145,13 @@ renderRatio=function(){
 };
 renderRegionIntegration=function(){renderRatio();};
 renderFit=function(){
+ // The legacy fit action temporarily clears its checkbox sets. Restore
+ // selections from the independent ratio draft before drawing the table.
+ if(activeRatio){
+  ratioNumerator.clear();ratioDenominator.clear();
+  for(const key of activeRatio.nPeaks||[])ratioNumerator.add(key);
+  for(const key of activeRatio.dPeaks||[])ratioDenominator.add(key);
+ }
  originalFitRender();let s=current(),r=activeRegion(s);if(!r)return;
  const available=!!r.fit&&!r.stale&&!r._pending;
  $('fitTable').querySelectorAll('[data-ratio]').forEach(el=>{
@@ -214,6 +223,7 @@ $('fitTable').onchange=e=>{
  if(!r?.fit||r.stale||r._pending||!Number.isInteger(i)||!['n','d'].includes(side))return;
  let key=r.id+':'+i,own=side==='n'?ratioNumerator:ratioDenominator,other=side==='n'?ratioDenominator:ratioNumerator;
  if(e.target.checked){own.add(key);other.delete(key);}else own.delete(key);
+ if(activeRatio){activeRatio.nPeaks=[...ratioNumerator];activeRatio.dPeaks=[...ratioDenominator];}
  const tag=side==='n'?'Num':'Den';$('ratio'+tag+'Mode').value='peaks';
  $('ratio'+tag+'Range').style.display='none';ratioStash();renderFit();
 };
