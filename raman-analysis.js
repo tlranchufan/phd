@@ -299,7 +299,7 @@ function updateHostUi(){
   else if(!ready){let sameTemp=finiteMetaNumber(s,'temp')!==null&&finiteMetaNumber(chosen,'temp')!==null&&Math.abs(finiteMetaNumber(s,'temp')-finiteMetaNumber(chosen,'temp'))<.5,sameRun=runState(s)===runState(chosen);$('hostPrepStatus').textContent='Matched '+chosen.name+(sameTemp&&sameRun?'':' · closest available host condition')+', but it is not prepared yet. Open that host spectrum, baseline-correct it, then Apply.';}
   else {let bands=hostPeakBands(chosen.x,chosen.working),tt=finiteMetaNumber(s,'temp'),ht=finiteMetaNumber(chosen,'temp'),mismatch=tt!==null&&ht!==null&&Math.abs(tt-ht)>30;$('hostPrepStatus').textContent='Prepared host: '+chosen.name+' · '+bands.length+' narrow band(s) detected across the full Raman range. Broad features (>110 cm⁻¹ FWHM) are protected.'+(mismatch?' Caution: host '+ht+' °C vs sample '+tt+' °C; their broad background shapes may differ.':'');}
  }
- if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Host peak subtraction: aggressive matched-band removal below 2500 cm⁻¹; conservative OH-safe subtraction above 2500 cm⁻¹.':'';
+ if($('hostStatus'))$('hostStatus').textContent=chosen&&ready?'Host peak subtraction: overlap-aware joint fitting of narrow bands below 2500 cm⁻¹; conservative OH-safe subtraction above 2500 cm⁻¹.':'';
  if($('hostBgStatus')){
   if(selfHost)$('hostBgStatus').textContent='';
   else if(chosen&&!bgReady)$('hostBgStatus').textContent='Prepared host background unavailable. Re-apply baseline correction to the host with this version.';
@@ -348,10 +348,68 @@ function localDetrendedSignal(x,y,center,halfWidth){
  let coeff=solveLinear(A,b)||[medianArray(fitIdx.map(i=>y[i])),0,0],baseline=idx.map(i=>{let q=(x[i]-center)/scale;return coeff[0]+coeff[1]*q+coeff[2]*q*q;});
  return {idx,baseline,signal:idx.map((i,j)=>y[i]-baseline[j])};
 }
+// Overlapping corundum bands are fitted as one local template so shared intensity
+// cannot be subtracted repeatedly. The template is derived from the prepared host,
+// not from an independently re-baselined liquid spectrum.
+function mergeHostBands(bands){
+ let groups=[];
+ for(const band of bands.filter(b=>b.center<2500)){
+  let lo=band.center-band.halfWidth,hi=band.center+band.halfWidth,last=groups.at(-1);
+  if(last&&lo<=last.hi+2){last.hi=Math.max(last.hi,hi);last.bands.push(band);}
+  else groups.push({lo,hi,bands:[band]});
+ }
+ return groups;
+}
+function detrendHostGroup(x,y,lo,hi){
+ let idx=[],flank=[],span=20,mid=(lo+hi)/2;
+ for(let i=0;i<x.length;i++){
+  if(x[i]>=lo&&x[i]<=hi)idx.push(i);
+  else if((x[i]>=lo-span&&x[i]<lo)||(x[i]>hi&&x[i]<=hi+span))flank.push(i);
+ }
+ if(idx.length<8||flank.length<12)return {idx:[],signal:[]};
+ let z=flank.map(i=>x[i]-mid),mz=medianArray(z),my=medianArray(flank.map(i=>y[i])),
+  num=0,den=0;
+ for(let j=0;j<flank.length;j++){let q=z[j]-mz;num+=q*(y[flank[j]]-my);den+=q*q;}
+ let slope=den>1e-12?num/den:0;
+ return {idx,signal:idx.map(i=>y[i]-(my+slope*(x[i]-mid-mz)))};
+}
+function subtractOverlappingHostGroups(x,sampleY,template,bands,mode,manual){
+ let out=sampleY.slice(),used=[];
+ for(const group of mergeHostBands(bands)){
+  let hs=detrendHostGroup(x,template,group.lo,group.hi),
+      ss=detrendHostGroup(x,sampleY,group.lo,group.hi);
+  if(hs.idx.length<8||hs.idx.length!==ss.idx.length)continue;
+  let h=hs.signal.map(v=>Math.max(0,v)),hmax=Math.max(...h);
+  if(hmax<=1e-12)continue;
+  let num=0,den=0,ss2=0,core=0,caps=[];
+  const diffs=[];
+  for(let j=1;j<ss.signal.length;j++)diffs.push(ss.signal[j]-ss.signal[j-1]);
+  let dm=medianArray(diffs),noise=Math.max(1,1.4826*medianArray(diffs.map(v=>Math.abs(v-dm)))/Math.SQRT2);
+  for(let j=0;j<h.length;j++){
+   if(h[j]>.20*hmax){num+=h[j]*ss.signal[j];den+=h[j]*h[j];ss2+=ss.signal[j]*ss.signal[j];core++;}
+   if(h[j]>.30*hmax)caps.push((ss.signal[j]+Math.max(4,.5*noise))/h[j]);
+  }
+  if(core<5||den<=1e-12||!caps.length)continue;
+  let corr=ss2>1e-12?num/Math.sqrt(den*ss2):0;
+  if(mode==='auto'&&corr<.55)continue;
+  let headroom=Math.max(0,quantileArray(caps,.15)*1.03),
+      scale=Math.min(mode==='manual'?manual:Math.max(0,num/den),headroom,3);
+  if(!(scale>0))continue;
+  let edge=Math.min(8,(group.hi-group.lo)*.15);
+  for(let j=0;j<hs.idx.length;j++){
+   let i=hs.idx[j],dist=Math.min(x[i]-group.lo,group.hi-x[i]),taper=edge>0&&dist<edge?.5-.5*Math.cos(Math.PI*Math.max(0,dist)/edge):1;
+   out[i]-=scale*h[j]*taper;
+  }
+  for(const band of group.bands)used.push({...band,scale,correlation:corr,grouped:true,groupSize:group.bands.length});
+ }
+ return {y:out,used};
+}
 function subtractHostSignal(sampleY,s){
  let host=selectedHostReference();if(!$('subtractHost').checked||$('subtractHost').disabled||!host?.preparedHost)return {y:sampleY.slice(),host:null,scale:null,bands:[]};
- let template=interpolateSeries(host.x,host.working,s.x).map(v=>Number.isFinite(v)?v:0),bands=hostPeakBands(s.x,template),out=sampleY.slice(),mode=$('hostScaleMode').value,manual=Math.max(0,Number($('hostScale').value)||0),used=[];
+ let template=interpolateSeries(host.x,host.working,s.x).map(v=>Number.isFinite(v)?v:0),bands=hostPeakBands(s.x,template),mode=$('hostScaleMode').value,manual=Math.max(0,Number($('hostScale').value)||0),
+ grouped=subtractOverlappingHostGroups(s.x,sampleY,template,bands,mode,manual),out=grouped.y,used=grouped.used;
  for(const band of bands){
+  if(band.center<2500)continue; // Narrow lower-frequency bands have already been jointly subtracted.
   let hs=localDetrendedSignal(s.x,template,band.center,band.halfWidth),ss=localDetrendedSignal(s.x,sampleY,band.center,band.halfWidth);if(hs.idx.length<8||ss.idx.length!==hs.idx.length)continue;
   let num=0,den=0,ss2=0,hostPeak=0,samplePeak=0,centerJ=0,centerDist=Infinity;
   for(let j=0;j<hs.idx.length;j++){
