@@ -94,6 +94,8 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 </div></div>
 
 <div class="panel"><h2>Peak fitting</h2><div class="stack">
+<div class="toolbar"><label for="fitRegion">Region</label><select id="fitRegion" style="min-width:130px;width:auto;flex:1"></select><button id="addFitRegion">+ Add region</button><button id="saveFitRegion" class="primary">Save fit</button><button id="deleteFitRegion">Delete</button></div>
+<div class="field"><label for="fitRegionName">Region name</label><input id="fitRegionName" placeholder="Region 1"></div><div id="fitRegionStatus" class="hint"></div>
 <div class="field"><label>Fit mode</label><select id="fitMode"><option value="standard" selected>Standard Raman peaks</option><option value="broadOH">Broad OH / H₂O envelope</option></select></div>
 <div id="broadOhHint" class="hint" style="display:none">Broad OH mode uses manual centres, broad components and a selectable local fit baseline; known prepared-host bands are excluded from optimisation.</div>
 <div class="grid2"><div class="field"><label>Fit minimum (cm⁻¹)</label><input id="fitMin" type="number" step="any"></div><div class="field"><label>Fit maximum (cm⁻¹)</label><input id="fitMax" type="number" step="any"></div></div>
@@ -121,12 +123,14 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 <div class="toolbar"><h2 style="margin:0">Fit results</h2><button id="exportAnalysisCsv" class="right">Export analysis CSV</button></div>
 <div id="fitSummary" class="fit-summary" style="margin:10px 0"></div>
 <div class="scroll"><table><thead><tr><th>#</th><th>Selected cm⁻¹</th><th>Fitted cm⁻¹</th><th>Height</th><th>FWHM cm⁻¹</th><th>η</th><th>Area</th><th>N</th><th>D</th></tr></thead><tbody id="fitTable"></tbody></table></div>
-<div id="ratioSummary" class="status" style="margin-top:12px">Select numerator (N) and denominator (D) peaks.</div>
+<div class="toolbar" style="margin-top:12px"><label for="ratioSelect">Ratio</label><select id="ratioSelect" style="min-width:130px;width:auto;flex:1"></select><button id="newRatio">+ New ratio</button><button id="saveRatio" class="primary">Save ratio</button><button id="deleteRatio">Delete</button></div>
+<div class="field" style="margin-top:10px"><label for="ratioName">Ratio name</label><input id="ratioName" placeholder="e.g. OH band ratio"></div>
 <div class="grid2" style="margin-top:12px">
-  <div class="field"><label>Numerator integration (cm⁻¹)</label><div class="grid2"><input id="regionNumMin" type="number" step="any" value="2800" aria-label="Numerator minimum"><input id="regionNumMax" type="number" step="any" value="3300" aria-label="Numerator maximum"></div></div>
-  <div class="field"><label>Denominator integration (cm⁻¹)</label><div class="grid2"><input id="regionDenMin" type="number" step="any" value="3300" aria-label="Denominator minimum"><input id="regionDenMax" type="number" step="any" value="3800" aria-label="Denominator maximum"></div></div>
+<div class="field"><label for="ratioNumMode">Numerator</label><select id="ratioNumMode"><option value="range">Integrate fitted range</option><option value="peaks">Selected peaks (N)</option></select><div id="ratioNumRange" class="field"><select id="ratioNumRegion" aria-label="Numerator fit region"></select><div class="grid2"><input id="regionNumMin" type="number" step="any" value="2800" aria-label="Numerator minimum"><input id="regionNumMax" type="number" step="any" value="3300" aria-label="Numerator maximum"></div></div></div>
+<div class="field"><label for="ratioDenMode">Denominator</label><select id="ratioDenMode"><option value="range">Integrate fitted range</option><option value="peaks">Selected peaks (D)</option></select><div id="ratioDenRange" class="field"><select id="ratioDenRegion" aria-label="Denominator fit region"></select><div class="grid2"><input id="regionDenMin" type="number" step="any" value="3300" aria-label="Denominator minimum"><input id="regionDenMax" type="number" step="any" value="3800" aria-label="Denominator maximum"></div></div></div>
 </div>
-<div id="regionSummary" class="status" style="margin-top:10px">Fit peaks to calculate integrated areas.</div>
+<div id="ratioSummary" class="status" style="margin-top:12px">Save a fitted region to calculate ratios.</div>
+<div id="regionSummary" class="hint" style="margin-top:10px">Use saved peaks or fitted ranges from any region.</div>
 </div>
 <div class="panel">
 <h2>Approved comparison preview</h2>
@@ -136,6 +140,7 @@ h2{font-size:18px;margin:0 0 13px}.stack{display:grid;gap:12px}.grid2{display:gr
 </div></div>
 
 <script src="./raman-analysis.js?v=20261119-upper-host-3850-joint"></script>
+<script src="./raman-regions.js?v=20261119-multiregion-v1"></script>
 <footer>Data Processing Tools · Timothy Leong</footer>
 </body>
 </html>
