@@ -55,6 +55,12 @@ function loadRegion(s){
  settingsWrite(s,src.settings);$('fitRegionName').value=src.name||r.name;
  regionUi();
 }
+function sameSpectrumValues(a,b){
+ return !!a&&!!b&&a.length===b.length&&a.every((v,i)=>Number.isFinite(v)&&v===b[i]);
+}
+function fitInputMatches(r){
+ return !r?._pending||!r._fitInput||sameSpectrumValues(r._fitInput,activeY());
+}
 function regionUi(){
  let s=current(),select=$('fitRegion');
  if(!s){select.replaceChildren();$('fitRegionStatus').textContent='Load a spectrum to select regions.';
@@ -62,9 +68,14 @@ function regionUi(){
  init(s);
  select.replaceChildren(...s.fitRegions.map(r=>new Option(r.name+(r.stale?' · refit required':r.fit?' · saved':''),r.id)));
  select.value=s.activeRegionId;let r=activeRegion(s);
+ const hasFit=!!fitResult?.peaks?.length,inputMatches=fitInputMatches(r);
  $('deleteFitRegion').disabled=s.fitRegions.length<=1;
- $('saveFitRegion').disabled=!fitResult?.peaks?.length||!!preview||(r.stale&&!r._pending);
- $('fitRegionStatus').textContent=r.stale?'Processing changed since this fit. Refit and save to use its areas.':
+ // A preview is on by default. Never disable Save fit solely for that reason.
+ $('saveFitRegion').disabled=!hasFit||!inputMatches||(r.stale&&!r._pending)||(!!preview&&!r._pending);
+ $('fitRegionStatus').textContent=hasFit&&!inputMatches?'Processing changed after fitting. Fit peaks again before saving.':
+ r.stale&&!r._pending?'Processing changed since this fit. Refit and save to use its areas.':
+ r._pending&&preview&&!sameSpectrumValues(preview.y,s.working)?
+ 'Fit complete · Save fit will ask to apply the current processing preview first.':
  r._pending?'Fit complete but not saved · click Save fit.':
  r.fit?'Saved · '+r.fit.peaks.length+' peaks.':'Select peak centres, fit, then Save fit.';
 }
@@ -186,7 +197,7 @@ renderFit=function(){
  if(s){init(s);renderSavedFitGroups(s);}
  regionUi();
 };
-storeCurrentFit=function(){let r=activeRegion();if(r)r._pending=true;regionUi();};
+storeCurrentFit=function(){let r=activeRegion();if(r){r._pending=true;r._fitInput=activeY().slice();}regionUi();};
 restoreStoredFit=function(s){
  if(!s){fitResult=null;seeds=[];activeRatio=null;regionUi();return;}
  init(s);visibleSpectrum=s.id;loadRegion(s);
@@ -232,12 +243,35 @@ $('fitRegionName').oninput=()=>{let r=activeRegion();if(!r)return;r.name=$('fitR
 $('addFitRegion').onclick=()=>{let s=current();if(!s)return;stashRegion();let id=idNext(s.fitRegions,'r');
  s.fitRegions.push({id,name:'Region '+(s.fitRegions.length+1),settings:defaultSettings(s),seedXs:[],fit:null,stale:false});
  s.activeRegionId=id;loadRegion(s);renderSeeds();renderFit();renderPlot();ratioUi();};
-$('saveFitRegion').onclick=()=>{let s=current(),r=activeRegion(s);
- if(!s||!r||!fitResult?.peaks?.length||preview||(r.stale&&!r._pending))return;
+$('saveFitRegion').onclick=()=>{
+ const s=current(),r=activeRegion(s);
+ if(!s||!r||!fitResult?.peaks?.length||(r.stale&&!r._pending)||!fitInputMatches(r))return;
+ if(preview){
+  if(!r._pending||preview.error){
+   $('fitRegionStatus').textContent='Fit the current processing preview successfully before saving.';
+   return;
+  }
+  if(!sameSpectrumValues(preview.y,s.working)){
+   if(!window.confirm('The fit uses a processing preview. Apply that preview to the spectrum and save this fit? Older saved fits will be marked for refitting.'))return;
+   const fitted=clone(fitResult),chosenSeeds=seeds.slice(),settings=settingsRead(),
+         targetId=s.id,regionId=r.id,expectedY=preview.y.slice();
+   $('applyProcessing').onclick();
+   if(current()?.id!==targetId||current()?.activeRegionId!==regionId||
+      preview||!sameSpectrumValues(s.working,expectedY)){
+    $('fitRegionStatus').textContent='Processing preview could not be applied. No fit was saved.';
+    return;
+   }
+   // Applying processing invalidates previous regions; retain only this exact fit.
+   fitResult=fitted;seeds=chosenSeeds;r._pending=true;r._fitInput=expectedY.slice();
+   settingsWrite(s,settings);
+  }
+ }
  r.name=$('fitRegionName').value.trim()||r.name;r.settings=settingsRead();
  r.seedXs=seeds.slice();r.fit=clone(fitResult);r.stale=false;r._pending=false;
- delete s._fitDrafts[r.id];s.fit=clone(s.fitRegions[0].fit);
- s.reviewed=false;s.approved=false;regionUi();ratioUi();renderList();renderApprovedPreview();renderFit();renderPlot();};
+ delete r._fitInput;delete s._fitDrafts[r.id];s.fit=clone(s.fitRegions[0].fit);
+ s.reviewed=false;s.approved=false;
+ regionUi();ratioUi();renderList();renderApprovedPreview();renderFit();renderPlot();
+};
 $('deleteFitRegion').onclick=()=>{let s=current();if(!s||s.fitRegions.length<=1)return;
  if(!window.confirm('Delete this region? Ratios referring to it will become invalid.'))return;
  let id=s.activeRegionId;s.fitRegions=s.fitRegions.filter(r=>r.id!==id);delete s._fitDrafts[id];
