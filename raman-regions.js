@@ -144,6 +144,36 @@ renderRatio=function(){
   'Numerator '+v.numerator.toPrecision(7)+' · Denominator '+v.denominator.toPrecision(7);
 };
 renderRegionIntegration=function(){renderRatio();};
+function fitGroupRows(r,fit,state,enabled){
+ const min=fit?.xs?.[0],max=fit?.xs?.at(-1);
+ const limits=Number.isFinite(min)&&Number.isFinite(max)?min.toFixed(0)+'–'+max.toFixed(0)+' cm⁻¹':'fitted region';
+ const rows=['<tr class="fit-region-row"><td colspan="9">'+esc(r.name)+' · '+esc(limits)+' · '+fit.peaks.length+' peak(s) · '+esc(state)+'</td></tr>'];
+ for(const [i,p] of fit.peaks.entries()){
+  const key=r.id+':'+i,disabled=enabled?'':' disabled',
+   note=enabled?'':' title="Save or refit this region before selecting its peaks"',
+   selected=Number(fit.seedXs?.[i]??p.c),
+   height=Number(p.h),width=Number(p.w),position=Number(p.c),
+   eta=fit.profile==='pseudo'?Number(p.eta??0).toFixed(3):fit.profile==='lorentzian'?'1.000':'0.000';
+  rows.push('<tr><td>'+(i+1)+'</td><td>'+selected.toFixed(3)+'</td><td>'+position.toFixed(3)+'</td><td>'
+   +height.toPrecision(6)+'</td><td>'+width.toFixed(3)+'</td><td>'+eta+'</td><td>'
+   +Number(peakArea(p,fit.profile)).toPrecision(7)+'</td>'
+   +['n','d'].map(side=>'<td class="ratio-cell"><input type="checkbox" aria-label="'+(side==='n'?'Numerator':'Denominator')+' · '+esc(r.name)+' · '+position.toFixed(1)+' cm⁻¹" data-ratio="'+side+'" data-region="'+esc(r.id)+'" data-peak="'+i+'"'
+     +((side==='n'?ratioNumerator:ratioDenominator).has(key)?' checked':'')+disabled+note+'></td>').join('')+'</tr>');
+ }
+ return rows;
+}
+function renderSavedFitGroups(s){
+ const rows=[],currentRegion=activeRegion(s);
+ for(const r of s.fitRegions){
+  if(r.fit?.peaks?.length)rows.push(...fitGroupRows(r,r.fit,r.stale?'refit required':r._pending?'saved version · newer fit unsaved':'saved',!r.stale));
+ }
+ // Working fits can be examined, but only saved fits can be selected for a ratio.
+ if(currentRegion&&fitResult?.peaks?.length&&(currentRegion._pending||!currentRegion.fit)){
+  rows.push(...fitGroupRows({...currentRegion,name:currentRegion.name+' (working fit)'},fitResult,'not saved · click Save fit to select N/D',false));
+ }
+ $('fitTable').innerHTML=rows.length?rows.join(''):
+  '<tr><td colspan="9" style="color:#718096">Fit and save a region to select its peaks for a ratio.</td></tr>';
+}
 renderFit=function(){
  // The legacy fit action temporarily clears its checkbox sets. Restore
  // selections from the independent ratio draft before drawing the table.
@@ -152,13 +182,8 @@ renderFit=function(){
   for(const key of activeRatio.nPeaks||[])ratioNumerator.add(key);
   for(const key of activeRatio.dPeaks||[])ratioDenominator.add(key);
  }
- originalFitRender();let s=current(),r=activeRegion(s);if(!r)return;
- const available=!!r.fit&&!r.stale&&!r._pending;
- $('fitTable').querySelectorAll('[data-ratio]').forEach(el=>{
-  let key=r.id+':'+el.dataset.peak;
-  el.checked=(el.dataset.ratio==='n'?ratioNumerator:ratioDenominator).has(key);
-  el.disabled=!available;
- });
+ originalFitRender();const s=current();
+ if(s){init(s);renderSavedFitGroups(s);}
  regionUi();
 };
 storeCurrentFit=function(){let r=activeRegion();if(r)r._pending=true;regionUi();};
@@ -219,13 +244,17 @@ $('deleteFitRegion').onclick=()=>{let s=current();if(!s||s.fitRegions.length<=1)
  s.activeRegionId=s.fitRegions[0].id;s.fit=clone(s.fitRegions[0].fit);
  loadRegion(s);renderSeeds();renderFit();renderPlot();ratioUi();};
 $('fitTable').onchange=e=>{
- let s=current(),r=activeRegion(s),i=Number(e.target.dataset.peak),side=e.target.dataset.ratio;
- if(!r?.fit||r.stale||r._pending||!Number.isInteger(i)||!['n','d'].includes(side))return;
- let key=r.id+':'+i,own=side==='n'?ratioNumerator:ratioDenominator,other=side==='n'?ratioDenominator:ratioNumerator;
+ const s=current(),regionId=e.target.dataset.region,
+  r=s?.fitRegions?.find(v=>v.id===regionId),
+  i=Number(e.target.dataset.peak),side=e.target.dataset.ratio;
+ if(!r?.fit||r.stale||!r.fit.peaks?.[i]||!Number.isInteger(i)||!['n','d'].includes(side))return;
+ const key=r.id+':'+i,own=side==='n'?ratioNumerator:ratioDenominator,
+  other=side==='n'?ratioDenominator:ratioNumerator;
  if(e.target.checked){own.add(key);other.delete(key);}else own.delete(key);
  if(activeRatio){activeRatio.nPeaks=[...ratioNumerator];activeRatio.dPeaks=[...ratioDenominator];}
- const tag=side==='n'?'Num':'Den';$('ratio'+tag+'Mode').value='peaks';
- $('ratio'+tag+'Range').style.display='none';ratioStash();renderFit();
+ const tag=side==='n'?'Num':'Den';
+ $('ratio'+tag+'Mode').value='peaks';$('ratio'+tag+'Range').style.display='none';
+ ratioStash();renderFit();
 };
 $('ratioSelect').onchange=()=>{let s=current();if(!s)return;
  activeRatio=clone(s.savedRatios.find(q=>q.id===$('ratioSelect').value)||freshRatio(s));
