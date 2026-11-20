@@ -5,7 +5,14 @@ const clone=v=>v==null?v:JSON.parse(JSON.stringify(v)),originalAdd=addSpectrum,
  originalFitRender=renderFit,originalPlot=renderPlot,
  originalChoose=chooseSpectrum,originalInvalidate=invalidateReview;
 let activeRatio=null,visibleSpectrum=null;
-const defaultSettings=s=>({fitMode:'standard',lo:s?.x?.[0]??0,hi:s?.x?.at(-1)??4000,
+// Use clean display limits for new regions, retaining every measured point.
+// Only the defaults are rounded; saved and manually entered fit limits are exact.
+const roundedFitLimits=s=>{
+ const first=Number(s?.x?.[0]),last=Number(s?.x?.at(-1));
+ if(!Number.isFinite(first)||!Number.isFinite(last)||!(last>first))return {lo:0,hi:4000};
+ return {lo:Math.floor(first/10)*10,hi:Math.ceil(last/10)*10};
+};
+const defaultSettings=s=>({fitMode:'standard',...roundedFitLimits(s),
  autoPeaks:true,prominence:5,distance:10,profile:'pseudo',fitBaseline:'constant',iterations:120,initialWidth:12});
 function idNext(list,prefix){let n=0;for(const item of list){let m=String(item.id).match(new RegExp('^'+prefix+'(\\d+)$'));if(m)n=Math.max(n,Number(m[1]));}return prefix+(n+1);}
 function init(s){
